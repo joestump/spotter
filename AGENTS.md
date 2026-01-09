@@ -280,13 +280,231 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
-**Workflow:**
+### Basic Workflow
 ```bash
 bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work (only after ALL quality gates pass)
 bd sync               # Sync with git
+```
+
+### Creating Quality Beads
+
+#### When to Create a Bead
+
+Create beads for:
+- **Strategic work** spanning multiple sessions
+- **Work with dependencies** or that blocks other work
+- **Discovered work** during implementation that needs tracking
+- **Complex features** requiring planning and multiple steps
+- **Bugs** that require investigation and multiple attempts
+- **Security issues** or other critical problems
+
+Do NOT create beads for:
+- Simple, one-line fixes
+- Trivial documentation updates
+- Work you can complete in the current session
+- Temporary reminders (use TodoWrite for single-session tasks)
+
+#### 1. Outline Multiple Approaches
+
+Before creating a bead, consider 2-3 viable implementation approaches that comply with AGENTS.md requirements. Include in the description or notes.
+
+**Example:**
+```
+Title: Add caching layer for metadata enrichment
+
+Description:
+Metadata enrichment makes excessive API calls. Need caching layer.
+
+Approaches:
+1. In-memory cache with TTL (simple, but lost on restart)
+2. Redis cache (requires new dependency, scales better)
+3. Database-backed cache (reuses existing SQLite, persistent)
+
+Recommend approach #3 for MVP - no new dependencies, persistent across restarts.
+```
+
+#### 2. Write Acceptance Criteria (RFC 2119 Format)
+
+Use RFC 2119 keywords for precision:
+- **MUST** / **MUST NOT** - Absolute requirements
+- **SHOULD** / **SHOULD NOT** - Recommended but not required
+- **MAY** - Optional features
+- **SHALL** / **SHALL NOT** - (same as MUST/MUST NOT)
+
+**Example:**
+```
+Acceptance Criteria:
+- The system MUST encrypt all OAuth tokens using AES-256-GCM
+- The system MUST automatically decrypt tokens on query
+- The system SHOULD support key rotation without data migration
+- The system MAY log encryption operations for audit purposes
+- Backward compatibility MUST be maintained (plaintext → encrypted migration)
+- All tests MUST pass including backward compatibility tests
+```
+
+#### 3. Use Notes for Context (Not Updates)
+
+Notes should contain **static reference material**:
+- Relevant file paths and line numbers
+- Key symbols, functions, classes involved
+- Library choices and rationale
+- Architectural considerations
+- Links to related issues
+- Code snippets for reference
+
+**Example:**
+```
+Notes:
+Files:
+- internal/database/hooks.go:102-170 - Existing NavidromeAuth encryption pattern
+- internal/crypto/encrypt.go - AES-256-GCM utility (already implemented)
+- ent/schema/spotifyauth.go:21-22 - access_token, refresh_token fields
+
+Libraries:
+- crypto/aes (stdlib) - No external dependencies needed
+- encoding/base64 (stdlib) - For storage encoding
+
+Related Issues:
+- spotter-ahw - Navidrome password encryption (same pattern)
+- Implements AUTH-008 requirement from AGENTS.md
+
+Architectural Notes:
+- Ent hooks provide transparent encryption/decryption
+- Hooks run on Create/Update mutations, Interceptors on Query
+- IsEncrypted() heuristic enables backward compatibility
+```
+
+**DO NOT put updates in notes:**
+- ❌ "Started working on this"
+- ❌ "Fixed the first issue"
+- ❌ "Almost done with tests"
+
+#### 4. Use Comments for Updates
+
+Use `bd comments add <id> "update text"` for timeline updates:
+
+```bash
+bd comments add spotter-vey "Implemented encryption hooks for SpotifyAuth"
+bd comments add spotter-vey "All tests passing, ready for review"
+bd comments add spotter-vey "Fixed backward compatibility issue"
+```
+
+Comments create a timeline of progress. Notes are evergreen reference material.
+
+### Bead Metadata
+
+#### Priority Levels
+- **P0** - Critical (security, data loss, system down)
+- **P1** - High (major features, important bugs)
+- **P2** - Medium (normal features, minor bugs)
+- **P3** - Low (nice-to-have features)
+- **P4** - Backlog (future consideration)
+
+#### Types
+- **bug** - Something broken that needs fixing
+- **task** - Work item without new functionality
+- **feature** - New functionality
+- **epic** - Large feature spanning multiple issues
+
+#### Dependencies
+
+Use dependencies to model blockers:
+```bash
+bd dep add <issue> <depends-on>  # issue depends on depends-on
+bd blocked                        # Show all blocked issues
+```
+
+**Example:**
+- "Add playlist sync UI" depends on "Implement playlist sync API"
+- "Write integration tests" depends on "Implement feature"
+
+### Bead Lifecycle
+
+1. **Created** → `open` status, assigned priority and type
+2. **Claimed** → `bd update <id> --status=in_progress`
+3. **Work** → Add comments as you progress
+4. **Quality Gates** → Run tests, linters, builds
+5. **Closed** → `bd close <id> --reason="description"` (ONLY if quality gates pass)
+6. **Synced** → `bd sync` pushes to remote
+
+### Best Practices
+
+**DO:**
+- Create beads proactively when discovering new work
+- Use RFC 2119 keywords in acceptance criteria
+- Add file paths and line numbers to notes
+- Break large work into smaller dependent beads
+- Close beads immediately when quality gates pass
+- Use `bd close <id1> <id2> <id3>` to close multiple at once
+
+**DON'T:**
+- Create beads for trivial one-line changes
+- Put progress updates in notes (use comments)
+- Close beads before all quality gates pass
+- Leave beads open after pushing code
+- Forget to sync after closing beads
+
+### Example: Well-Written Bead
+
+```
+Title: Encrypt OAuth tokens at rest using AES-256-GCM
+Type: bug
+Priority: P1
+Status: open
+
+Description:
+SpotifyAuth stores access_token and refresh_token in plaintext. LastFMAuth
+stores session_key in plaintext. These tokens grant account access and should
+be encrypted at rest per AUTH-008 requirement.
+
+Approaches:
+1. Handler-level encryption (encrypt before save, decrypt after load)
+   - Pro: Simple, explicit
+   - Con: Easy to forget in new code paths
+2. Ent hooks (automatic encryption on mutation)
+   - Pro: Transparent, can't be forgotten
+   - Con: More complex, requires understanding Ent hooks
+3. Application-level encryption (encrypt in business logic)
+   - Pro: Full control
+   - Con: Scattered across codebase
+
+Recommend approach #2 (Ent hooks) - same pattern as NavidromeAuth password.
+
+Acceptance Criteria:
+- The system MUST encrypt access_token and refresh_token fields using AES-256-GCM
+- The system MUST encrypt session_key field using AES-256-GCM
+- The system MUST automatically decrypt tokens on query
+- Backward compatibility MUST be maintained (plaintext tokens continue to work)
+- The system SHOULD automatically re-encrypt plaintext tokens on next write
+- All existing tests MUST pass
+- New tests MUST cover encryption, decryption, and backward compatibility
+
+Notes:
+Reference Files:
+- internal/database/hooks.go:33-67 - NavidromeAuth encryption pattern (template)
+- internal/crypto/encrypt.go - AES-256-GCM utility (ready to use)
+- ent/schema/spotifyauth.go:21-23 - Fields to encrypt
+- ent/schema/lastfmauth.go:19 - Field to encrypt
+
+Token Usage:
+- internal/providers/spotify/spotify.go:164,169 - Reads tokens for API calls
+- internal/providers/lastfm/lastfm.go:170 - Reads username (NOT session_key)
+
+Implementation Notes:
+- Use Ent hooks (OnCreate/OnUpdate for encryption)
+- Use Ent interceptors (AfterQuery for decryption)
+- IsEncrypted() heuristic enables backward compatibility
+- Remember to decrypt in returned entities (see NavidromeAuth pattern)
+
+Related:
+- spotter-ahw - Navidrome password encryption (reference implementation)
+- Implements: AUTH-008
+
+Dependencies:
+None (crypto infrastructure already exists)
 ```
 
 ## Tech Stack
