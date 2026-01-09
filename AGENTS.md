@@ -616,7 +616,8 @@ Before running `bd close <id>`, ALL of the following MUST pass:
 
 ## Completing Work (Landing the Plane)
 
-When ending a work session, complete ALL steps below. **Work is NOT complete until the feature branch is pushed.**
+When ending a work session, complete ALL steps below. **Work is NOT complete until `git push` succeeds.**
+
 
 **MANDATORY WORKFLOW:**
 
