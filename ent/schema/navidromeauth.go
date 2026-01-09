@@ -15,7 +15,8 @@ type NavidromeAuth struct {
 func (NavidromeAuth) Fields() []ent.Field {
 	return []ent.Field{
 		// We need the password to sign requests (md5(password + salt))
-		// Note: In production, this field should be encrypted at rest.
+		// This field is encrypted at rest using AES-256-GCM encryption.
+		// Encryption/decryption is handled automatically by database hooks.
 		field.String("password"),
 		field.Time("last_synced_at").
 			Optional(),

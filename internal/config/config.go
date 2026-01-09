@@ -46,6 +46,9 @@ type VibesConfig struct {
 }
 
 type Config struct {
+	Security struct {
+		EncryptionKey string `mapstructure:"encryption_key"` // 32-byte hex key for AES-256 encryption
+	} `mapstructure:"security"`
 	Database struct {
 		Driver string `mapstructure:"driver"`
 		Source string `mapstructure:"source"`
@@ -173,6 +176,25 @@ func (c *Config) GetVibesPromptsDirectory() string {
 	return "./data/prompts"
 }
 
+// GetEncryptionKeyBytes returns the encryption key as a 32-byte array.
+// The key is stored as a 64-character hex string in config.
+func (c *Config) GetEncryptionKeyBytes() ([]byte, error) {
+	if len(c.Security.EncryptionKey) != 64 {
+		return nil, fmt.Errorf("invalid encryption key length")
+	}
+
+	key := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		var b byte
+		_, err := fmt.Sscanf(c.Security.EncryptionKey[i*2:i*2+2], "%02x", &b)
+		if err != nil {
+			return nil, fmt.Errorf("invalid hex in encryption key: %w", err)
+		}
+		key[i] = b
+	}
+	return key, nil
+}
+
 func Load() (*Config, error) {
 	v := viper.New()
 
@@ -181,6 +203,7 @@ func Load() (*Config, error) {
 	v.AutomaticEnv()
 
 	// Defaults
+	v.SetDefault("security.encryption_key", "") // Must be set via environment variable
 	v.SetDefault("server.port", "8080")
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("sync.interval", "5m")
@@ -263,6 +286,21 @@ func Load() (*Config, error) {
 
 	if cfg.OpenAI.APIKey == "" {
 		return nil, fmt.Errorf("openai.api_key is required for AI enrichment")
+	}
+
+	// Validate encryption key
+	if cfg.Security.EncryptionKey == "" {
+		return nil, fmt.Errorf("security.encryption_key is required (set SPOTTER_SECURITY_ENCRYPTION_KEY)")
+	}
+	// Key must be 64 hex characters (32 bytes for AES-256)
+	if len(cfg.Security.EncryptionKey) != 64 {
+		return nil, fmt.Errorf("security.encryption_key must be 64 hexadecimal characters (32 bytes)")
+	}
+	// Validate hex format
+	for _, c := range cfg.Security.EncryptionKey {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return nil, fmt.Errorf("security.encryption_key must contain only hexadecimal characters")
+		}
 	}
 
 	return &cfg, nil

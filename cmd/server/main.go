@@ -11,6 +11,7 @@ import (
 	"spotter/ent"
 	"spotter/ent/user"
 	"spotter/internal/config"
+	"spotter/internal/crypto"
 	"spotter/internal/database"
 	"spotter/internal/enrichers"
 	enricherFanart "spotter/internal/enrichers/fanart"
@@ -46,8 +47,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize encryption for sensitive data
+	encryptionKey, err := cfg.GetEncryptionKeyBytes()
+	if err != nil {
+		logger.Error("failed to get encryption key", "error", err)
+		os.Exit(1)
+	}
+	encryptor, err := crypto.NewEncryptor(encryptionKey)
+	if err != nil {
+		logger.Error("failed to initialize encryptor", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("encryption initialized for sensitive data")
+
 	// Connect to Database
-	client, err := database.NewClient(cfg.Database.Driver, cfg.Database.Source)
+	client, err := database.NewClient(cfg.Database.Driver, cfg.Database.Source, encryptor)
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
 		os.Exit(1)
