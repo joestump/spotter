@@ -281,13 +281,35 @@
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ### Basic Workflow
+
+**IMPORTANT: Always create a feature branch from `main` before starting work on a bead.**
+
 ```bash
+# 1. Find and claim work
 bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work (only after ALL quality gates pass)
-bd sync               # Sync with git
+
+# 2. Create feature branch from main
+git checkout main
+git pull
+git checkout -b bead/<id>  # e.g., bead/spotter-vey
+
+# 3. Do the work
+# ... implement, test, commit ...
+
+# 4. Complete work (only after ALL quality gates pass)
+bd close <id>
+git push -u origin bead/<id>  # Push feature branch
+
+# 5. Sync beads metadata
+bd sync
 ```
+
+**Branch Naming Convention:**
+- Format: `bead/<bead-id>`
+- Examples: `bead/spotter-vey`, `bead/spotter-ahw`, `bead/spotter-0n9`
+- Always branch from `main`, not from other feature branches
 
 ### Creating Quality Beads
 
@@ -425,10 +447,12 @@ bd blocked                        # Show all blocked issues
 
 1. **Created** → `open` status, assigned priority and type
 2. **Claimed** → `bd update <id> --status=in_progress`
-3. **Work** → Add comments as you progress
-4. **Quality Gates** → Run tests, linters, builds
-5. **Closed** → `bd close <id> --reason="description"` (ONLY if quality gates pass)
-6. **Synced** → `bd sync` pushes to remote
+3. **Branch Created** → `git checkout -b bead/<id>` from `main`
+4. **Work** → Implement, test, commit. Add comments via `bd comments add <id>`
+5. **Quality Gates** → Run tests, linters, builds (ALL must pass)
+6. **Closed** → `bd close <id> --reason="description"` (ONLY if quality gates pass)
+7. **Pushed** → `git push -u origin bead/<id>` (push feature branch)
+8. **Synced** → `bd sync` (sync beads metadata)
 
 ### Best Practices
 
@@ -592,27 +616,37 @@ Before running `bd close <id>`, ALL of the following MUST pass:
 
 ## Completing Work (Landing the Plane)
 
-When ending a work session, complete ALL steps below. **Work is NOT complete until `git push` succeeds.**
+When ending a work session, complete ALL steps below. **Work is NOT complete until the feature branch is pushed.**
 
 **MANDATORY WORKFLOW:**
 
 1. **Verify quality gates** - Ensure all quality gates pass (tests, linters, builds)
-2. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **File issues for remaining work** - Create beads for anything that needs follow-up
 3. **Close completed issues** - Run `bd close <id>` ONLY if quality gates passed
-4. **PUSH TO REMOTE** - This is MANDATORY:
+4. **PUSH FEATURE BRANCH** - This is MANDATORY:
    ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
+   git status              # Verify clean working tree
+   git push -u origin bead/<id>  # Push feature branch to remote
+   bd sync                 # Sync beads metadata
+   git status              # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
+5. **Create Pull Request** (optional but recommended):
+   ```bash
+   gh pr create --title "Brief description" --body "Closes bead <id>"
+   ```
+6. **Clean up** - After PR is merged, delete local branch:
+   ```bash
+   git checkout main
+   git pull
+   git branch -d bead/<id>
+   ```
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
+- Work is NOT complete until feature branch is pushed
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-- DO NOT close issues unless ALL quality gates have passed
+- DO NOT close beads unless ALL quality gates have passed
+- ALWAYS create feature branch `bead/<id>` from `main` before starting work
+- DO NOT work directly on `main` or long-lived branches
