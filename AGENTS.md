@@ -296,10 +296,16 @@ git pull
 git checkout -b bead/<id>  # e.g., bead/spotter-vey
 
 # 3. Do the work
-# ... implement, test, commit ...
+# ... implement, test ...
+make test                 # Run tests before EVERY commit
+git add .
+git commit -m "..."
+# ... repeat as needed ...
 
 # 4. Complete work (only after ALL quality gates pass)
+make test                 # MANDATORY before closing bead
 bd close <id>
+make test                 # MANDATORY before pushing
 git push -u origin bead/<id>  # Push feature branch
 
 # 5. Sync beads metadata
@@ -604,15 +610,19 @@ Enrichers add metadata, images, and AI-generated content to local entities.
 
 ## Quality Gates (MANDATORY)
 
-Before running `bd close <id>`, ALL of the following MUST pass:
+Before running `bd close <id>` or `git commit`, ALL of the following MUST pass:
 
-1. **Tests**: All tests pass
+1. **Tests**: `make test` - All tests MUST pass
 2. **Linters**: Code passes all linter checks
 3. **Build**: Project builds successfully
 4. **Code Generation**: Run `go generate ./ent` if schema changed
 5. **Standards**: Code follows all standards above (error handling, context, testing, etc.)
 
-**DO NOT close issues until quality gates pass.**
+**CRITICAL:**
+- Run `make test` before EVERY `git commit`
+- Run `make test` before EVERY `git push`
+- DO NOT close beads until quality gates pass
+- DO NOT commit code that breaks tests
 
 ## Completing Work (Landing the Plane)
 
@@ -620,11 +630,17 @@ When ending a work session, complete ALL steps below. **Work is NOT complete unt
 
 **MANDATORY WORKFLOW:**
 
-1. **Verify quality gates** - Ensure all quality gates pass (tests, linters, builds)
+1. **Verify quality gates** - Ensure all quality gates pass:
+   ```bash
+   make test               # MUST pass before proceeding
+   go generate ./ent       # If schema changed
+   # Run any linters
+   ```
 2. **File issues for remaining work** - Create beads for anything that needs follow-up
 3. **Close completed issues** - Run `bd close <id>` ONLY if quality gates passed
 4. **PUSH FEATURE BRANCH** - This is MANDATORY:
    ```bash
+   make test               # MANDATORY - final verification
    git status              # Verify clean working tree
    git push -u origin bead/<id>  # Push feature branch to remote
    bd sync                 # Sync beads metadata
@@ -643,10 +659,16 @@ When ending a work session, complete ALL steps below. **Work is NOT complete unt
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
+- **ALWAYS run `make test` before EVERY `git commit` and `git push`**
 - Work is NOT complete until feature branch is pushed
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 - DO NOT close beads unless ALL quality gates have passed
+- DO NOT commit or push code that breaks tests
 - ALWAYS create feature branch `bead/<id>` from `main` before starting work
 - DO NOT work directly on `main` or long-lived branches
+
+## Keeping AGENTS.md Updated
+
+**META-RULE:** When workflow instructions are updated (Git, Beads, testing, etc.), AGENTS.md MUST be updated to reflect the changes. This ensures the documentation stays in sync with current practices and all contributors follow the same workflow.
