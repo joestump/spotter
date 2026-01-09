@@ -652,7 +652,12 @@ func (h *Handler) AlbumMixtapeModal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a, err := h.Client.Album.Get(r.Context(), albumID)
+	a, err := h.Client.Album.Query().
+		Where(
+			album.ID(albumID),
+			album.HasUserWith(user.ID(u.ID)),
+		).
+		Only(r.Context())
 	if err != nil {
 		http.Error(w, "Album not found", http.StatusNotFound)
 		return

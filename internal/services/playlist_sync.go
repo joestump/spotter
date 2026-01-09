@@ -246,12 +246,19 @@ func (s *PlaylistSyncService) SyncPlaylistToNavidrome(ctx context.Context, playl
 
 	// Update database with sync info
 	now := time.Now()
-	_, err = s.Client.Playlist.UpdateOne(pl).
+	update := s.Client.Playlist.UpdateOne(pl).
 		SetNavidromePlaylistID(navidromePlaylistID).
 		SetLastSyncedAt(now).
-		SetMatchedTrackCount(matchedCount).
-		ClearSyncError().
-		Save(ctx)
+		SetMatchedTrackCount(matchedCount)
+
+	// Only clear sync error if at least one track matched (SRV-PS-009)
+	if matchedCount > 0 {
+		update = update.ClearSyncError()
+	} else {
+		update = update.SetSyncError("No tracks matched - playlist may be empty or library mismatch")
+	}
+
+	_, err = update.Save(ctx)
 	if err != nil {
 		s.Logger.Error("failed to update playlist sync info",
 			"playlist_id", playlistID,
