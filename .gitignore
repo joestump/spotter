@@ -60,3 +60,6 @@ Thumbs.db
 
 # Go
 *.prof
+
+# Claude
+.claude/settings.local.json
