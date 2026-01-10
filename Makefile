@@ -133,7 +133,7 @@ lint-md: ## Run markdownlint on Markdown files
 	@npx markdownlint "**/*.md" --ignore node_modules --ignore .beads --ignore "website/node_modules"
 	@echo "✓ Markdown linting passed"
 
-lint-go: ## Run golangci-lint on Go code
+lint-go: generate ## Run golangci-lint on Go code
 	@echo "Running golangci-lint..."
 	@golangci-lint run ./...
 	@echo "✓ Go linting passed"
