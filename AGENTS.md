@@ -286,10 +286,11 @@ This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get sta
 
 1. 🗂️ **Separate Fields** - Use separate fields/sections for Description, Acceptance Criteria, and Notes (DO NOT dump everything in description)
 2. ✅ **RFC 2119 Acceptance Criteria** - All beads MUST include acceptance criteria using RFC 2119 keywords (MUST/SHOULD/MAY)
-3. 🏷️ **3-5 Labels** - Including exactly ONE work category label (feature/research/toil/cleanup/refactor/other)
+3. 🏷️ **3-5 Labels (REQUIRED)** - NEVER skip labels. Include exactly ONE work category label (feature/research/toil/cleanup/refactor/other)
 4. 📝 **Markdown Formatting** - All file names, paths, code, and commands MUST use backticks (`` `code` ``)
-5. 😊 **Optional Emojis** - Use 2-3 emojis per bead for clarity (don't overdo it)
-6. 🔍 **Research Beads** - MUST NOT mutate code; ONLY generate new beads with actionable work items
+5. 🎨 **Epic Emoji Flair (REQUIRED)** - Epics MUST have emoji flair in their titles (e.g., "🎵 Playlist Linking & Management UI")
+6. 😊 **Optional Emojis for Tasks** - Use 2-3 emojis per bead for clarity (don't overdo it)
+7. 🔍 **Research Beads** - MUST NOT mutate code; ONLY generate new beads with actionable work items
 
 **Example label usage:**
 ```bash
@@ -1027,6 +1028,125 @@ npm install
 **"Docker daemon not running" (hadolint)**
 - Start Docker Desktop
 - Or skip Docker linting locally (CI will catch it)
+
+## Documentation (Docusaurus)
+
+Spotter documentation is built with [Docusaurus](https://docusaurus.io/) and deployed to GitHub Pages.
+
+### Documentation Structure
+
+```
+website/
+├── docs/                    # Documentation markdown files
+│   ├── intro.md            # Landing/intro page
+│   ├── getting-started/    # Installation, configuration, Docker
+│   ├── features/           # Feature documentation
+│   ├── providers/          # Provider docs (Navidrome, Spotify, Last.fm)
+│   ├── enrichers/          # Enricher docs
+│   ├── api/                # API reference
+│   └── development/        # Contributing, architecture, testing
+├── src/
+│   ├── pages/              # Custom React pages (landing)
+│   └── css/                # Custom CSS (retro themes)
+├── static/                 # Static assets (images, favicon)
+├── docusaurus.config.ts    # Site configuration
+├── sidebars.ts             # Sidebar navigation
+└── package.json            # Dependencies
+```
+
+### Documentation Commands
+
+```bash
+# Install documentation dependencies
+make docs-deps
+
+# Start local dev server with hot-reload
+make docs-serve
+# Opens at http://localhost:3000/spotter/
+
+# Build static documentation site
+make docs-build
+# Output in website/build/
+
+# Clean documentation artifacts
+make docs-clean
+```
+
+### Writing Documentation
+
+**File locations:**
+- New feature docs go in `website/docs/features/`
+- Provider docs go in `website/docs/providers/`
+- Enricher docs go in `website/docs/enrichers/`
+- API docs go in `website/docs/api/`
+
+**Frontmatter:**
+```markdown
+---
+sidebar_position: 1
+---
+
+# Page Title
+
+Content here...
+```
+
+**Sidebar navigation:**
+- Edit `website/sidebars.ts` to add new pages to navigation
+- Pages are ordered by `sidebar_position` in frontmatter
+
+**Admonitions (callouts):**
+```markdown
+:::note
+Informational note
+:::
+
+:::tip
+Helpful tip
+:::
+
+:::caution
+Warning message
+:::
+
+:::danger
+Critical warning
+:::
+```
+
+### Documentation Deployment
+
+Documentation automatically deploys to GitHub Pages when:
+- Changes are pushed to `main` branch in the `website/` directory
+- The `deploy-docs.yml` workflow runs
+
+**Manual deployment:**
+```bash
+cd website
+npm run build
+npm run deploy
+```
+
+**Deployment URL:** https://joestump.github.io/spotter/
+
+### Documentation Linting
+
+Documentation markdown is linted by `make lint-md`. The `.markdownlint.json` config is set up for Docusaurus compatibility.
+
+**Common fixes:**
+- Use allowed HTML elements (details, summary, div, span)
+- Avoid inline HTML when possible
+- Add blank lines around code blocks
+- Use consistent heading levels
+
+### Adding New Documentation
+
+1. Create markdown file in appropriate `website/docs/` subdirectory
+2. Add frontmatter with `sidebar_position`
+3. Add to `website/sidebars.ts` if not auto-detected
+4. Run `make docs-serve` to preview
+5. Run `make lint-md` to verify markdown
+6. Commit changes - auto-deploys on merge to main
 
 ## Quality Gates (MANDATORY)
 

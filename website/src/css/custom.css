@@ -1,0 +1,152 @@
+/**
+ * Custom styles for Spotter documentation
+ * Based on the retro themes from the main application
+ */
+
+/* You can override the default Infima variables here. */
+:root {
+  /* Primary colors - Amber/Gold theme inspired by 1970s music cabinet */
+  --ifm-color-primary: #d97706;
+  --ifm-color-primary-dark: #b45309;
+  --ifm-color-primary-darker: #92400e;
+  --ifm-color-primary-darkest: #78350f;
+  --ifm-color-primary-light: #f59e0b;
+  --ifm-color-primary-lighter: #fbbf24;
+  --ifm-color-primary-lightest: #fcd34d;
+
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(217, 119, 6, 0.1);
+
+  /* Warm background tones */
+  --ifm-background-color: #fffbeb;
+  --ifm-background-surface-color: #fef3c7;
+}
+
+/* Dark mode - Cyberpunk theme inspired by 1980s aesthetic */
+[data-theme='dark'] {
+  /* Neon cyan primary color */
+  --ifm-color-primary: #00d9ff;
+  --ifm-color-primary-dark: #00c4e6;
+  --ifm-color-primary-darker: #00b8d9;
+  --ifm-color-primary-darkest: #0099b3;
+  --ifm-color-primary-light: #33e0ff;
+  --ifm-color-primary-lighter: #66e8ff;
+  --ifm-color-primary-lightest: #99efff;
+
+  --docusaurus-highlighted-code-line-bg: rgba(0, 217, 255, 0.15);
+
+  /* Deep dark background */
+  --ifm-background-color: #0f0f23;
+  --ifm-background-surface-color: #1a1a3e;
+
+  /* Neon glow effects for links */
+  --ifm-link-color: #00d9ff;
+
+  /* Footer */
+  --ifm-footer-background-color: #0a0a1a;
+}
+
+/* Custom navbar styling */
+.navbar {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .navbar {
+  background-color: #0f0f23;
+  border-bottom: 1px solid #00d9ff33;
+}
+
+/* Code blocks */
+.prism-code {
+  border-radius: 8px;
+}
+
+/* Tables */
+table {
+  display: table;
+  width: 100%;
+}
+
+table th {
+  background-color: var(--ifm-background-surface-color);
+}
+
+[data-theme='dark'] table th {
+  background-color: #1a1a3e;
+}
+
+/* Sidebar */
+.menu__link {
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.menu__link:hover {
+  background-color: var(--ifm-color-primary-lightest);
+  color: var(--ifm-color-primary-darkest);
+}
+
+[data-theme='dark'] .menu__link:hover {
+  background-color: rgba(0, 217, 255, 0.1);
+  color: var(--ifm-color-primary);
+}
+
+/* Hero section on landing page */
+.hero {
+  padding: 4rem 0;
+}
+
+.hero__title {
+  font-size: 3rem;
+  font-weight: 700;
+}
+
+.hero__subtitle {
+  font-size: 1.5rem;
+  opacity: 0.9;
+}
+
+/* Feature cards */
+.feature-card {
+  padding: 1.5rem;
+  border-radius: 8px;
+  background-color: var(--ifm-background-surface-color);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme='dark'] .feature-card {
+  border: 1px solid #00d9ff33;
+}
+
+[data-theme='dark'] .feature-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 217, 255, 0.2);
+}
+
+/* Admonitions */
+.admonition {
+  border-radius: 8px;
+}
+
+/* Scrollbar styling for dark mode */
+[data-theme='dark'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: #0f0f23;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #00d9ff33;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: #00d9ff66;
+}

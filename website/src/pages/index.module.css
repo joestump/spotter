@@ -1,0 +1,64 @@
+.heroBanner {
+  padding: 4rem 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.features {
+  display: flex;
+  align-items: center;
+  padding: 4rem 0;
+  width: 100%;
+}
+
+.quickStart {
+  padding: 4rem 0;
+  background: var(--ifm-background-surface-color);
+}
+
+.codeBlock {
+  background: var(--ifm-code-background);
+  border-radius: var(--ifm-code-border-radius);
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.codeBlock pre {
+  margin: 0;
+}
+
+.codeBlock code {
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+[data-theme='dark'] .heroBanner {
+  background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 100%);
+}
+
+[data-theme='dark'] .quickStart {
+  background: #0a0a1a;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+
+  .buttons {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .buttons a {
+    margin-left: 0 !important;
+  }
+}

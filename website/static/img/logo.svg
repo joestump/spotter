@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00d9ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Outer circle (record) -->
+  <circle cx="50" cy="50" r="45" fill="url(#grad)" opacity="0.9"/>
+  <!-- Inner circle (label) -->
+  <circle cx="50" cy="50" r="20" fill="#0f0f23"/>
+  <!-- Center hole -->
+  <circle cx="50" cy="50" r="5" fill="#00d9ff"/>
+  <!-- Grooves -->
+  <circle cx="50" cy="50" r="35" fill="none" stroke="#0f0f23" stroke-width="1" opacity="0.3"/>
+  <circle cx="50" cy="50" r="40" fill="none" stroke="#0f0f23" stroke-width="0.5" opacity="0.3"/>
+  <!-- Stylized S -->
+  <text x="50" y="58" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#00d9ff" text-anchor="middle">S</text>
+</svg>

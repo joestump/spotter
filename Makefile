@@ -6,7 +6,7 @@ endif
 BINARY_NAME=spotter-server
 MAIN_PATH=./cmd/server/main.go
 
-.PHONY: all help deps ci-deps docker-deps generate css build build-binary run dev test test-coverage lint lint-docker lint-go lint-md lint-templ lint-yaml clean docker-build docker-run
+.PHONY: all help deps ci-deps docker-deps generate css build build-binary run dev test test-coverage lint lint-docker lint-go lint-md lint-templ lint-yaml clean docker-build docker-run docs-deps docs-build docs-serve docs-clean
 
 all: build
 
@@ -17,7 +17,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-deps: ## Install all dependencies (Go, Node, tools)
+deps: ## Install all dependencies (Go, Node, tools, docs)
 	@echo "Installing Go dependencies..."
 	go mod download
 	@echo "Installing development tools..."
@@ -26,7 +26,9 @@ deps: ## Install all dependencies (Go, Node, tools)
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	@echo "Installing Node dependencies..."
 	npm install
-	@echo "✓ Dependencies installed"
+	@echo "Installing documentation dependencies..."
+	cd website && npm install
+	@echo "✓ All dependencies installed"
 
 ci-deps: ## Install CI dependencies (minimal, no dev tools)
 	@echo "Installing Go dependencies..."
@@ -164,3 +166,27 @@ docker-build: ## Build Docker image
 docker-run: ## Run application in Docker
 	@echo "Starting Spotter in Docker..."
 	docker run -p 8080:8080 --env-file .env spotter
+
+# ===================
+# Documentation
+# ===================
+
+docs-deps: ## Install documentation dependencies
+	@echo "Installing documentation dependencies..."
+	cd website && npm install
+	@echo "✓ Documentation dependencies installed"
+
+docs-build: ## Build documentation site
+	@echo "Building documentation..."
+	cd website && npm run build
+	@echo "✓ Documentation built to website/build/"
+
+docs-serve: ## Start local documentation server with hot-reload
+	@echo "Starting documentation server..."
+	@echo "Documentation will be available at http://localhost:3000/spotter/"
+	cd website && npm start
+
+docs-clean: ## Clean documentation build artifacts
+	@echo "Cleaning documentation artifacts..."
+	rm -rf website/build website/.docusaurus website/.cache-loader
+	@echo "✓ Documentation cleaned"

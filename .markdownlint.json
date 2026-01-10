@@ -2,7 +2,10 @@
   "default": true,
   "MD013": false,
   "MD033": {
-    "allowed_elements": ["details", "summary", "br", "img"]
+    "allowed_elements": ["details", "summary", "br", "img", "div", "span", "a"]
   },
-  "MD041": false
+  "MD041": false,
+  "MD024": {
+    "siblings_only": true
+  }
 }
