@@ -1,0 +1,56 @@
+# golangci-lint configuration for Spotter
+# See: https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - govet          # Go vet examines Go source code and reports suspicious constructs
+    - staticcheck    # Staticcheck is a go vet on steroids
+    - errcheck       # Errcheck checks for unchecked errors
+    - gosimple       # Linter for Go source code that specializes in simplifying code
+    - ineffassign    # Detects when assignments to existing variables are not used
+    - unused         # Checks Go code for unused constants, variables, functions and types
+    - gofmt          # Gofmt checks whether code was gofmt-ed
+    - goimports      # Check import statements are formatted according to the 'goimport' command
+    - misspell       # Finds commonly misspelled English words in comments
+    - revive         # Fast, configurable, extensible, flexible, and beautiful linter for Go
+    - typecheck      # Like the front-end of a Go compiler, parses and type-checks Go code
+    - goconst        # Finds repeated strings that could be replaced by a constant
+    - unconvert      # Remove unnecessary type conversions
+    - gocritic       # Provides diagnostics that check for bugs, performance and style issues
+
+linters-settings:
+  govet:
+    enable-all: true
+
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  revive:
+    confidence: 0.8
+
+  goimports:
+    local-prefixes: github.com/joestump/spotter
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  # Exclude generated code directories and files
+  exclude-dirs:
+    - ent  # Exclude generated Ent code
+  exclude-files:
+    - ".*_gen\\.go$"      # Exclude *_gen.go files
+    - ".*_templ\\.go$"    # Exclude Templ generated files
+
+  # Exclude some linters from running on tests files
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - goconst
