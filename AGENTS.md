@@ -1079,10 +1079,16 @@ When ending a work session, complete ALL steps below. **Work is NOT complete unt
    bd sync                 # Sync beads metadata
    git status              # MUST show "up to date with origin"
    ```
-5. **Create Pull Request** (optional but recommended):
+5. **CREATE PULL REQUEST** - This is MANDATORY, NOT OPTIONAL:
    ```bash
    gh pr create --title "Brief description" --body "Closes bead <id>"
    ```
+   - **ALWAYS create a PR when you complete a batch of work**
+   - **DO NOT leave pushed branches without a PR**
+   - Use `gh pr create` with descriptive title and body
+   - Include "Closes bead <id>" or related issue references
+   - This is NOT OPTIONAL - PRs are required for all work
+
 6. **Clean up** - After PR is merged, delete local branch:
    ```bash
    git checkout main
@@ -1094,14 +1100,16 @@ When ending a work session, complete ALL steps below. **Work is NOT complete unt
 **CRITICAL RULES:**
 - **ALWAYS run `make test`, `make run`, and `make lint` before EVERY `git commit` and `git push`**
 - **ALWAYS verify `make run` starts the application without errors**
-- Work is NOT complete until feature branch is pushed
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
+- **ALWAYS create a Pull Request with `gh pr create` after pushing - this is NOT OPTIONAL**
+- Work is NOT complete until feature branch is pushed AND a PR is created
+- NEVER stop before pushing and creating a PR - that leaves work incomplete
+- NEVER say "ready to push when you are" - YOU must push AND create the PR
 - If push fails, resolve and retry until it succeeds
 - DO NOT close beads unless ALL quality gates have passed
 - DO NOT commit or push code that breaks tests, linting, or fails to start
 - ALWAYS create feature branch `bead/<id>` from `main` before starting work
 - DO NOT work directly on `main` or long-lived branches
+- DO NOT leave pushed branches without a Pull Request
 
 ## Keeping AGENTS.md Updated
 
