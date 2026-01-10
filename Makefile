@@ -6,7 +6,7 @@ endif
 BINARY_NAME=spotter-server
 MAIN_PATH=./cmd/server/main.go
 
-.PHONY: all help deps ci-deps docker-deps generate css build build-binary run dev test test-coverage clean docker-build docker-run
+.PHONY: all help deps ci-deps docker-deps generate css build build-binary run dev test test-coverage lint-templ clean docker-build docker-run
 
 all: build
 
@@ -87,6 +87,11 @@ test-coverage: generate ## Run tests with coverage report
 	go test -v -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "✓ Coverage report generated: coverage.html"
+
+lint-templ: ## Run templ fmt to check Templ template formatting
+	@echo "Checking Templ template formatting..."
+	@templ fmt -fail .
+	@echo "✓ Templ formatting check passed"
 
 clean: ## Remove build artifacts
 	@echo "Cleaning build artifacts..."
