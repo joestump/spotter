@@ -374,8 +374,8 @@ func (e *Enricher) callOpenAI(ctx context.Context, prompt string, images []strin
 		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			e.logger.Warn("failed to close response body", "error", err)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			e.logger.Warn("failed to close response body", "error", closeErr)
 		}
 	}()
 
@@ -415,8 +415,8 @@ func (e *Enricher) loadImageAsBase64(imagePath string) (string, error) {
 		return "", fmt.Errorf("failed to open image: %w", err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			e.logger.Warn("failed to close file", "error", err)
+		if closeErr := file.Close(); closeErr != nil {
+			e.logger.Warn("failed to close file", "error", closeErr)
 		}
 	}()
 
@@ -594,7 +594,9 @@ func (e *Enricher) EnrichArtist(ctx context.Context, artist *ent.Artist) (*enric
 	}
 
 	// Deduplicate tags
-	existingTags := append(artist.Tags, artist.Genres...)
+	existingTags := make([]string, 0, len(artist.Tags)+len(artist.Genres))
+	existingTags = append(existingTags, artist.Tags...)
+	existingTags = append(existingTags, artist.Genres...)
 	aiTags := deduplicateTags(aiResp.Tags, existingTags, 5)
 
 	result := &enrichers.ArtistData{
@@ -876,7 +878,9 @@ func (e *Enricher) EnrichTrack(ctx context.Context, track *ent.Track) (*enricher
 	}
 
 	// Deduplicate tags
-	existingTags := append(track.Tags, track.Genres...)
+	existingTags := make([]string, 0, len(track.Tags)+len(track.Genres))
+	existingTags = append(existingTags, track.Tags...)
+	existingTags = append(existingTags, track.Genres...)
 	aiTags := deduplicateTags(aiResp.Tags, existingTags, 5)
 
 	result := &enrichers.TrackData{

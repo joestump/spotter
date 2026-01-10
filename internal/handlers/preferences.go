@@ -894,10 +894,10 @@ func (h *Handler) TaskResetData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete all album images
-	if _, err := h.Client.AlbumImage.Delete().
+	if _, deleteErr := h.Client.AlbumImage.Delete().
 		Where(albumimage.HasAlbumWith(album.HasUserWith(user.ID(u.ID)))).
-		Exec(ctx); err != nil {
-		h.Logger.Error("failed to delete album images", "error", err)
+		Exec(ctx); deleteErr != nil {
+		h.Logger.Error("failed to delete album images", "error", deleteErr)
 	}
 
 	// Delete all albums
@@ -909,10 +909,10 @@ func (h *Handler) TaskResetData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete all artist images
-	if _, err := h.Client.ArtistImage.Delete().
+	if _, deleteErr := h.Client.ArtistImage.Delete().
 		Where(artistimage.HasArtistWith(artist.HasUserWith(user.ID(u.ID)))).
-		Exec(ctx); err != nil {
-		h.Logger.Error("failed to delete artist images", "error", err)
+		Exec(ctx); deleteErr != nil {
+		h.Logger.Error("failed to delete artist images", "error", deleteErr)
 	}
 
 	// Delete all artists

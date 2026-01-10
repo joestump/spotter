@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"spotter/ent"
 	"spotter/internal/crypto"
@@ -23,9 +24,9 @@ func NewClient(driver, source string, encryptor *crypto.Encryptor) (*ent.Client,
 
 	// Run the auto migration tool.
 	if err := client.Schema.Create(context.Background()); err != nil {
+		// Attempt to close the client before returning the error, ignoring any close error
 		if closeErr := client.Close(); closeErr != nil {
-			// If closing the client also returns an error, you might want to log it.
-			// For now, we'll just return the original schema creation error.
+			log.Printf("failed to close database client: %v", closeErr)
 		}
 		return nil, fmt.Errorf("failed creating schema resources: %v", err)
 	}

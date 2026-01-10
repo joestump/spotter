@@ -257,7 +257,7 @@ func (h *Handler) TrackIndex(w http.ResponseWriter, r *http.Request) {
 	// Get page number from query
 	page := 1
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		if p, parseErr := strconv.Atoi(pageStr); parseErr == nil && p > 0 {
 			page = p
 		}
 	}

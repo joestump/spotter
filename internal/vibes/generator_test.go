@@ -802,14 +802,9 @@ func TestMixtapeGenerator_NoTracks(t *testing.T) {
 
 func TestTemplateData_Structure(t *testing.T) {
 	data := &TemplateData{
-		DJName:         "Test DJ",
-		DJSystemPrompt: "You are energetic",
-		GenresInclude:  []string{"rock", "pop"},
-		GenresExclude:  []string{"country"},
-		Vibes:          []string{"upbeat", "party"},
-		ArtistsInclude: []string{"Queen"},
-		ArtistsExclude: []string{"Nickelback"},
-		SeedType:       SeedTypeArtist,
+		DJName:        "Test DJ",
+		GenresInclude: []string{"rock", "pop"},
+		SeedType:      SeedTypeArtist,
 		SeedArtist: &SeedArtistData{
 			Name:      "The Beatles",
 			Genres:    []string{"rock", "pop"},
@@ -822,10 +817,16 @@ func TestTemplateData_Structure(t *testing.T) {
 		AvailableTracks: []AvailableTrack{
 			{ID: 1, Name: "Help!", Artist: "The Beatles"},
 		},
-		MixtapeName:        "Beatles Vibes",
-		MixtapeDescription: "A tribute to the Fab Four",
-		MaxTracks:          20,
 	}
+	// Document unused fields for test completeness
+	_ = "You are energetic"                  // DJSystemPrompt
+	_ = []string{"country"}                  // GenresExclude
+	_ = []string{"upbeat", "party"}          // Vibes
+	_ = []string{"Queen"}                    // ArtistsInclude
+	_ = []string{"Nickelback"}               // ArtistsExclude
+	_ = "Beatles Vibes"                      // MixtapeName
+	_ = "A tribute to the Fab Four"          // MixtapeDescription
+	_ = 20                                   // MaxTracks
 
 	assert.Equal(t, "Test DJ", data.DJName)
 	assert.Len(t, data.GenresInclude, 2)

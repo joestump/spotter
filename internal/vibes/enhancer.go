@@ -503,7 +503,11 @@ func (e *PlaylistEnhancer) callOpenAI(ctx context.Context, prompt string) (strin
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			e.logger.Warn("failed to close response body", "error", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

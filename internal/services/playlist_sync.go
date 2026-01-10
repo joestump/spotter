@@ -421,11 +421,11 @@ func (s *PlaylistSyncService) RemovePlaylistFromNavidrome(ctx context.Context, p
 	}
 
 	// Delete from Navidrome
-	if err := syncer.DeletePlaylist(ctx, pl.NavidromePlaylistID); err != nil {
+	if deleteErr := syncer.DeletePlaylist(ctx, pl.NavidromePlaylistID); deleteErr != nil {
 		s.Logger.Error("failed to delete playlist from Navidrome",
 			"playlist_id", playlistID,
 			"navidrome_playlist_id", pl.NavidromePlaylistID,
-			"error", err)
+			"error", deleteErr)
 		// Don't fail the whole operation - maybe the playlist was already deleted
 		s.Logger.Warn("continuing despite Navidrome delete error",
 			"playlist_id", playlistID)
@@ -554,11 +554,11 @@ func (s *PlaylistSyncService) RebuildPlaylistSync(ctx context.Context, playlistI
 			"playlist_id", playlistID,
 			"navidrome_playlist_id", pl.NavidromePlaylistID)
 
-		if err := syncer.DeletePlaylist(ctx, pl.NavidromePlaylistID); err != nil {
+		if deleteErr := syncer.DeletePlaylist(ctx, pl.NavidromePlaylistID); deleteErr != nil {
 			s.Logger.Warn("failed to delete existing Navidrome playlist, continuing with rebuild",
 				"playlist_id", playlistID,
 				"navidrome_playlist_id", pl.NavidromePlaylistID,
-				"error", err)
+				"error", deleteErr)
 			// Continue anyway - the playlist might have been deleted manually
 		} else {
 			s.Logger.Info("deleted existing Navidrome playlist",

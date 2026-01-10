@@ -46,7 +46,7 @@ func (h *Handler) Playlists(w http.ResponseWriter, r *http.Request) {
 	// Get page number from query
 	page := 1
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		if p, parseErr := strconv.Atoi(pageStr); parseErr == nil && p > 0 {
 			page = p
 		}
 	}
@@ -340,7 +340,11 @@ func (h *Handler) DebugPlaylistSync(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
 	// Perform synchronous sync
-	err = h.PlaylistSyncSvc.SyncPlaylistToNavidrome(ctx, playlistID)
+	if err = h.PlaylistSyncSvc.SyncPlaylistToNavidrome(ctx, playlistID); err != nil {
+		h.Logger.Error("playlist sync failed", "playlist_id", playlistID, "error", err)
+		http.Error(w, "Sync failed", http.StatusInternalServerError)
+		return
+	}
 
 	duration := time.Since(startTime)
 
@@ -550,11 +554,11 @@ func (h *Handler) SyncPlaylist(w http.ResponseWriter, r *http.Request) {
 			h.Logger.Debug("starting async playlist sync",
 				"playlist_id", playlistID)
 
-			if err := h.PlaylistSyncSvc.SyncPlaylistToNavidrome(ctx, playlistID); err != nil {
+			if syncErr := h.PlaylistSyncSvc.SyncPlaylistToNavidrome(ctx, playlistID); syncErr != nil {
 				h.Logger.Error("manual playlist sync failed",
 					"playlist_id", playlistID,
 					"playlist_name", pl.Name,
-					"error", err)
+					"error", syncErr)
 			} else {
 				h.Logger.Info("manual playlist sync completed",
 					"playlist_id", playlistID,
@@ -649,11 +653,11 @@ func (h *Handler) RebuildPlaylistSync(w http.ResponseWriter, r *http.Request) {
 			h.Logger.Debug("starting async playlist rebuild",
 				"playlist_id", playlistID)
 
-			if err := h.PlaylistSyncSvc.RebuildPlaylistSync(ctx, playlistID); err != nil {
+			if rebuildErr := h.PlaylistSyncSvc.RebuildPlaylistSync(ctx, playlistID); rebuildErr != nil {
 				h.Logger.Error("playlist rebuild failed",
 					"playlist_id", playlistID,
 					"playlist_name", pl.Name,
-					"error", err)
+					"error", rebuildErr)
 			} else {
 				h.Logger.Info("playlist rebuild completed",
 					"playlist_id", playlistID,
@@ -851,7 +855,7 @@ func (h *Handler) EnhanceVibes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	if parseErr := r.ParseForm(); parseErr != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -1042,21 +1046,21 @@ func (h *Handler) applyEnhancementToNavidrome(ctx context.Context, u *ent.User, 
 
 	// Add new tracks in order
 	for i, trackID := range trackIDs {
-		track, err := h.Client.Track.Get(ctx, trackID)
-		if err != nil {
+		track, getErr := h.Client.Track.Get(ctx, trackID)
+		if getErr != nil {
 			h.Logger.Warn("track not found, skipping",
 				"track_id", trackID,
-				"error", err)
+				"error", getErr)
 			continue
 		}
 
 		// Get artist and album names
 		artistName := ""
 		albumName := ""
-		if edges, err := track.Edges.ArtistOrErr(); err == nil && edges != nil {
+		if edges, edgeErr := track.Edges.ArtistOrErr(); edgeErr == nil && edges != nil {
 			artistName = edges.Name
 		}
-		if edges, err := track.Edges.AlbumOrErr(); err == nil && edges != nil {
+		if edges, edgeErr := track.Edges.AlbumOrErr(); edgeErr == nil && edges != nil {
 			albumName = edges.Name
 		}
 

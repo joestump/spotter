@@ -577,8 +577,8 @@ func (e *Enricher) EnrichTrack(ctx context.Context, track *ent.Track) (*enricher
 	}
 
 	var sp spotifyTrack
-	if err := json.Unmarshal(trackData, &sp); err != nil {
-		return nil, fmt.Errorf("failed to parse track response: %w", err)
+	if unmarshalErr := json.Unmarshal(trackData, &sp); unmarshalErr != nil {
+		return nil, fmt.Errorf("failed to parse track response: %w", unmarshalErr)
 	}
 
 	// Fetch audio features

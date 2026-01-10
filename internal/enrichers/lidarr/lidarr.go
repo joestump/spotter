@@ -181,16 +181,16 @@ func (e *Enricher) EnrichAlbum(ctx context.Context, album *ent.Album) (*enricher
 
 			var artistID int
 			if arData != nil && arData.LidarrID != "" {
-				parsedID, err := strconv.Atoi(arData.LidarrID)
-				if err == nil {
+				parsedID, parseErr := strconv.Atoi(arData.LidarrID)
+				if parseErr == nil {
 					artistID = parsedID
 				}
 			}
 
 			if artistID == 0 {
 				// Fallback check
-				lArt, err := e.findArtist(ctx, album.Edges.Artist)
-				if err == nil && lArt != nil {
+				lArt, findErr := e.findArtist(ctx, album.Edges.Artist)
+				if findErr == nil && lArt != nil {
 					artistID = lArt.ID
 				}
 			}
@@ -352,9 +352,9 @@ func (e *Enricher) doRequest(ctx context.Context, method, endpoint string, body 
 
 	var bodyReader io.Reader
 	if body != nil {
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return err
+		jsonBody, marshalErr := json.Marshal(body)
+		if marshalErr != nil {
+			return marshalErr
 		}
 		bodyReader = bytes.NewBuffer(jsonBody)
 	}
@@ -378,7 +378,10 @@ func (e *Enricher) doRequest(ctx context.Context, method, endpoint string, body 
 	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(resp.Body)
+		b, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("lidarr api error: %d", resp.StatusCode)
+		}
 		return fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b))
 	}
 
@@ -444,13 +447,12 @@ func (e *Enricher) addArtist(ctx context.Context, mbid string) (*lidarrArtist, e
 	}
 
 	artistToAdd := results[0]
-	artistToAdd.Monitored = true
 
 	var rootFolders []struct {
 		Path string `json:"path"`
 	}
-	if err := e.doRequest(ctx, "GET", "rootfolder", nil, &rootFolders); err != nil {
-		return nil, err
+	if reqErr := e.doRequest(ctx, "GET", "rootfolder", nil, &rootFolders); reqErr != nil {
+		return nil, reqErr
 	}
 	if len(rootFolders) == 0 {
 		return nil, fmt.Errorf("no root folder configured in lidarr")
@@ -470,7 +472,7 @@ func (e *Enricher) addArtist(ctx context.Context, mbid string) (*lidarrArtist, e
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	}
-	if err := e.doRequest(ctx, "GET", "qualityprofile", nil, &qualityProfiles); err == nil && len(qualityProfiles) > 0 {
+	if reqErr := e.doRequest(ctx, "GET", "qualityprofile", nil, &qualityProfiles); reqErr == nil && len(qualityProfiles) > 0 {
 		payload["qualityProfileId"] = qualityProfiles[0].ID
 	}
 
@@ -478,7 +480,7 @@ func (e *Enricher) addArtist(ctx context.Context, mbid string) (*lidarrArtist, e
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	}
-	if err := e.doRequest(ctx, "GET", "metadataprofile", nil, &metadataProfiles); err == nil && len(metadataProfiles) > 0 {
+	if reqErr := e.doRequest(ctx, "GET", "metadataprofile", nil, &metadataProfiles); reqErr == nil && len(metadataProfiles) > 0 {
 		payload["metadataProfileId"] = metadataProfiles[0].ID
 	}
 

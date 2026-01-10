@@ -122,10 +122,10 @@ func (s *MetadataService) SyncAll(ctx context.Context, u *ent.User) error {
 	}
 
 	// Step 1: Build catalog from listens and playlists
-	if err := s.BuildCatalog(ctx, refreshedUser); err != nil {
-		s.Logger.Error("failed to build catalog", "error", err)
+	if buildErr := s.BuildCatalog(ctx, refreshedUser); buildErr != nil {
+		s.Logger.Error("failed to build catalog", "error", buildErr)
 		s.logEvent(ctx, u, syncevent.EventTypeMetadataFailed, "metadata",
-			fmt.Sprintf("Failed to build catalog: %v", err), nil)
+			fmt.Sprintf("Failed to build catalog: %v", buildErr), nil)
 		// Continue with enrichment for existing entries
 	}
 
@@ -206,8 +206,8 @@ func (s *MetadataService) BuildCatalog(ctx context.Context, u *ent.User) error {
 
 	// Process listens
 	for _, l := range listens {
-		added, err := s.processListenEntry(ctx, u, l.ArtistName, l.AlbumName, l.TrackName)
-		if err != nil {
+		added, processErr := s.processListenEntry(ctx, u, l.ArtistName, l.AlbumName, l.TrackName)
+		if processErr != nil {
 			s.Logger.Warn("failed to process listen entry",
 				"artist", l.ArtistName,
 				"album", l.AlbumName,
@@ -239,8 +239,8 @@ func (s *MetadataService) BuildCatalog(ctx context.Context, u *ent.User) error {
 
 	// Process playlist tracks (similar to listens)
 	for _, pt := range playlistTracks {
-		added, err := s.processListenEntry(ctx, u, pt.ArtistName, pt.AlbumName, pt.TrackName)
-		if err != nil {
+		added, processErr := s.processListenEntry(ctx, u, pt.ArtistName, pt.AlbumName, pt.TrackName)
+		if processErr != nil {
 			s.Logger.Warn("failed to process playlist track entry",
 				"artist", pt.ArtistName,
 				"album", pt.AlbumName,
@@ -1336,8 +1336,8 @@ func (s *MetadataService) DownloadImages(ctx context.Context, u *ent.User) (int,
 	}
 
 	for _, img := range artistImages {
-		if err := s.downloadArtistImage(ctx, u, img, baseDir); err != nil {
-			s.Logger.Warn("failed to download artist image", "url", img.URL, "error", err)
+		if downloadErr := s.downloadArtistImage(ctx, u, img, baseDir); downloadErr != nil {
+			s.Logger.Warn("failed to download artist image", "url", img.URL, "error", downloadErr)
 		} else {
 			downloadedCount++
 		}
@@ -1480,7 +1480,11 @@ func (s *MetadataService) downloadFile(ctx context.Context, url, localPath strin
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			s.Logger.Warn("failed to close response body", "error", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
@@ -1490,7 +1494,11 @@ func (s *MetadataService) downloadFile(ctx context.Context, url, localPath strin
 	if err != nil {
 		return err
 	}
-	defer func() { _ = file.Close() }()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			s.Logger.Warn("failed to close file", "error", closeErr)
+		}
+	}()
 
 	_, err = io.Copy(file, resp.Body)
 	return err

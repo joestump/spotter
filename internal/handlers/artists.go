@@ -27,13 +27,13 @@ import (
 )
 
 const (
-	groupByDay    = "day"
-	groupByWeek   = "week"
-	groupByMonth  = "month"
-	timeframe90d  = "90d"
-	timeframe6m   = "6m"
-	timeframe1y   = "1y"
-	timeframeAll  = "all"
+	groupByDay   = "day"
+	groupByWeek  = "week"
+	groupByMonth = "month"
+	timeframe90d = "90d"
+	timeframe6m  = "6m"
+	timeframe1y  = "1y"
+	timeframeAll = "all"
 )
 
 func (h *Handler) ArtistShow(w http.ResponseWriter, r *http.Request) {
@@ -72,9 +72,9 @@ func (h *Handler) ArtistShow(w http.ResponseWriter, r *http.Request) {
 	// Get similar artists
 	var similarArtists []artists.SimilarArtistInfo
 	if h.SimilarArtistsSvc != nil {
-		similar, err := h.SimilarArtistsSvc.GetSimilarArtists(r.Context(), u.ID, artistID)
-		if err != nil {
-			h.Logger.Warn("failed to get similar artists", "error", err, "artist_id", artistID)
+		similar, similarErr := h.SimilarArtistsSvc.GetSimilarArtists(r.Context(), u.ID, artistID)
+		if similarErr != nil {
+			h.Logger.Warn("failed to get similar artists", "error", similarErr, "artist_id", artistID)
 		} else {
 			for _, s := range similar {
 				if s.Edges.SimilarArtist != nil {
@@ -503,7 +503,7 @@ func (h *Handler) ArtistIndex(w http.ResponseWriter, r *http.Request) {
 	// Get page number from query
 	page := 1
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		if p, parseErr := strconv.Atoi(pageStr); parseErr == nil && p > 0 {
 			page = p
 		}
 	}
@@ -737,7 +737,7 @@ func (h *Handler) ArtistCreateMixtape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	if parseErr := r.ParseForm(); parseErr != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -766,7 +766,7 @@ func (h *Handler) ArtistCreateMixtape(w http.ResponseWriter, r *http.Request) {
 	// Get max tracks (default 25)
 	maxTracks := 25
 	if maxTracksStr := r.FormValue("max_tracks"); maxTracksStr != "" {
-		if mt, err := strconv.Atoi(maxTracksStr); err == nil && mt >= 1 && mt <= 100 {
+		if mt, parseErr := strconv.Atoi(maxTracksStr); parseErr == nil && mt >= 1 && mt <= 100 {
 			maxTracks = mt
 		}
 	}

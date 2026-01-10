@@ -256,9 +256,9 @@ func (g *MixtapeGenerator) loadSeedData(ctx context.Context, req *GenerationRequ
 		if err == nil {
 			req.Seed.Album = album
 			// Load artist
-			albumArtist, err := album.QueryArtist().Only(ctx)
-			if err != nil {
-				g.logger.Debug("failed to load album artist", "album_id", album.ID, "error", err)
+			albumArtist, artistErr := album.QueryArtist().Only(ctx)
+			if artistErr != nil {
+				g.logger.Debug("failed to load album artist", "album_id", album.ID, "error", artistErr)
 			} else if albumArtist != nil {
 				_ = albumArtist // Album already has artist info we need
 			}
@@ -647,7 +647,11 @@ func (g *MixtapeGenerator) callOpenAI(ctx context.Context, prompt string) (strin
 		g.logger.Error("OpenAI request failed", "error", err)
 		return "", 0, fmt.Errorf("request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			g.logger.Warn("failed to close response body", "error", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -820,7 +824,7 @@ func (g *MixtapeGenerator) findBestFuzzyMatch(name, artist string, candidates []
 
 		// Bonus for both being high confidence
 		if nameScore > 0.8 && artistScore > 0.8 {
-			score = score + 0.1
+			score += 0.1
 			if score > 1.0 {
 				score = 1.0
 			}

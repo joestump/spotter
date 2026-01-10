@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	baseURL          = "https://ws.audioscrobbler.com/2.0/"
-	imageSizeXLarge  = "extralarge"
+	baseURL         = "https://ws.audioscrobbler.com/2.0/"
+	imageSizeXLarge = "extralarge"
 )
 
 // Enricher implements the Last.fm metadata enricher.
@@ -564,11 +564,12 @@ func stripHTML(s string) string {
 	inTag := false
 
 	for _, r := range s {
-		if r == '<' {
+		switch {
+		case r == '<':
 			inTag = true
-		} else if r == '>' {
+		case r == '>':
 			inTag = false
-		} else if !inTag {
+		case !inTag:
 			result.WriteRune(r)
 		}
 	}

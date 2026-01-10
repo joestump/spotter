@@ -46,8 +46,8 @@ func DownloadAndSaveImage(url, localPath string, logger *slog.Logger) (string, e
 		return "", fmt.Errorf("failed to start image download from %s: %w", url, err)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logger.Warn("failed to close response body", "error", err)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Warn("failed to close response body", "error", closeErr)
 		}
 	}()
 
@@ -70,8 +70,8 @@ func DownloadAndSaveImage(url, localPath string, logger *slog.Logger) (string, e
 
 	// Ensure the destination directory exists.
 	dir := filepath.Dir(localPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create image directory %s: %w", dir, err)
+	if mkdirErr := os.MkdirAll(dir, 0755); mkdirErr != nil {
+		return "", fmt.Errorf("failed to create image directory %s: %w", dir, mkdirErr)
 	}
 
 	// Create the destination file.

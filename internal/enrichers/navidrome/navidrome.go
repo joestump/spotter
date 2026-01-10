@@ -118,7 +118,11 @@ func (e *Enricher) doRequest(ctx context.Context, method string, params url.Valu
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			e.logger.Warn("failed to close response body", "error", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Navidrome API returned status %d", resp.StatusCode)
@@ -315,8 +319,8 @@ func (e *Enricher) EnrichArtist(ctx context.Context, artist *ent.Artist) (*enric
 	}
 
 	var response subsonicArtistResponse
-	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse artist response: %w", err)
+	if unmarshalErr := json.Unmarshal(data, &response); unmarshalErr != nil {
+		return nil, fmt.Errorf("failed to parse artist response: %w", unmarshalErr)
 	}
 
 	result := &enrichers.ArtistData{

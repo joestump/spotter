@@ -149,7 +149,7 @@ func (h *Handler) UpdateDJ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	if parseErr := r.ParseForm(); parseErr != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -242,7 +242,7 @@ func (h *Handler) MixtapesIndex(w http.ResponseWriter, r *http.Request) {
 	// Get page number from query
 	page := 1
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		if p, parseErr := strconv.Atoi(pageStr); parseErr == nil && p > 0 {
 			page = p
 		}
 	}
@@ -333,7 +333,7 @@ func (h *Handler) CreateMixtape(w http.ResponseWriter, r *http.Request) {
 
 	maxTracks := 25 // default
 	if maxTracksStr := r.FormValue("max_tracks"); maxTracksStr != "" {
-		if mt, err := strconv.Atoi(maxTracksStr); err == nil && mt >= 1 && mt <= 100 {
+		if mt, parseErr := strconv.Atoi(maxTracksStr); parseErr == nil && mt >= 1 && mt <= 100 {
 			maxTracks = mt
 		}
 	}
@@ -388,7 +388,7 @@ func (h *Handler) UpdateMixtape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	if parseErr := r.ParseForm(); parseErr != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -424,7 +424,7 @@ func (h *Handler) UpdateMixtape(w http.ResponseWriter, r *http.Request) {
 
 	maxTracks := 25 // default
 	if maxTracksStr := r.FormValue("max_tracks"); maxTracksStr != "" {
-		if mt, err := strconv.Atoi(maxTracksStr); err == nil && mt >= 1 && mt <= 100 {
+		if mt, parseErr := strconv.Atoi(maxTracksStr); parseErr == nil && mt >= 1 && mt <= 100 {
 			maxTracks = mt
 		}
 	}
@@ -667,16 +667,23 @@ func (h *Handler) GenerateMixtape(w http.ResponseWriter, r *http.Request) {
 		// Store seed information if provided
 		if seed != nil {
 			updater.SetSeedType(string(seed.Type))
-			if seed.Type == vibes.SeedTypeArtist && seed.Artist != nil {
-				updater.SetSeedID(seed.Artist.ID)
-			} else if seed.Type == vibes.SeedTypeAlbum && seed.Album != nil {
-				updater.SetSeedID(seed.Album.ID)
-			} else if seed.Type == vibes.SeedTypeTracks && len(seed.TrackIDs) > 0 {
-				seedTrackIDs := make([]string, len(seed.TrackIDs))
-				for i, id := range seed.TrackIDs {
-					seedTrackIDs[i] = strconv.Itoa(id)
+			switch seed.Type {
+			case vibes.SeedTypeArtist:
+				if seed.Artist != nil {
+					updater.SetSeedID(seed.Artist.ID)
 				}
-				updater.SetSeedTrackIds(seedTrackIDs)
+			case vibes.SeedTypeAlbum:
+				if seed.Album != nil {
+					updater.SetSeedID(seed.Album.ID)
+				}
+			case vibes.SeedTypeTracks:
+				if len(seed.TrackIDs) > 0 {
+					seedTrackIDs := make([]string, len(seed.TrackIDs))
+					for i, id := range seed.TrackIDs {
+						seedTrackIDs[i] = strconv.Itoa(id)
+					}
+					updater.SetSeedTrackIds(seedTrackIDs)
+				}
 			}
 		}
 
@@ -750,7 +757,7 @@ func (h *Handler) MixtapeShow(w http.ResponseWriter, r *http.Request) {
 		// Parse track IDs from strings to ints
 		trackIDs := make([]int, 0, len(m.TrackIds))
 		for _, idStr := range m.TrackIds {
-			if id, err := strconv.Atoi(idStr); err == nil {
+			if id, parseErr := strconv.Atoi(idStr); parseErr == nil {
 				trackIDs = append(trackIDs, id)
 			}
 		}

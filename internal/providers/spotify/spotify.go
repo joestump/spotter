@@ -195,14 +195,14 @@ func (p *Provider) fetchUserProfile(ctx context.Context, accessToken string) (*s
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := http.DefaultClient.Do(req)
-	    if err != nil {
-	        return nil, err
-	    }
-	    defer func() {
-	        if err := resp.Body.Close(); err != nil {
-	            p.logger.Warn("failed to close response body", "error", err)
-	        }
-	    }()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			p.logger.Warn("failed to close response body", "error", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("spotify API returned status %d", resp.StatusCode)
 	}
@@ -389,12 +389,14 @@ func (p *Provider) GetPlaylists(ctx context.Context) ([]providers.Playlist, erro
 
 		var result playlistsResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			if err := resp.Body.Close(); err != nil {
-				p.logger.Warn("failed to close response body", "error", err)
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				p.logger.Warn("failed to close response body", "error", closeErr)
 			}
 			return nil, err
 		}
-		_ = resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			p.logger.Warn("failed to close response body", "error", closeErr)
+		}
 
 		for _, item := range result.Items {
 			// Get the best image (first one is usually the largest)
@@ -457,13 +459,15 @@ func (p *Provider) getPlaylistTracks(ctx context.Context, accessToken, playlistI
 
 		var result playlistTracksResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			if err := resp.Body.Close(); err != nil {
-				p.logger.Warn("failed to close response body", "error", err)
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				p.logger.Warn("failed to close response body", "error", closeErr)
 			}
 			p.logger.Debug("failed to decode playlist tracks response", "error", err)
 			break
 		}
-		_ = resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			p.logger.Warn("failed to close response body", "error", closeErr)
+		}
 
 		for _, item := range result.Items {
 			if item.Track.ID == "" {

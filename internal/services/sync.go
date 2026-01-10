@@ -222,10 +222,10 @@ func (s *Syncer) syncHistory(ctx context.Context, u *ent.User, activeProviders [
 			totalFound += len(tracks)
 			s.Logger.Info("found new tracks batch", "count", len(tracks), "provider", provider.Type())
 
-			count, skipped, err := s.persistListens(ctx, u, provider.Type(), tracks)
-			if err != nil {
-				s.Logger.Error("failed to persist listens batch", "error", err)
-				return err
+			count, skipped, persistErr := s.persistListens(ctx, u, provider.Type(), tracks)
+			if persistErr != nil {
+				s.Logger.Error("failed to persist listens batch", "error", persistErr)
+				return persistErr
 			}
 			totalAdded += count
 			totalSkipped += skipped

@@ -264,8 +264,8 @@ func (h *Handler) getAlbumTracksWithListens(ctx context.Context, userID int, a *
 			query = query.Where(listen.ArtistName(artistName))
 		}
 
-		count, err := query.Count(ctx)
-		if err != nil {
+		count, countErr := query.Count(ctx)
+		if countErr != nil {
 			count = 0
 		}
 
@@ -344,7 +344,7 @@ func (h *Handler) AlbumIndex(w http.ResponseWriter, r *http.Request) {
 	// Get page number from query
 	page := 1
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		if p, parseErr := strconv.Atoi(pageStr); parseErr == nil && p > 0 {
 			page = p
 		}
 	}
@@ -513,7 +513,7 @@ func (h *Handler) AlbumCreateMixtape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	if parseErr := r.ParseForm(); parseErr != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -542,7 +542,7 @@ func (h *Handler) AlbumCreateMixtape(w http.ResponseWriter, r *http.Request) {
 	// Get max tracks (default 25)
 	maxTracks := 25
 	if maxTracksStr := r.FormValue("max_tracks"); maxTracksStr != "" {
-		if mt, err := strconv.Atoi(maxTracksStr); err == nil && mt >= 1 && mt <= 100 {
+		if mt, parseErr := strconv.Atoi(maxTracksStr); parseErr == nil && mt >= 1 && mt <= 100 {
 			maxTracks = mt
 		}
 	}
