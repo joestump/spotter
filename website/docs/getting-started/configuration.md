@@ -27,6 +27,17 @@ Spotter is configured using environment variables. You can set these in your she
 | `SPOTTER_SERVER_PORT` | The HTTP port the server listens on | `8080` |
 | `SPOTTER_SERVER_HOST` | The host address to bind to | `0.0.0.0` |
 
+## Security Configuration
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `SPOTTER_SECURITY_ENCRYPTION_KEY` | 64-character hex key for encrypting OAuth tokens at rest | *None* |
+| `SPOTTER_SECURITY_SECURE_COOKIES` | Set `Secure` flag on session cookies (requires HTTPS) | `true` |
+
+:::caution Production Requirement
+When deploying with HTTPS (recommended), keep `SPOTTER_SECURITY_SECURE_COOKIES=true` (the default). Only set to `false` for local development over HTTP.
+:::
+
 ## Database Configuration
 
 | Variable | Description | Default |
@@ -147,6 +158,14 @@ SPOTTER_OPENAI_API_KEY=sk-your-openai-api-key
 # ===================
 SPOTTER_SERVER_PORT=8080
 SPOTTER_SERVER_HOST=0.0.0.0
+
+# ===================
+# Security Configuration
+# ===================
+# Generate with: openssl rand -hex 32
+SPOTTER_SECURITY_ENCRYPTION_KEY=your_64_char_hex_key_here
+# Set to false for local HTTP development
+SPOTTER_SECURITY_SECURE_COOKIES=true
 
 # ===================
 # Database Configuration
