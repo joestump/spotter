@@ -1,0 +1,16 @@
+# hadolint configuration for Spotter
+# See: https://github.com/hadolint/hadolint
+
+# Ignore specific rules if needed
+ignored:
+  # DL3008: Pin versions in apt-get install (too strict for dev)
+  # - DL3008
+  # DL3009: Delete apt-get lists after installing (handled by multi-stage)
+  # - DL3009
+
+# Trust official images
+trustedRegistries:
+  - docker.io
+
+# Strict mode - fail on warnings
+failure-threshold: error
