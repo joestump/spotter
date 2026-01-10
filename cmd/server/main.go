@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"spotter/ent"
@@ -32,6 +34,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -112,6 +115,13 @@ func main() {
 	// Initialize Handlers
 	h := handlers.New(client, cfg, logger, encryptor, syncer, metadataSvc, playlistSyncSvc, mixtapeGenerator, playlistEnhancer, similarArtistsSvc, bus)
 
+	// Create root context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create errgroup for managing background goroutines
+	g, gctx := errgroup.WithContext(ctx)
+
 	// Background Sync Loop for listens/playlists
 	syncInterval, err := time.ParseDuration(cfg.Sync.Interval)
 	if err != nil {
@@ -120,25 +130,9 @@ func main() {
 	}
 	logger.Info("background sync configured", "interval", syncInterval)
 
-	go func() {
-		ticker := time.NewTicker(syncInterval)
-		defer ticker.Stop()
-		for range ticker.C {
-			ctx := context.Background()
-			users, err := client.User.Query().All(ctx)
-			if err != nil {
-				logger.Error("failed to fetch users for background sync", "error", err)
-				continue
-			}
-			for _, u := range users {
-				go func(user *ent.User) {
-					if err := syncer.Sync(ctx, user); err != nil {
-						logger.Error("background sync failed", "username", user.Username, "error", err)
-					}
-				}(u)
-			}
-		}
-	}()
+	g.Go(func() error {
+		return runBackgroundSyncLoop(gctx, client, syncer, syncInterval, logger)
+	})
 
 	// Background Metadata Enrichment Loop
 	if cfg.Metadata.Enabled {
@@ -151,19 +145,9 @@ func main() {
 			"interval", metadataInterval,
 			"order", cfg.MetadataEnricherOrder())
 
-		go func() {
-			// Initial delay to let the app start up
-			time.Sleep(30 * time.Second)
-
-			// Run immediately on startup
-			runMetadataSync(client, metadataSvc, logger)
-
-			ticker := time.NewTicker(metadataInterval)
-			defer ticker.Stop()
-			for range ticker.C {
-				runMetadataSync(client, metadataSvc, logger)
-			}
-		}()
+		g.Go(func() error {
+			return runMetadataEnrichmentLoop(gctx, client, metadataSvc, metadataInterval, logger)
+		})
 	} else {
 		logger.Info("metadata enrichment disabled")
 	}
@@ -176,28 +160,9 @@ func main() {
 	}
 	logger.Info("playlist sync configured", "interval", playlistSyncInterval)
 
-	go func() {
-		// Initial delay to let the app start up
-		time.Sleep(1 * time.Minute)
-
-		ticker := time.NewTicker(playlistSyncInterval)
-		defer ticker.Stop()
-		for range ticker.C {
-			ctx := context.Background()
-			users, err := client.User.Query().All(ctx)
-			if err != nil {
-				logger.Error("failed to fetch users for playlist sync", "error", err)
-				continue
-			}
-			for _, u := range users {
-				go func(user *ent.User) {
-					if err := playlistSyncSvc.SyncAllEnabledPlaylists(ctx, user.ID); err != nil {
-						logger.Error("playlist sync failed", "username", user.Username, "error", err)
-					}
-				}(u)
-			}
-		}
-	}()
+	g.Go(func() error {
+		return runPlaylistSyncLoop(gctx, client, playlistSyncSvc, playlistSyncInterval, logger)
+	})
 
 	// Router setup
 	r := chi.NewRouter()
@@ -332,17 +297,65 @@ func main() {
 		})
 	})
 
+	// Create HTTP server
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
-	logger.Info("starting server", "addr", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		logger.Error("server failed", "error", err)
-		os.Exit(1)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+
+	// Channel to listen for shutdown signals
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	// Start server in goroutine
+	serverErrors := make(chan error, 1)
+	go func() {
+		logger.Info("starting server", "addr", addr)
+		serverErrors <- srv.ListenAndServe()
+	}()
+
+	// Wait for shutdown signal or server error
+	select {
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			logger.Error("server failed", "error", err)
+			cancel() // Cancel background goroutines
+			os.Exit(1)
+		}
+	case sig := <-sigCh:
+		logger.Info("shutdown signal received", "signal", sig)
+
+		// Cancel context for background goroutines
+		cancel()
+
+		// Create shutdown context with timeout
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer shutdownCancel()
+
+		// Gracefully shutdown HTTP server
+		logger.Info("shutting down HTTP server", "timeout", "25s")
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Error("error during HTTP server shutdown", "error", err)
+		}
+
+		// Wait for background goroutines to finish
+		logger.Info("waiting for background goroutines to finish")
+		if err := g.Wait(); err != nil && err != context.Canceled {
+			logger.Error("error during background goroutine shutdown", "error", err)
+		}
+
+		// Shutdown event bus
+		logger.Info("shutting down event bus")
+		bus.Shutdown()
+
+		// Database will be closed by defer
+		logger.Info("graceful shutdown complete")
 	}
 }
 
 // runMetadataSync runs metadata enrichment for all users.
-func runMetadataSync(client *ent.Client, metadataSvc *services.MetadataService, logger *slog.Logger) {
-	ctx := context.Background()
+func runMetadataSync(ctx context.Context, client *ent.Client, metadataSvc *services.MetadataService, logger *slog.Logger) {
 	users, err := client.User.Query().All(ctx)
 	if err != nil {
 		logger.Error("failed to fetch users for metadata sync", "error", err)
@@ -354,6 +367,100 @@ func runMetadataSync(client *ent.Client, metadataSvc *services.MetadataService, 
 				logger.Error("metadata sync failed", "username", user.Username, "error", err)
 			}
 		}(u)
+	}
+}
+
+// runBackgroundSyncLoop runs periodic sync for all users.
+func runBackgroundSyncLoop(ctx context.Context, client *ent.Client, syncer *services.Syncer, interval time.Duration, logger *slog.Logger) error {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("background sync loop shutting down")
+			return ctx.Err()
+		case <-ticker.C:
+			users, err := client.User.Query().All(ctx)
+			if err != nil {
+				logger.Error("failed to fetch users for background sync", "error", err)
+				continue
+			}
+			for _, u := range users {
+				// Check context before spawning goroutine
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				go func(user *ent.User) {
+					if err := syncer.Sync(ctx, user); err != nil {
+						logger.Error("background sync failed", "username", user.Username, "error", err)
+					}
+				}(u)
+			}
+		}
+	}
+}
+
+// runMetadataEnrichmentLoop runs periodic metadata enrichment.
+func runMetadataEnrichmentLoop(ctx context.Context, client *ent.Client, metadataSvc *services.MetadataService, interval time.Duration, logger *slog.Logger) error {
+	// Initial delay to let the app start up
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(30 * time.Second):
+	}
+
+	// Run immediately on startup
+	runMetadataSync(ctx, client, metadataSvc, logger)
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("metadata enrichment loop shutting down")
+			return ctx.Err()
+		case <-ticker.C:
+			runMetadataSync(ctx, client, metadataSvc, logger)
+		}
+	}
+}
+
+// runPlaylistSyncLoop runs periodic playlist sync to external services.
+func runPlaylistSyncLoop(ctx context.Context, client *ent.Client, playlistSyncSvc *services.PlaylistSyncService, interval time.Duration, logger *slog.Logger) error {
+	// Initial delay to let the app start up
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Minute):
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("playlist sync loop shutting down")
+			return ctx.Err()
+		case <-ticker.C:
+			users, err := client.User.Query().All(ctx)
+			if err != nil {
+				logger.Error("failed to fetch users for playlist sync", "error", err)
+				continue
+			}
+			for _, u := range users {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				go func(user *ent.User) {
+					if err := playlistSyncSvc.SyncAllEnabledPlaylists(ctx, user.ID); err != nil {
+						logger.Error("playlist sync failed", "username", user.Username, "error", err)
+					}
+				}(u)
+			}
+		}
 	}
 }
 

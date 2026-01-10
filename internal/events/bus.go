@@ -182,6 +182,20 @@ func (b *Bus) Publish(userID int, event Event) {
 	}
 }
 
+// Shutdown closes all subscriber channels and cleans up the event bus.
+// It is safe to call Shutdown multiple times.
+func (b *Bus) Shutdown() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for _, chans := range b.subscribers {
+		for _, ch := range chans {
+			close(ch)
+		}
+	}
+	b.subscribers = make(map[int][]chan Event)
+}
+
 // PublishNotification is a convenience method to publish a notification event.
 func (b *Bus) PublishNotification(userID int, title, message, iconType string) {
 	b.Publish(userID, Event{
