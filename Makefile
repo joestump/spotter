@@ -128,8 +128,8 @@ lint-templ: ## Run templ fmt to check Templ template formatting
 
 lint-md: ## Run markdownlint on Markdown files
 	@echo "Linting Markdown files..."
-	@npx markdownlint "**/*.md" --ignore node_modules --ignore .beads || echo "⚠ Markdown linting found issues (non-blocking)"
-	@echo "✓ Markdown linting check complete"
+	@npx markdownlint "**/*.md" --ignore node_modules --ignore .beads
+	@echo "✓ Markdown linting passed"
 
 lint-go: ## Run golangci-lint on Go code
 	@echo "Running golangci-lint..."

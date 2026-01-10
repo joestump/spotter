@@ -8,6 +8,7 @@ The MusicBrainz enricher provides comprehensive metadata from the world's larges
 
 - **Implements**: `ArtistEnricher`, `AlbumEnricher`, `TrackEnricher`, `IDMatcher`
 - **Data provided**:
+
   - **Artists**: MusicBrainz ID (MBID), sort name, tags, country, area
   - **Albums**: MBID, release date, year, tags, album type (album/single/EP/etc.)
   - **Tracks**: MBID, ISRC codes, duration, tags, MusicBrainz URL
@@ -21,18 +22,21 @@ The MusicBrainz enricher provides comprehensive metadata from the world's larges
 ```yaml
 metadata:
   musicbrainz:
-    user_agent: "YourApp/1.0.0 (https://yourwebsite.com)"  # Optional but recommended
+    user_agent: "YourApp/1.0.0 (<https://yourwebsite.com>)"  # Optional but recommended
+
 ```
 
 **Environment Variables** (alternative):
+
 ```bash
-MUSICBRAINZ_USER_AGENT="YourApp/1.0.0 (https://yourwebsite.com)"
+MUSICBRAINZ_USER_AGENT="YourApp/1.0.0 (<https://yourwebsite.com>)"
+
 ```
 
 ### Configuration Notes
 
 - **User Agent**: Recommended to identify your application
-- **Default**: If not configured, uses `"Spotter/1.0.0 (https://github.com/spotter)"`
+- **Default**: If not configured, uses `"Spotter/1.0.0 (<https://github.com/spotter>)"`
 - **Format**: `ApplicationName/Version (Contact URL or Email)`
 
 ## How to Get API Keys
@@ -40,30 +44,35 @@ MUSICBRAINZ_USER_AGENT="YourApp/1.0.0 (https://yourwebsite.com)"
 **No API key required!** MusicBrainz is a free, open-source music database.
 
 However, you should:
+
 1. Set a descriptive User-Agent header to identify your application
 2. Follow the rate limit guidelines (max 1 request per second)
-3. Consider supporting MusicBrainz: https://metabrainz.org/donate
+3. Consider supporting MusicBrainz: <https://metabrainz.org/donate>
 
 ## Rate Limits
 
 ### Official Limits
+
 - **Maximum**: 1 request per second (enforced by MusicBrainz)
 - **Commercial use**: Should use MusicBrainz mirror or database replication
 - **Burst requests**: Not allowed - must space out requests
 
 ### Spotter Implementation
+
 - Rate limiting enforced via mutex and sleep
 - Minimum 1.1 seconds between requests (1100ms)
 - Applied to all API calls automatically
 - Shared across all enrichment operations
 
 ### Error Responses
+
 - **503 Service Unavailable**: Server overloaded or maintenance
 - **429 Too Many Requests**: Rate limit exceeded (shouldn't happen with our implementation)
 
 ## Data Quality
 
 ### Strengths
+
 - **Comprehensive**: Largest open music database
 - **Accurate**: Community-vetted data
 - **Stable IDs**: MBIDs are permanent identifiers
@@ -71,18 +80,21 @@ However, you should:
 - **Well-Maintained**: Active community of editors
 
 ### Limitations
+
 - **Coverage**: Some obscure artists/albums may be missing
 - **Completeness**: Not all releases have cover art
 - **Lag**: New releases may take time to be added
 - **Consistency**: Data quality varies by popularity
 
 ### Tag Quality
+
 - Tags sorted by vote count (most popular first)
 - Only tags with count > 0 are included
 - User-generated (may include unexpected values)
 - Examples: "rock", "alternative", "british", "90s"
 
 ### MBID Matching
+
 - Search returns confidence scores (0.0 to 1.0)
 - Based on MusicBrainz's internal search algorithm
 - Score of 1.0 = 100% match
@@ -98,24 +110,27 @@ However, you should:
 func (e *Enricher) rateLimit() {
     e.mu.Lock()
     defer e.mu.Unlock()
-    
+
     elapsed := time.Since(e.lastCall)
     if elapsed < rateLimitDelay {
         time.Sleep(rateLimitDelay - elapsed)
     }
     e.lastCall = time.Now()
 }
+
 ```
 
 ### Search vs. Lookup
 
 **Search** (used for matching):
+
 - Endpoint: `/ws/2/artist?query=...`
 - Returns multiple results with scores
 - Used when MBID is unknown
 - Fuzzy matching supported
 
 **Lookup** (used for enrichment):
+
 - Endpoint: `/ws/2/artist/{mbid}`
 - Returns single entity with full details
 - Used when MBID is known
@@ -124,6 +139,7 @@ func (e *Enricher) rateLimit() {
 ### Release Group vs. Release
 
 MusicBrainz distinguishes:
+
 - **Release Group**: Abstract album (e.g., "Abbey Road")
 - **Release**: Specific edition (e.g., "Abbey Road [2009 Remaster, US]")
 
@@ -132,12 +148,14 @@ Spotter uses Release Groups for albums as they represent the canonical album.
 ### Cover Art Archive
 
 - Separate service built on MusicBrainz data
-- URL: `https://coverartarchive.org`
+- URL: `<https://coverartarchive.org`>
 - Uses same MBIDs as MusicBrainz
 - Returns multiple images per release:
+
   - Front cover (primary)
   - Back cover
   - Medium/booklet images
+
 - Thumbnails available (small: 250px, large: 500px)
 
 ### ISRC Codes
@@ -151,6 +169,7 @@ Spotter uses Release Groups for albums as they represent the canonical album.
 ### Year Parsing
 
 From release dates:
+
 - Full date: `2023-05-15` → Year: 2023
 - Year-month: `2023-05` → Year: 2023
 - Year only: `2023` → Year: 2023
@@ -161,22 +180,29 @@ From release dates:
 ### Running Tests
 
 ```bash
+
 # Run MusicBrainz enricher tests
+
 go test ./internal/enrichers/musicbrainz/...
 
 # Run with verbose output
+
 go test -v ./internal/enrichers/musicbrainz/...
 
 # Run with coverage
+
 go test -cover ./internal/enrichers/musicbrainz/...
 
 # Run specific test
+
 go test -run TestMatchArtist ./internal/enrichers/musicbrainz/...
+
 ```
 
 ### Test Coverage
 
 Tests cover:
+
 - Factory creation
 - Artist/album/track matching with various scores
 - Enrichment with and without MBIDs
@@ -195,40 +221,47 @@ Tests use `httptest.NewServer` to simulate MusicBrainz API:
 server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     // Verify User-Agent header
     assert.NotEmpty(t, r.Header.Get("User-Agent"))
-    
+
     // Return mock MusicBrainz response
     json.NewEncoder(w).Encode(mockResponse)
 }))
+
 ```
 
 ## Troubleshooting
 
 ### "Rate Limited" Errors
+
 - Should be rare with built-in rate limiting
 - May occur if using multiple instances of Spotter
 - Solution: Ensure only one instance syncing at a time
 
 ### "Service Unavailable" (503)
+
 - MusicBrainz server is overloaded or in maintenance
 - Wait and retry later
-- Check status: https://metabrainz.org/status
+- Check status: <https://metabrainz.org/status>
 
 ### No Match Found
+
 - Artist/album/track not in MusicBrainz database
-- Try searching manually: https://musicbrainz.org
+- Try searching manually: <https://musicbrainz.org>
 - Consider contributing missing data to MusicBrainz
 
 ### Incorrect Matches
+
 - Search algorithm may match wrong entity
 - Check confidence scores (< 0.9 may be unreliable)
 - Manual verification recommended for low scores
 
 ### Missing Cover Art
+
 - Not all releases have cover art in Cover Art Archive
-- Check manually: https://coverartarchive.org/release-group/{mbid}
+- Check manually: <https://coverartarchive.org/release-group/{mbid}>
 - Consider using other enrichers (Fanart.tv, Last.fm)
 
 ### Slow Enrichment
+
 - Rate limiting causes 1+ second per API call
 - Multiple API calls per entity (search + lookup)
 - This is intentional and required
@@ -236,11 +269,11 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
 
 ## API Reference
 
-- **MusicBrainz API**: https://musicbrainz.org/doc/MusicBrainz_API
-- **API Docs**: https://musicbrainz.org/doc/Development/XML_Web_Service/Version_2
-- **Rate Limiting**: https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting
-- **Cover Art Archive**: https://musicbrainz.org/doc/Cover_Art_Archive/API
-- **Search Syntax**: https://musicbrainz.org/doc/Indexed_Search_Syntax
+- **MusicBrainz API**: <https://musicbrainz.org/doc/MusicBrainz_API>
+- **API Docs**: <https://musicbrainz.org/doc/Development/XML_Web_Service/Version_2>
+- **Rate Limiting**: <https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting>
+- **Cover Art Archive**: <https://musicbrainz.org/doc/Cover_Art_Archive/API>
+- **Search Syntax**: <https://musicbrainz.org/doc/Indexed_Search_Syntax>
 
 ## Example Usage
 
@@ -290,9 +323,10 @@ if err != nil {
 }
 
 for _, img := range images {
-    fmt.Printf("Image: %s (Type: %s, Primary: %v)\n", 
+    fmt.Printf("Image: %s (Type: %s, Primary: %v)\n",
         img.URL, img.Type, img.IsPrimary)
 }
+
 ```
 
 ## Best Practices

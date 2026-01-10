@@ -4,45 +4,49 @@ Spotter is an AI-powered playlist generator for Navidrome. It aggregates your li
 
 ## Features
 
-*   **Unified Listening History**: Syncs recent listens from Navidrome, Spotify, and Last.fm into a single view with pagination.
-*   **Playlist Management**: View and sync playlists from all connected services.
-*   **Vibes Engine**: AI-powered mixtape generation with customizable DJ personas that curate playlists based on your listening history.
-*   **Navidrome Integration**: Log in using your existing Navidrome credentials.
-*   **External Service Support**: Connect your Spotify and Last.fm accounts to import history and improve recommendations.
-*   **Metadata Enrichment**: Automatically enriches artist, album, and track metadata from MusicBrainz, Fanart.tv, Spotify, Last.fm, and more.
-*   **AI-Powered Enrichment**: Optional OpenAI integration generates intelligent summaries, biographies, and tags for artists, albums, and tracks. AI-generated content is clearly marked in the UI.
-*   **Real-time Updates**: Server-Sent Events (SSE) push new listens and sync notifications to the UI automatically.
-*   **Retro-Themed UI**: Custom-designed themes featuring a warm 1970s music cabinet aesthetic (light mode) and an 1980s cyberpunk vibe (dark mode).
-*   **AI-Powered**: Customizable AI system prompts for personalized playlist generation.
-*   **Pluggable Architecture**: Easily extensible sync framework for adding more music providers.
-*   **Background Sync**: Configurable automatic synchronization of listening history and playlists.
+* **Unified Listening History**: Syncs recent listens from Navidrome, Spotify, and Last.fm into a single view with pagination.
+* **Playlist Management**: View and sync playlists from all connected services.
+* **Vibes Engine**: AI-powered mixtape generation with customizable DJ personas that curate playlists based on your listening history.
+* **Navidrome Integration**: Log in using your existing Navidrome credentials.
+* **External Service Support**: Connect your Spotify and Last.fm accounts to import history and improve recommendations.
+* **Metadata Enrichment**: Automatically enriches artist, album, and track metadata from MusicBrainz, Fanart.tv, Spotify, Last.fm, and more.
+* **AI-Powered Enrichment**: Optional OpenAI integration generates intelligent summaries, biographies, and tags for artists, albums, and tracks. AI-generated content is clearly marked in the UI.
+* **Real-time Updates**: Server-Sent Events (SSE) push new listens and sync notifications to the UI automatically.
+* **Retro-Themed UI**: Custom-designed themes featuring a warm 1970s music cabinet aesthetic (light mode) and an 1980s cyberpunk vibe (dark mode).
+* **AI-Powered**: Customizable AI system prompts for personalized playlist generation.
+* **Pluggable Architecture**: Easily extensible sync framework for adding more music providers.
+* **Background Sync**: Configurable automatic synchronization of listening history and playlists.
 
 ## Getting Started
 
 ### Prerequisites
 
-*   Go 1.23+
-*   Node.js & npm (for Tailwind CSS generation)
-*   Make
+* Go 1.23+
+* Node.js & npm (for Tailwind CSS generation)
+* Make
 
 ### Installation
 
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/joestump/spotter.git
-    cd spotter
-    ```
+1. Clone the repository:
 
-2.  Install dependencies:
-    ```bash
-    make deps
-    ```
+   ```bash
+   git clone https://github.com/joestump/spotter.git
+   cd spotter
+   ```
 
-3.  Build and run locally:
-    ```bash
-    make run
-    ```
-    The server will start at `http://localhost:8080`.
+2. Install dependencies:
+
+   ```bash
+   make deps
+   ```
+
+3. Build and run locally:
+
+   ```bash
+   make run
+   ```
+
+   The server will start at `http://localhost:8080`.
 
 ### Docker
 
@@ -93,13 +97,14 @@ Spotter can sync playlists from external sources (Spotify, Last.fm) to your Navi
 1. Navigate to any non-Navidrome playlist (e.g., from Spotify or Last.fm)
 2. Toggle "Sync to Navidrome" to enable syncing
 3. Spotter will:
-   - Match tracks from the source playlist to your Navidrome library
-   - Create a playlist in Navidrome with the matched tracks
-   - Periodically update the playlist when the source changes
+   * Match tracks from the source playlist to your Navidrome library
+   * Create a playlist in Navidrome with the matched tracks
+   * Periodically update the playlist when the source changes
 
 #### Track Matching
 
 Tracks are matched using the following strategies (in order of priority):
+
 1. **ISRC Match**: If available, matches by International Standard Recording Code
 2. **Exact Match**: Matches by exact track name and artist (case-insensitive)
 3. **Fuzzy Match**: Matches similar track names with configurable confidence threshold
@@ -121,19 +126,21 @@ The playlist detail page displays a dropdown button showing the current sync sta
 **Important:** The Warning state includes the case where 0 tracks are matched but the sync process has completed (i.e., `NavidromeID` is set). This distinguishes between "sync in progress" (Pending/Blue) and "sync completed but nothing matched" (Warning/Orange).
 
 When the dropdown menu is expanded, users can see:
-- Last synced timestamp with timeago formatting
-- A compact progress bar showing track match statistics
-- Available sync actions (Sync Now, Rebuild, Disable)
+
+* Last synced timestamp with timeago formatting
+* A compact progress bar showing track match statistics
+* Available sync actions (Sync Now, Rebuild, Disable)
 
 The progress bar automatically polls for updates every 5 seconds **only** while in the "Pending" state. Polling stops once a final state (Success, Warning, or Error) is reached.
 
 #### Sync Events
 
 Playlist sync operations are logged to the `sync_events` table for auditing and debugging. Event types include:
-- `playlist_sync_started` - Sync operation initiated
-- `playlist_sync_completed` - Sync completed successfully (includes track match stats)
-- `playlist_sync_failed` - Sync failed with error details
-- `playlist_sync_removed` - Playlist was removed from Navidrome
+
+* `playlist_sync_started` - Sync operation initiated
+* `playlist_sync_completed` - Sync completed successfully (includes track match stats)
+* `playlist_sync_failed` - Sync failed with error details
+* `playlist_sync_removed` - Playlist was removed from Navidrome
 
 #### Playlist Sync API
 
@@ -149,6 +156,7 @@ Spotter provides endpoints for managing playlist sync:
 | `/playlists/{id}/debug-sync` | POST | Triggers synchronous sync and returns detailed results |
 
 Example debug sync response:
+
 ```json
 {
   "playlist_id": 5,
@@ -165,11 +173,12 @@ Example debug sync response:
 #### UI Notifications
 
 Toast notifications appear in the UI during sync operations:
-- **Info**: "Syncing Playlist" - when sync starts
-- **Success**: "Playlist Synced" - with track match count
-- **Error**: "Playlist Sync Failed" - with error message
-- **Warning**: "Rebuilding Playlist" - when rebuild starts
-- **Info**: "Playlist Removed" - when unsynced from Navidrome
+
+* **Info**: "Syncing Playlist" - when sync starts
+* **Success**: "Playlist Synced" - with track match count
+* **Error**: "Playlist Sync Failed" - with error message
+* **Warning**: "Rebuilding Playlist" - when rebuild starts
+* **Info**: "Playlist Removed" - when unsynced from Navidrome
 
 ### Theme Configuration
 
@@ -268,9 +277,10 @@ The Vibes Engine uses prompt templates stored in `data/prompts/generate_mixtape.
 #### Seed Data
 
 Mixtapes can be seeded with:
-- **Artist**: Generate a mixtape inspired by a specific artist
-- **Album**: Generate a mixtape based on an album's vibe
-- **Tracks**: Generate a mixtape starting from specific seed tracks
+
+* **Artist**: Generate a mixtape inspired by a specific artist
+* **Album**: Generate a mixtape based on an album's vibe
+* **Tracks**: Generate a mixtape starting from specific seed tracks
 
 #### Playlist Enhancement (Enhance Vibes)
 
@@ -302,12 +312,12 @@ The Similar Artists feature uses AI to find artists in your library that are mus
 3. **Confidence Scoring**: Each recommendation includes a confidence score (0.0-1.0) indicating how similar the artists are.
 4. **Explanations**: The AI provides a brief explanation for why each artist is similar.
 
-#### Features
+#### Similar Artist Features
 
-- **Provider Tracking**: Each similarity recommendation is tagged with its source (e.g., "OpenAI", "LastFM") so you know where it came from.
-- **Visual Indicators**: Similar artist tiles show an AI badge and confidence score.
-- **Hover Explanations**: Hover over a similar artist tile to see why they're recommended.
-- **Refresh on Demand**: Re-run the similarity analysis anytime to get fresh recommendations.
+* **Provider Tracking**: Each similarity recommendation is tagged with its source (e.g., "OpenAI", "LastFM") so you know where it came from.
+* **Visual Indicators**: Similar artist tiles show an AI badge and confidence score.
+* **Hover Explanations**: Hover over a similar artist tile to see why they're recommended.
+* **Refresh on Demand**: Re-run the similarity analysis anytime to get fresh recommendations.
 
 #### Prompt Template
 
@@ -333,64 +343,65 @@ Each provider and enricher has its own comprehensive README with detailed setup 
 
 Providers sync your listening history from external music services:
 
-- **[Last.fm Provider](internal/providers/lastfm/README.md)** - Scrobble history, full listening history
-  - MD5 authentication flow
-  - No API key expiration
-  - Unlimited historical data
-- **[Spotify Provider](internal/providers/spotify/README.md)** - Recently played tracks (last 50), playlists
-  - OAuth2 authentication
-  - Automatic token refresh
-  - 50-track history limitation
-- **[Navidrome Provider](internal/providers/navidrome/)** - Primary music server integration
-  - Subsonic API
-  - Library management
-  - Playlist syncing
+* **[Last.fm Provider](internal/providers/lastfm/README.md)** - Scrobble history, full listening history
+  * MD5 authentication flow
+  * No API key expiration
+  * Unlimited historical data
+* **[Spotify Provider](internal/providers/spotify/README.md)** - Recently played tracks (last 50), playlists
+  * OAuth2 authentication
+  * Automatic token refresh
+  * 50-track history limitation
+* **[Navidrome Provider](internal/providers/navidrome/)** - Primary music server integration
+  * Subsonic API
+  * Library management
+  * Playlist syncing
 
 ### Enrichers (Metadata Enhancement)
 
 Enrichers enhance your music metadata from various sources:
 
-- **[MusicBrainz Enricher](internal/enrichers/musicbrainz/README.md)** - Open music database (no API key required)
-  - Artist, album, track metadata
-  - MusicBrainz IDs (MBIDs)
-  - Cover Art Archive integration
-  - Rate limit: 1 request/second
-- **[Spotify Enricher](internal/enrichers/spotify/README.md)** - Audio features and metadata
-  - BPM, key, energy, danceability
-  - Popularity scores
-  - High-resolution artwork
-  - Requires user authentication
-- **[Fanart.tv Enricher](internal/enrichers/fanart/README.md)** - High-quality images
-  - HD artist logos
-  - Album artwork
-  - Backgrounds and banners
-  - Requires API key
-- **[Last.fm Enricher](internal/enrichers/lastfm/)** - Community metadata
-  - Artist biographies
-  - Tags and genres
-  - Album information
-- **[Navidrome Enricher](internal/enrichers/navidrome/)** - Local server metadata
-  - Subsonic API integration
-  - Cover art URLs
-  - Library information
-- **[Lidarr Enricher](internal/enrichers/lidarr/)** - Music collection manager
-  - Automated organization
-  - Quality profiles
-  - Release tracking
-- **[OpenAI Enricher](internal/enrichers/openai/)** - AI-powered enrichment
-  - Intelligent summaries
-  - Generated biographies
-  - Smart tagging
+* **[MusicBrainz Enricher](internal/enrichers/musicbrainz/README.md)** - Open music database (no API key required)
+  * Artist, album, track metadata
+  * MusicBrainz IDs (MBIDs)
+  * Cover Art Archive integration
+  * Rate limit: 1 request/second
+* **[Spotify Enricher](internal/enrichers/spotify/README.md)** - Audio features and metadata
+  * BPM, key, energy, danceability
+  * Popularity scores
+  * High-resolution artwork
+  * Requires user authentication
+* **[Fanart.tv Enricher](internal/enrichers/fanart/README.md)** - High-quality images
+  * HD artist logos
+  * Album artwork
+  * Backgrounds and banners
+  * Requires API key
+* **[Last.fm Enricher](internal/enrichers/lastfm/)** - Community metadata
+  * Artist biographies
+  * Tags and genres
+  * Album information
+* **[Navidrome Enricher](internal/enrichers/navidrome/)** - Local server metadata
+  * Subsonic API integration
+  * Cover art URLs
+  * Library information
+* **[Lidarr Enricher](internal/enrichers/lidarr/)** - Music collection manager
+  * Automated organization
+  * Quality profiles
+  * Release tracking
+* **[OpenAI Enricher](internal/enrichers/openai/)** - AI-powered enrichment
+  * Intelligent summaries
+  * Generated biographies
+  * Smart tagging
 
 ### Quick Setup Guide
 
 For detailed setup instructions for each service, see the individual README files linked above. Each README includes:
-- Step-by-step API key acquisition
-- Configuration examples
-- Authentication flows
-- Rate limits and limitations
-- Troubleshooting guides
-- Example usage code
+
+* Step-by-step API key acquisition
+* Configuration examples
+* Authentication flows
+* Rate limits and limitations
+* Troubleshooting guides
+* Example usage code
 
 ## Quick Start: Obtaining API Keys
 
@@ -404,10 +415,10 @@ Spotify integration enables syncing your recent listening history and enriching 
 2. Log in with your Spotify account
 3. Click **Create App**
 4. Fill in the app details:
-   - **App name**: Spotter (or any name you prefer)
-   - **App description**: Personal music tracking app
-   - **Redirect URI**: `http://localhost:8080/auth/spotify/callback` (or your production URL)
-   - Check the **Web API** checkbox
+   * **App name**: Spotter (or any name you prefer)
+   * **App description**: Personal music tracking app
+   * **Redirect URI**: `http://localhost:8080/auth/spotify/callback` (or your production URL)
+   * Check the **Web API** checkbox
 5. Click **Save**
 6. On your app's dashboard, click **Settings**
 7. Copy the **Client ID** and **Client Secret**
@@ -425,10 +436,10 @@ Last.fm integration enables syncing your scrobble history and enriching metadata
 1. Go to [Last.fm API Account Creation](https://www.last.fm/api/account/create)
 2. Log in with your Last.fm account (or create one)
 3. Fill in the application form:
-   - **Application name**: Spotter
-   - **Application description**: Personal music tracking app
-   - **Application homepage**: (optional, can leave blank or use your URL)
-   - **Callback URL**: `http://localhost:8080/auth/lastfm/callback` (or your production URL)
+   * **Application name**: Spotter
+   * **Application description**: Personal music tracking app
+   * **Application homepage**: (optional, can leave blank or use your URL)
+   * **Callback URL**: `http://localhost:8080/auth/lastfm/callback` (or your production URL)
 4. Click **Submit**
 5. You'll receive an **API Key** and **Shared Secret**
 
@@ -443,9 +454,10 @@ SPOTTER_LASTFM_REDIRECT_URL=http://localhost:8080/auth/lastfm/callback
 MusicBrainz is a free, open music encyclopedia that provides metadata enrichment. No API key is required, but you **must** provide a proper User-Agent string that identifies your application.
 
 According to [MusicBrainz API requirements](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting), your User-Agent should include:
-- Application name
-- Version
-- Contact URL or email
+
+* Application name
+* Version
+* Contact URL or email
 
 ```bash
 SPOTTER_METADATA_MUSICBRAINZ_USER_AGENT="Spotter/1.0.0 (https://github.com/joestump/spotter)"
@@ -509,9 +521,10 @@ SPOTTER_METADATA_AI_PROMPTS_DIRECTORY=/path/to/custom/prompts
 > **For complete setup instructions, configuration options, and troubleshooting, see the [Service Documentation](#service-documentation) section above and individual component READMEs.**
 
 Template files:
-- `artist.tmpl` - Prompt for artist enrichment (generates biography, summary, and tags)
-- `album.tmpl` - Prompt for album enrichment (generates summary and tags)
-- `track.tmpl` - Prompt for track enrichment (generates summary and tags)
+
+* `artist.tmpl` - Prompt for artist enrichment (generates biography, summary, and tags)
+* `album.tmpl` - Prompt for album enrichment (generates summary and tags)
+* `track.tmpl` - Prompt for track enrichment (generates summary and tags)
 
 > **Note**: AI enrichment uses vision capabilities to analyze album/artist artwork when available. The enricher runs last in the pipeline to have access to all metadata from other enrichers.
 
@@ -615,13 +628,13 @@ npm run watch:css
 
 ### Architecture
 
-*   **Backend**: Go with `chi` router and Server-Sent Events (SSE) for real-time updates.
-*   **Database**: SQLite (via `ent` ORM) with automatic migrations.
-*   **Frontend**: Server-side rendering with `templ` + `HTMX` for interactivity and real-time updates.
-*   **Styling**: `DaisyUI` + `Tailwind CSS` with custom retro themes and `@iconify/tailwind` for icons.
-*   **Background Jobs**: Configurable periodic sync for all connected providers.
-*   **Real-time**: Event Bus + SSE for push notifications and live updates.
-*   **Metadata Enrichment**: Pluggable enricher system that aggregates data from multiple sources (MusicBrainz, Spotify, Last.fm, Fanart.tv, Navidrome).
+* **Backend**: Go with `chi` router and Server-Sent Events (SSE) for real-time updates.
+* **Database**: SQLite (via `ent` ORM) with automatic migrations.
+* **Frontend**: Server-side rendering with `templ` + `HTMX` for interactivity and real-time updates.
+* **Styling**: `DaisyUI` + `Tailwind CSS` with custom retro themes and `@iconify/tailwind` for icons.
+* **Background Jobs**: Configurable periodic sync for all connected providers.
+* **Real-time**: Event Bus + SSE for push notifications and live updates.
+* **Metadata Enrichment**: Pluggable enricher system that aggregates data from multiple sources (MusicBrainz, Spotify, Last.fm, Fanart.tv, Navidrome).
 
 ## User Features
 
@@ -633,65 +646,66 @@ Spotter features two custom-designed retro themes that create an immersive nosta
 
 The light theme evokes the warm, cozy feeling of a vintage 1970s hi-fi system:
 
-*   **Color Palette**: Rich amber (#d97706), golden yellow (#f59e0b), and deep brown (#92400e) tones
-*   **Background**: Cream and beige tones (#fef3c7) reminiscent of wood veneer
-*   **Visual Effects**: 
-    - Subtle wood-grain texture overlays
-    - Raised beveled borders on cards and buttons
-    - Soft inset shadows suggesting depth
-    - Warm text shadows for a soft, analog feel
-*   **Typography**: Bold, slightly spaced lettering with gentle shadows
-*   **Aesthetic**: Think vintage record players, warm living rooms, and analog warmth
+* **Color Palette**: Rich amber (#d97706), golden yellow (#f59e0b), and deep brown (#92400e) tones
+* **Background**: Cream and beige tones (#fef3c7) reminiscent of wood veneer
+* **Visual Effects**:
+  * Subtle wood-grain texture overlays
+  * Raised beveled borders on cards and buttons
+  * Soft inset shadows suggesting depth
+  * Warm text shadows for a soft, analog feel
+* **Typography**: Bold, slightly spaced lettering with gentle shadows
+* **Aesthetic**: Think vintage record players, warm living rooms, and analog warmth
 
 #### ⚡ Dark Theme - 1980s Cyberpunk
 
 The dark theme channels the neon-soaked, digital future imagined in 1980s cyberpunk:
 
-*   **Color Palette**: Neon cyan (#00d9ff), magenta (#ff00ff), and electric green (#00ff41)
-*   **Background**: Deep dark blue-black (#0f0f23) with navy accents
-*   **Visual Effects**:
-    - Scan line overlay across the entire interface
-    - Glowing neon borders on all interactive elements
-    - Multiple layered box shadows creating depth and glow
-    - Text shadows with neon glow effects
-    - Icon glow filters for that electric feel
-*   **Typography**: Sharp, uppercase lettering with wider tracking and neon glow
-*   **Aesthetic**: Blade Runner meets Tron - dark, electric, and futuristic
+* **Color Palette**: Neon cyan (#00d9ff), magenta (#ff00ff), and electric green (#00ff41)
+* **Background**: Deep dark blue-black (#0f0f23) with navy accents
+* **Visual Effects**:
+  * Scan line overlay across the entire interface
+  * Glowing neon borders on all interactive elements
+  * Multiple layered box shadows creating depth and glow
+  * Text shadows with neon glow effects
+  * Icon glow filters for that electric feel
+* **Typography**: Sharp, uppercase lettering with wider tracking and neon glow
+* **Aesthetic**: Blade Runner meets Tron - dark, electric, and futuristic
 
 **Theme Controls:**
-*   **Sidebar Toggle**: Temporarily switch themes (persisted in browser localStorage, does not affect database)
-*   **Preferences > General Tab**: Permanently set your theme preference (Light, Dark, or System)
+
+* **Sidebar Toggle**: Temporarily switch themes (persisted in browser localStorage, does not affect database)
+* **Preferences > General Tab**: Permanently set your theme preference (Light, Dark, or System)
 
 ### Preferences
 
-*   **Theme Selection**: Choose between Light, Dark, or System (auto) themes. Your preference is saved to the database.
-*   **AI System Prompt**: Customize the AI personality for playlist generation.
-*   **Pagination**: Configure how many items to display per page (10-100).
+* **Theme Selection**: Choose between Light, Dark, or System (auto) themes. Your preference is saved to the database.
+* **AI System Prompt**: Customize the AI personality for playlist generation.
+* **Pagination**: Configure how many items to display per page (10-100).
 
 ### Connected Services
 
-*   **Navidrome**: Automatically connected via your login credentials. View last sync time.
-*   **Spotify**: Optional OAuth integration. Connect/disconnect from Preferences. View last sync time.
-*   **Last.fm**: Optional OAuth integration. Connect/disconnect from Preferences. View last sync time and username.
+* **Navidrome**: Automatically connected via your login credentials. View last sync time.
+* **Spotify**: Optional OAuth integration. Connect/disconnect from Preferences. View last sync time.
+* **Last.fm**: Optional OAuth integration. Connect/disconnect from Preferences. View last sync time and username.
 
 ### Background Tasks
 
 From the Preferences > Tasks page, you can manually run or monitor:
 
-*   **Sync All Listens**: Pull recent listening history from all connected providers
-*   **Sync All Playlists**: Pull playlist data from all connected providers
-*   **Run Metadata Enricher**: Enrich artist, album, and track metadata from external sources
-*   **Sync All Artist Images**: Re-fetch artist images from all connected providers
-*   **Sync All Album Art**: Re-fetch album artwork from all connected providers
-*   **Reset All Data**: Delete all data and re-sync from scratch
-*   **Clear Caches & Cleanup**: Delete old events and perform maintenance tasks
+* **Sync All Listens**: Pull recent listening history from all connected providers
+* **Sync All Playlists**: Pull playlist data from all connected providers
+* **Run Metadata Enricher**: Enrich artist, album, and track metadata from external sources
+* **Sync All Artist Images**: Re-fetch artist images from all connected providers
+* **Sync All Album Art**: Re-fetch album artwork from all connected providers
+* **Reset All Data**: Delete all data and re-sync from scratch
+* **Clear Caches & Cleanup**: Delete old events and perform maintenance tasks
 
 ### Real-time Features
 
-*   Live updates for new listens via SSE
-*   Toast notifications for sync events
-*   Automatic background synchronization every 5 minutes (configurable)
-*   No manual refresh buttons needed
+* Live updates for new listens via SSE
+* Toast notifications for sync events
+* Automatic background synchronization every 5 minutes (configurable)
+* No manual refresh buttons needed
 
 ## License
 

@@ -8,6 +8,7 @@ The OpenAI enricher uses AI language models to generate rich, contextual metadat
 
 - **Implements**: `ArtistEnricher`, `AlbumEnricher`, `TrackEnricher`
 - **Data provided**:
+
   - **Artists**: AI-generated biography, summary, intelligent tags
   - **Albums**: Album summary, contextual tags, cover art commentary, dominant colors
   - **Tracks**: Track summary, mood/style tags
@@ -23,7 +24,7 @@ The OpenAI enricher uses AI language models to generate rich, contextual metadat
 ```yaml
 openai:
   api_key: "your-openai-api-key"
-  base_url: "https://api.openai.com/v1"  # Or LiteLLM proxy URL
+  base_url: "<https://api.openai.com/v1">  # Or LiteLLM proxy URL
   model: "gpt-4o"  # Or gpt-3.5-turbo, gpt-4-turbo, etc.
 
 metadata:
@@ -32,17 +33,20 @@ metadata:
     prompts_directory: "./prompts"  # Optional: custom prompt templates
     max_tags: 10
     re_enrich_after_days: 30
+
 ```
 
 **Environment Variables** (alternative):
+
 ```bash
 OPENAI_API_KEY=your-api-key
-OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_BASE_URL=<https://api.openai.com/v1>
 OPENAI_MODEL=gpt-4o
 AI_ENABLED=true
 AI_PROMPTS_DIRECTORY=./prompts
 AI_MAX_TAGS=10
 AI_RE_ENRICH_AFTER_DAYS=30
+
 ```
 
 ### Configuration Notes
@@ -59,28 +63,34 @@ AI_RE_ENRICH_AFTER_DAYS=30
 ### OpenAI API Key
 
 1. **Go to OpenAI Platform**
-   - Visit: https://platform.openai.com/
+
+   - Visit: <https://platform.openai.com/>
 
 2. **Create an Account**
+
    - Sign up with email or Google/Microsoft account
    - Verify email address
 
 3. **Add Payment Method**
+
    - Go to Settings → Billing
    - Add credit card (required for API access)
    - Set usage limits to control costs
 
 4. **Create API Key**
+
    - Go to API Keys section
    - Click "Create new secret key"
    - Name it "Spotter" (or custom name)
    - Copy the key immediately (shown only once)
 
 5. **Add to Spotter Config**
+
    - Paste API key into configuration file
    - Set model preference
 
 6. **Set Usage Limits**
+
    - Settings → Limits
    - Set monthly budget cap
    - Enable email notifications
@@ -90,22 +100,27 @@ AI_RE_ENRICH_AFTER_DAYS=30
 For non-OpenAI models or cost savings:
 
 1. **Install LiteLLM**
+
    ```bash
    pip install litellm
    ```
 
 2. **Start LiteLLM Proxy**
+
    ```bash
    litellm --model gpt-3.5-turbo
+
    # Or for Anthropic: litellm --model claude-3-sonnet-20240229
    # Or for local: litellm --model ollama/llama2
+
    ```
 
 3. **Configure Spotter**
+
    ```yaml
    openai:
      api_key: "any-key"  # LiteLLM may not require real key for local models
-     base_url: "http://localhost:8000"
+     base_url: "<http://localhost:8000">
      model: "gpt-3.5-turbo"  # Or your chosen model
    ```
 
@@ -114,6 +129,7 @@ For non-OpenAI models or cost savings:
 ### When AI Enrichment Runs
 
 OpenAI enricher runs **last** in the enrichment pipeline because:
+
 1. **Synthesizes All Data**: Uses metadata from all other enrichers
 2. **Context Aware**: Can reference biographies, genres, tags from multiple sources
 3. **Avoids Redundancy**: Doesn't re-process data that other enrichers provide better
@@ -122,21 +138,25 @@ OpenAI enricher runs **last** in the enrichment pipeline because:
 ### Re-enrichment Logic
 
 AI enrichment is expensive, so Spotter only re-enriches when:
+
 1. **Never enriched**: `LastAiEnrichedAt` is null
 2. **Sufficient time passed**: More than `re_enrich_after_days` since last enrichment
 3. **Manual trigger**: User explicitly requests re-enrichment
 
 Example:
+
 ```go
-if artist.LastAiEnrichedAt == nil || 
+if artist.LastAiEnrichedAt == nil ||
    time.Since(*artist.LastAiEnrichedAt) > 30*24*time.Hour {
     // Run AI enrichment
 }
+
 ```
 
 ### Tag Deduplication
 
 AI-generated tags are deduplicated against existing tags:
+
 - Case-insensitive comparison
 - Removes tags already from MusicBrainz, Last.fm, Spotify
 - Respects `max_tags` limit
@@ -156,26 +176,30 @@ AI-generated tags are deduplicated against existing tags:
 ### Cost Comparison
 
 Approximate costs per 1,000 entities (as of 2024):
+
 - **gpt-4o**: $15-30 (with images)
 - **gpt-4-turbo**: $30-50
 - **gpt-3.5-turbo**: $3-6
 - **gpt-4o-mini**: $5-10
 
-*Actual costs depend on prompt length and entity complexity*
+> Actual costs depend on prompt length and entity complexity
 
 ### Choosing a Model
 
 **Use gpt-4o if**:
+
 - You want the best quality summaries
 - Budget allows for premium models
 - Processing albums with cover art
 
 **Use gpt-3.5-turbo if**:
+
 - You have a large library (>10,000 entities)
 - Cost is a primary concern
 - You're okay with slightly less nuanced text
 
 **Use gpt-4o-mini if**:
+
 - You want balance between cost and quality
 - Processing medium-sized libraries
 - Good enough quality for most use cases
@@ -185,6 +209,7 @@ Approximate costs per 1,000 entities (as of 2024):
 ### Built-in Prompts
 
 Spotter includes default prompts for:
+
 - `artist.tmpl`: Artist biography and summary generation
 - `album.tmpl`: Album summary and commentary
 - `track.tmpl`: Track summary and mood analysis
@@ -194,7 +219,8 @@ Spotter includes default prompts for:
 Create custom prompts in the `prompts_directory`:
 
 **prompts/artist.tmpl**:
-```
+
+```text
 You are a music journalist writing about {{ .Name }}.
 
 {{- if .Bio }}
@@ -206,6 +232,7 @@ Genres: {{ join .Genres ", " }}
 {{- end }}
 
 Generate:
+
 1. A concise 2-3 sentence biography
 2. A one-sentence summary
 3. 5-8 descriptive tags (mood, style, era, influence)
@@ -216,11 +243,13 @@ Respond in JSON format:
   "summary": "...",
   "tags": ["tag1", "tag2", ...]
 }
+
 ```
 
 ### Available Template Variables
 
 **Artist Template**:
+
 - `Name`, `SortName`, `Bio`, `Genres`, `Tags`
 - `Popularity`, `FollowerCount`
 - `MusicBrainzID`, `SpotifyID`, `LastFMURL`
@@ -228,6 +257,7 @@ Respond in JSON format:
 - `Tracks` (array of track info)
 
 **Album Template**:
+
 - `Name`, `Artist`, `Year`, `ReleaseDate`
 - `AlbumType`, `Label`, `Genre`, `Tags`
 - `Popularity`, `TotalTracks`
@@ -236,6 +266,7 @@ Respond in JSON format:
 - `HasCoverArt` (boolean)
 
 **Track Template**:
+
 - `Name`, `Artist`, `Album`
 - `TrackNumber`, `DiscNumber`, `Duration`
 - `BPM`, `MusicalKey`, `Energy`, `Danceability`
@@ -247,33 +278,39 @@ Respond in JSON format:
 ### Rate Limits
 
 **OpenAI**:
+
 - **Tier 1** (new): 500 RPM (requests per minute)
 - **Tier 2** ($50+ spent): 5,000 RPM
 - **Tier 3** ($100+ spent): 10,000 RPM
 
 **LiteLLM**:
+
 - Depends on underlying provider
 - Local models: No limits
 
 ### Token Limits
 
 **Context Windows**:
+
 - `gpt-4o`: 128,000 tokens
 - `gpt-3.5-turbo`: 16,385 tokens
 - Spotter prompts typically use 500-2,000 tokens
 
 **Output Limits**:
+
 - Spotter requests max 500 tokens output
 - Sufficient for summaries and tags
 
 ### Cost Considerations
 
 **Input vs Output**:
+
 - Input tokens (prompt) are cheaper
 - Output tokens (response) cost more
 - Spotter minimizes output length
 
 **Image Tokens**:
+
 - Album cover art analysis uses vision models
 - Images count as ~1,000 tokens each
 - Disabled by default to control costs
@@ -281,21 +318,25 @@ Respond in JSON format:
 ### Known Quirks
 
 1. **JSON Extraction**
+
    - AI may wrap JSON in markdown code blocks
    - Spotter automatically extracts JSON from text
    - Handles various response formats
 
 2. **Rate Limit Errors**
+
    - Exponential backoff on 429 errors
    - Retry after 1s, 2s, 4s, 8s
    - Max 4 retries before failing
 
 3. **Token Counting**
+
    - Approximate, not exact
    - Used for cost estimation only
    - Actual billing from OpenAI may differ slightly
 
 4. **Model Updates**
+
    - OpenAI periodically updates models
    - Model names remain stable
    - Quality may improve over time
@@ -315,28 +356,32 @@ Respond in JSON format:
 ### Response Parsing
 
 Handles multiple response formats:
-```
+
+```text
 Plain JSON: {"summary": "...", "tags": [...]}
 
 Markdown: ```json
 {"summary": "...", "tags": [...]}
+
 ```
 
 With text: Here's the response:
 {"summary": "...", "tags": [...]}
 Done.
-```
+
+```text
 
 ### Tag Deduplication Algorithm
 
 ```go
+
 func deduplicateTags(newTags, existingTags []string, maxTags int) []string {
     // 1. Normalize to lowercase
     existing := make(map[string]bool)
     for _, tag := range existingTags {
         existing[strings.ToLower(strings.TrimSpace(tag))] = true
     }
-    
+
     // 2. Filter new tags
     var deduplicated []string
     for _, tag := range newTags {
@@ -345,26 +390,31 @@ func deduplicateTags(newTags, existingTags []string, maxTags int) []string {
             deduplicated = append(deduplicated, strings.TrimSpace(tag))
         }
     }
-    
+
     // 3. Apply max limit
     if len(deduplicated) > maxTags {
         deduplicated = deduplicated[:maxTags]
     }
-    
+
     return deduplicated
 }
-```
+
+```text
 
 ### Cost Tracking
 
 Spotter logs token usage for monitoring:
+
 ```
+
 Input tokens: 1,234
 Output tokens: 456
 Estimated cost: $0.0123
-```
+
+```text
 
 Use these logs to:
+
 - Monitor spending
 - Optimize prompts (reduce input tokens)
 - Choose appropriate model
@@ -381,22 +431,29 @@ Use these logs to:
 ### Running Tests
 
 ```bash
+
 # Run OpenAI enricher tests
+
 go test ./internal/enrichers/openai/...
 
 # Run with verbose output
+
 go test -v ./internal/enrichers/openai/...
 
 # Run with coverage
+
 go test -cover ./internal/enrichers/openai/...
 
 # Run specific test
+
 go test -run TestEnrichArtist ./internal/enrichers/openai/...
-```
+
+```text
 
 ### Test Coverage
 
 Tests cover:
+
 - Factory creation with/without API key
 - Template loading and execution
 - Fallback prompts
@@ -413,9 +470,10 @@ Tests cover:
 Tests use `httptest.NewServer`:
 
 ```go
+
 server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
-    
+
     response := ChatResponse{
         Choices: []struct {
             Message struct {
@@ -436,23 +494,27 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
     }
     json.NewEncoder(w).Encode(response)
 }))
-```
+
+```text
 
 ## Troubleshooting
 
 ### "Invalid API Key" (401)
+
 - Verify API key is correct in configuration
 - Check key hasn't been revoked in OpenAI dashboard
 - Ensure key has no extra whitespace
-- Test key manually: `curl https://api.openai.com/v1/models -H "Authorization: Bearer YOUR_KEY"`
+- Test key manually: `curl <https://api.openai.com/v1/models> -H "Authorization: Bearer YOUR_KEY"`
 
 ### "Rate Limit Exceeded" (429)
+
 - Wait for rate limit to reset (usually 1 minute)
 - Reduce concurrent enrichment operations
 - Upgrade OpenAI tier (spend more to increase limits)
 - Consider using gpt-3.5-turbo (higher rate limits)
 
 ### High Costs
+
 - Switch to gpt-3.5-turbo or gpt-4o-mini
 - Reduce prompt length (minimize context)
 - Increase `re_enrich_after_days` to avoid re-enrichment
@@ -460,30 +522,35 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
 - Set monthly budget limits in OpenAI dashboard
 
 ### Poor Quality Responses
+
 - Upgrade to gpt-4o or gpt-4-turbo
 - Refine custom prompts with better instructions
 - Ensure other enrichers ran first (provide good context)
 - Check that entity has sufficient existing metadata
 
 ### No Tags Generated
+
 - AI may not return tags field
 - Check AI response in logs
 - Verify prompt requests tags
 - Try different model (gpt-4o better at structured output)
 
 ### Tags All Duplicates
+
 - Normal if other enrichers already have good tags
 - AI deduplicates against existing tags
 - This saves costs (doesn't repeat work)
 - Consider it a sign of good existing metadata
 
 ### JSON Parse Errors
+
 - AI didn't return valid JSON
 - Check prompt instructs JSON format
 - Try gpt-4o (better at structured output)
 - Review AI response in logs
 
 ### Timeout Errors
+
 - Increase timeout in config (default 120s)
 - Reduce prompt complexity
 - Try faster model (gpt-3.5-turbo)
@@ -491,16 +558,17 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
 
 ## API Reference
 
-- **OpenAI API**: https://platform.openai.com/docs/api-reference
-- **Chat Completions**: https://platform.openai.com/docs/api-reference/chat
-- **Models**: https://platform.openai.com/docs/models
-- **Pricing**: https://openai.com/pricing
-- **Rate Limits**: https://platform.openai.com/docs/guides/rate-limits
-- **LiteLLM**: https://docs.litellm.ai/
+- **OpenAI API**: <https://platform.openai.com/docs/api-reference>
+- **Chat Completions**: <https://platform.openai.com/docs/api-reference/chat>
+- **Models**: <https://platform.openai.com/docs/models>
+- **Pricing**: <https://openai.com/pricing>
+- **Rate Limits**: <https://platform.openai.com/docs/guides/rate-limits>
+- **LiteLLM**: <https://docs.litellm.ai/>
 
 ## Example Usage
 
 ```go
+
 // Create factory
 factory := openai.New(logger, config)
 
@@ -587,7 +655,8 @@ if err != nil {
 fmt.Printf("Track Summary: %s\n", trackData.AISummary)
 fmt.Printf("Mood Tags: %v\n", trackData.AITags)
 // Mood Tags: ["anxious", "complex", "dramatic", "intense"]
-```
+
+```text
 
 ## Best Practices
 
@@ -620,6 +689,7 @@ fmt.Printf("Mood Tags: %v\n", trackData.AITags)
 OpenAI enricher should run **LAST**:
 
 Order:
+
 1. MusicBrainz (IDs, basic metadata)
 2. Lidarr (library management data)
 3. Navidrome (local file metadata)

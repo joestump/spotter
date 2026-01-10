@@ -8,6 +8,7 @@ The Spotify enricher provides rich metadata and audio features from Spotify's We
 
 - **Implements**: `ArtistEnricher`, `AlbumEnricher`, `TrackEnricher`, `IDMatcher`
 - **Data provided**:
+
   - **Artists**: Spotify ID, genres, popularity score, follower count, images
   - **Albums**: Spotify ID, album type, release date, label, popularity, images
   - **Tracks**: Spotify ID, ISRC, popularity, Spotify URL
@@ -26,12 +27,15 @@ spotify:
 
 # User must also have Spotify connected as a provider
 # The enricher uses the user's OAuth2 tokens
+
 ```
 
 **Environment Variables** (alternative):
+
 ```bash
 SPOTIFY_CLIENT_ID=your-client-id
 SPOTIFY_CLIENT_SECRET=your-client-secret
+
 ```
 
 ### Configuration Notes
@@ -45,25 +49,30 @@ SPOTIFY_CLIENT_SECRET=your-client-secret
 ## How to Get API Keys
 
 1. **Go to Spotify Developer Dashboard**
-   - Visit: https://developer.spotify.com/dashboard
+
+   - Visit: <https://developer.spotify.com/dashboard>
 
 2. **Log in with Spotify Account**
+
    - Use your Spotify account (free or premium)
 
 3. **Create an App**
+
    - Click "Create app"
    - Fill in app details:
      - **App name**: `Spotter` (or your custom name)
      - **App description**: Brief description
-     - **Redirect URI**: `http://localhost:8080/auth/spotify/callback`
+     - **Redirect URI**: `<http://localhost:8080/auth/spotify/callback`>
    - Accept terms and click "Create"
 
 4. **Get Your Credentials**
+
    - On the app page, click "Settings"
    - Copy the **Client ID**
    - Click "View client secret" and copy the **Client Secret**
 
 5. **Configure in Spotter**
+
    - Add credentials to your configuration file
    - User must also connect Spotify in preferences
 
@@ -72,18 +81,21 @@ SPOTIFY_CLIENT_SECRET=your-client-secret
 ## Rate Limits
 
 ### Official Limits
+
 - **Standard**: ~180 requests per minute
 - **Extended**: Some operations allow burst requests
 - **Rate Limit Response**: HTTP 429 with `Retry-After` header
 - **Per-User**: Rate limits apply per access token
 
 ### Spotter Implementation
+
 - No built-in rate limiting (relies on Spotify's enforcement)
 - Enrichment runs in batches to minimize API calls
 - Audio features fetched in bulk (up to 100 tracks per request)
 - Token refresh handled automatically
 
-### Best Practices
+### Usage Best Practices
+
 - Run enrichment during off-peak hours
 - Batch operations when possible
 - Cache Spotify IDs to avoid repeated searches
@@ -92,6 +104,7 @@ SPOTIFY_CLIENT_SECRET=your-client-secret
 ## Data Quality
 
 ### Strengths
+
 - **Comprehensive**: Excellent coverage for most music
 - **Audio Features**: Unique technical analysis (BPM, key, etc.)
 - **Accurate**: High-quality metadata from Spotify's catalog
@@ -100,6 +113,7 @@ SPOTIFY_CLIENT_SECRET=your-client-secret
 - **Current**: Frequently updated catalog
 
 ### Limitations
+
 - **Requires User Auth**: User must have connected Spotify
 - **Token Dependency**: Enricher fails if tokens invalid
 - **Coverage Gaps**: Some indie/regional artists missing
@@ -110,12 +124,14 @@ SPOTIFY_CLIENT_SECRET=your-client-secret
 ### Audio Features Explained
 
 **Technical**:
+
 - `tempo`: BPM (beats per minute), e.g., 120.0
 - `key`: Pitch class (0-11), e.g., 0=C, 1=C#, 2=D, etc.
 - `mode`: 0=minor, 1=major
 - `time_signature`: Beats per bar, e.g., 4
 
 **Perceptual** (0.0 to 1.0):
+
 - `energy`: Intensity and activity level
 - `danceability`: How suitable for dancing
 - `valence`: Musical positiveness/happiness
@@ -127,6 +143,7 @@ SPOTIFY_CLIENT_SECRET=your-client-secret
 ### Musical Key Conversion
 
 Spotify returns numeric keys (0-11), Spotter converts to strings:
+
 - `0` → `C` (or `Cm` if mode=0)
 - `1` → `C#`
 - `2` → `D`
@@ -146,6 +163,7 @@ The enricher reuses the user's Spotify provider tokens:
 if time.Now().Add(5*time.Minute).After(token.Expiry) {
     // Automatically refresh using refresh token
 }
+
 ```
 
 **Important**: If user hasn't connected Spotify provider, enricher returns `nil`.
@@ -153,12 +171,14 @@ if time.Now().Add(5*time.Minute).After(token.Expiry) {
 ### Matching vs. Enrichment
 
 **Matching** (Search):
+
 - Used to find Spotify ID by name
 - Returns confidence score (0.9 for exact, 0.7 for partial)
 - Fuzzy matching supported
 - Returns first result (highest relevance)
 
 **Enrichment** (Direct Lookup):
+
 - Uses known Spotify ID
 - Returns complete metadata
 - Includes audio features for tracks
@@ -173,6 +193,7 @@ if strings.EqualFold(result.Name, searchName) {
 } else {
     confidence = 0.7 // Partial match
 }
+
 ```
 
 ### Audio Features Retrieval
@@ -185,6 +206,7 @@ if strings.EqualFold(result.Name, searchName) {
 ### Image Handling
 
 Spotify provides multiple image sizes:
+
 - Typically: 640x640, 300x300, 64x64
 - Spotter downloads and resizes to max 1024px
 - Saves as PNG in local storage
@@ -212,22 +234,29 @@ Spotify provides multiple image sizes:
 ### Running Tests
 
 ```bash
+
 # Run Spotify enricher tests
+
 go test ./internal/enrichers/spotify/...
 
 # Run with verbose output
+
 go test -v ./internal/enrichers/spotify/...
 
 # Run with coverage
+
 go test -cover ./internal/enrichers/spotify/...
 
 # Run specific test
+
 go test -run TestEnrichTrack ./internal/enrichers/spotify/...
+
 ```
 
 ### Test Coverage
 
 Tests should cover:
+
 - Factory creation with/without credentials
 - Token refresh logic
 - Artist/album/track matching
@@ -247,59 +276,67 @@ Tests use `httptest.NewServer`:
 server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     // Verify Authorization header
     assert.Contains(t, r.Header.Get("Authorization"), "Bearer")
-    
+
     // Return mock Spotify response
     json.NewEncoder(w).Encode(mockTrack)
 }))
+
 ```
 
 ## Troubleshooting
 
 ### "No Spotify Auth Configured"
+
 - User hasn't connected Spotify in Spotter
 - Go to preferences → connect Spotify
 - Complete OAuth2 flow
 
 ### "Spotify API Unauthorized"
+
 - Token may be expired (should auto-refresh)
 - Token may be invalid/revoked
 - User needs to disconnect and reconnect
 
 ### No Audio Features
+
 - Not all tracks have audio features on Spotify
 - This is normal and expected
 - Feature returns `nil` (not an error)
 
 ### Incorrect Matches
+
 - Search may match wrong track/artist
 - Check confidence scores
 - Consider manual verification for important matches
 
 ### Token Refresh Failing
+
 - Refresh token may be revoked
 - OAuth2 configuration may be incorrect
 - User needs to re-authenticate
 
 ### Rate Limit Errors (429)
+
 - Too many requests in short time
 - Wait for `Retry-After` duration
 - Reduce enrichment frequency
 - Batch operations
 
 ### Missing Artist Genres
+
 - Some artists don't have genres assigned
 - Spotify's genre classification is limited
 - This is expected behavior
 
 ## API Reference
 
-- **Spotify Web API**: https://developer.spotify.com/documentation/web-api
-- **Search API**: https://developer.spotify.com/documentation/web-api/reference/search
-- **Get Artist**: https://developer.spotify.com/documentation/web-api/reference/get-an-artist
-- **Get Album**: https://developer.spotify.com/documentation/web-api/reference/get-an-album
-- **Get Track**: https://developer.spotify.com/documentation/web-api/reference/get-track
-- **Audio Features**: https://developer.spotify.com/documentation/web-api/reference/get-audio-features
-- **Authorization**: https://developer.spotify.com/documentation/web-api/concepts/authorization
+- **Spotify Web API**: <https://developer.spotify.com/documentation/web-api>
+- **Search API**: <https://developer.spotify.com/documentation/web-api/reference/search>
+- **Get Artist**: <https://developer.spotify.com/documentation/web-api/reference/get-an-artist>
+- **Get Album**: <https://developer.spotify.com/documentation/web-api/reference/get-an-album>
+- **Get Track**: <https://developer.spotify.com/documentation/web-api/reference/get-track>
+- **Audio Features**: <https://developer.spotify.com/documentation/web-api/reference/get-audio-features>
+- **Authorization**: <https://developer.spotify.com/documentation/web-api/concepts/authorization>
 
 ## Example Usage
 
@@ -363,6 +400,7 @@ if err != nil {
 for _, img := range images {
     fmt.Printf("Image: %dx%d - %s\n", img.Width, img.Height, img.URL)
 }
+
 ```
 
 ## Best Practices
@@ -380,11 +418,13 @@ for _, img := range images {
 ## Enrichment Order
 
 Spotify enricher should run **after**:
+
 1. MusicBrainz (provides MBIDs)
 2. Lidarr
 3. Navidrome
 
 Spotify enricher should run **before**:
+
 1. Last.fm (less comprehensive)
 2. Fanart.tv (images only)
 3. OpenAI (AI enrichment uses all metadata)

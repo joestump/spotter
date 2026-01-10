@@ -8,6 +8,7 @@ The Fanart.tv enricher provides high-quality images for artists and albums. It's
 
 - **Implements**: `ArtistEnricher`, `AlbumEnricher`
 - **Data provided**:
+
   - **Artist Images**:
     - HD music logos (vector-quality)
     - Standard music logos
@@ -29,11 +30,14 @@ The Fanart.tv enricher provides high-quality images for artists and albums. It's
 metadata:
   fanart:
     api_key: "your-api-key"
+
 ```
 
 **Environment Variables** (alternative):
+
 ```bash
 FANART_API_KEY=your-api-key
+
 ```
 
 ### Configuration Notes
@@ -47,26 +51,31 @@ FANART_API_KEY=your-api-key
 ### Free Personal API Key
 
 1. **Visit Fanart.tv**
-   - Go to: https://fanart.tv
+
+   - Go to: <https://fanart.tv>
 
 2. **Create an Account**
+
    - Click "Register" in the top-right corner
    - Fill in username, email, and password
    - Verify your email address
 
 3. **Get Your API Key**
+
    - Log in to your account
    - Go to your profile settings
    - Navigate to "API" or "Personal API Key" section
    - Copy your personal API key
 
 4. **Add to Spotter Config**
+
    - Paste the API key into your configuration file
 
 ### Project API Key (Commercial Use)
 
 For commercial use or higher rate limits:
-1. Visit: https://fanart.tv/get-an-api-key/
+
+1. Visit: <https://fanart.tv/get-an-api-key/>
 2. Fill out the project application form
 3. Explain your use case
 4. Wait for approval (usually quick)
@@ -76,12 +85,16 @@ For commercial use or higher rate limits:
 
 ### Official Limits
 
-- **Personal Key**: 
+- **Personal Key**:
+
   - 1,000 requests per day
   - ~40 requests per hour
-- **Project Key**: 
+
+- **Project Key**:
+
   - 10,000 requests per day
   - ~400 requests per hour
+
 - **Rate Limit Response**: HTTP 429 (Too Many Requests)
 
 ### Spotter Implementation
@@ -118,6 +131,7 @@ For commercial use or higher rate limits:
 ### Image Types Explained
 
 **Artist Images**:
+
 - `hdmusiclogo`: High-definition logo (preferred)
 - `musiclogo`: Standard logo
 - `artistbackground`: Backdrop/wallpaper images
@@ -126,6 +140,7 @@ For commercial use or higher rate limits:
 - `musicbanner`: Wide banner images
 
 **Album Images**:
+
 - `cdart`: Disc artwork (transparent disc with album art)
 - `albumcover`: Front cover artwork
 
@@ -152,6 +167,7 @@ if artist.MusicbrainzID == "" {
 if album.Edges.Artist.MusicbrainzID == "" || album.MusicbrainzID == "" {
     return nil, nil // Skip
 }
+
 ```
 
 **Recommendation**: Run MusicBrainz enricher first to populate MBIDs.
@@ -159,6 +175,7 @@ if album.Edges.Artist.MusicbrainzID == "" || album.MusicbrainzID == "" {
 ### Image Priority
 
 **HD logos prioritized**:
+
 1. HD music logos (`hdmusiclogo`) - marked as primary
 2. Standard music logos (`musiclogo`) - secondary
 3. Other images by type
@@ -186,11 +203,13 @@ Fanart.tv organizes album art under artist:
     "album-mbid-2": { ... }
   }
 }
+
 ```
 
 ### Image Download Integration
 
 Uses `enrichers.DownloadAndSaveImage()`:
+
 - Checks if image already exists (skips re-download)
 - Downloads from remote URL
 - Resizes to max 1024px
@@ -212,6 +231,7 @@ Fanart.tv only provides images, not metadata:
 func (e *Enricher) EnrichArtist(ctx context.Context, artist *ent.Artist) (*enrichers.ArtistData, error) {
     return nil, nil // Only images, no metadata
 }
+
 ```
 
 Use `GetArtistImages()` and `GetAlbumImages()` instead.
@@ -221,22 +241,29 @@ Use `GetArtistImages()` and `GetAlbumImages()` instead.
 ### Running Tests
 
 ```bash
+
 # Run Fanart.tv enricher tests
+
 go test ./internal/enrichers/fanart/...
 
 # Run with verbose output
+
 go test -v ./internal/enrichers/fanart/...
 
 # Run with coverage
+
 go test -cover ./internal/enrichers/fanart/...
 
 # Run specific test
+
 go test -run TestGetArtistImages ./internal/enrichers/fanart/...
+
 ```
 
 ### Test Coverage
 
 Tests cover:
+
 - Factory creation with/without API key
 - Artist images retrieval
 - Album images retrieval
@@ -256,7 +283,7 @@ Tests use `httptest.NewServer`:
 ```go
 server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     assert.Contains(t, r.URL.RawQuery, "api_key=test-api-key")
-    
+
     response := fanartArtistResponse{
         Name: "Test Artist",
         MBID: "mbid-123",
@@ -266,39 +293,46 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
     }
     json.NewEncoder(w).Encode(response)
 }))
+
 ```
 
 ## Troubleshooting
 
 ### "Invalid API Key"
+
 - Verify API key is correct in config
 - Check for extra whitespace
 - Ensure key is active (check Fanart.tv account)
 
 ### No Images Returned
+
 - **Most Common**: Artist/album not in Fanart.tv database
-- Check manually: https://fanart.tv/music/{mbid}/
+- Check manually: <https://fanart.tv/music/{mbid}/>
 - Fanart.tv has less coverage than MusicBrainz
 - Popular artists have better coverage
 
 ### "No MusicBrainz ID"
+
 - Fanart.tv requires MBID to lookup
 - Run MusicBrainz enricher first
 - Check that entity has `musicbrainz_id` field populated
 
 ### Album Images Not Found
+
 - Album might not have images in Fanart.tv
 - Artist MBID required (even for album lookup)
 - Album MBID must also be present
 - Check nested structure in API response
 
 ### Rate Limit Errors (429)
+
 - You've exceeded daily/hourly limits
 - Wait until limit resets (usually next day/hour)
 - Consider project API key for higher limits
 - Reduce enrichment frequency
 
 ### Image Download Fails
+
 - Check network connectivity
 - Verify image URL is accessible
 - Check disk space for image storage
@@ -306,10 +340,10 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
 
 ## API Reference
 
-- **Official Docs**: https://fanart.tv/api-docs/
-- **Artist API**: https://fanart.tv/api-docs/music-api/
-- **Get API Key**: https://fanart.tv/get-an-api-key/
-- **Browse Music**: https://fanart.tv/music/
+- **Official Docs**: <https://fanart.tv/api-docs/>
+- **Artist API**: <https://fanart.tv/api-docs/music-api/>
+- **Get API Key**: <https://fanart.tv/get-an-api-key/>
+- **Browse Music**: <https://fanart.tv/music/>
 
 ## Example Usage
 
@@ -364,9 +398,10 @@ images, err = albumEnricher.GetAlbumImages(ctx, album)
 if err != nil {
     // Handle error
 }
+
 ```
 
-## Best Practices
+## Usage Best Practices
 
 1. **Run MusicBrainz First**: Always populate MBIDs before Fanart.tv
 2. **Cache Images**: Don't re-download; check if local file exists
@@ -380,6 +415,7 @@ if err != nil {
 ## Enrichment Order
 
 Fanart.tv should run **after**:
+
 1. MusicBrainz (provides required MBIDs)
 2. Lidarr
 3. Navidrome
@@ -387,6 +423,7 @@ Fanart.tv should run **after**:
 5. Last.fm
 
 Fanart.tv should run **before**:
+
 1. OpenAI (AI enrichment uses images)
 
 This is the default order in `enrichers.DefaultOrder()`.

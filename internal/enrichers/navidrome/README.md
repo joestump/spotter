@@ -8,6 +8,7 @@ The Navidrome enricher provides metadata enrichment from your self-hosted Navidr
 
 - **Implements**: `ArtistEnricher`, `AlbumEnricher`, `TrackEnricher`
 - **Data provided**:
+
   - **Artists**: Navidrome ID, MusicBrainz ID, biography, images, album count
   - **Albums**: Navidrome ID, MusicBrainz ID, year, genre, cover art
   - **Tracks**: Navidrome ID, MusicBrainz ID, duration, BPM, track/disc numbers
@@ -21,13 +22,17 @@ The Navidrome enricher provides metadata enrichment from your self-hosted Navidr
 
 ```yaml
 navidrome:
-  base_url: "http://localhost:4533"
+  base_url: "<http://localhost:4533">
+
   # No separate config for enricher - uses same settings as provider
+
 ```
 
 **Environment Variables** (alternative):
+
 ```bash
-NAVIDROME_BASE_URL=http://localhost:4533
+NAVIDROME_BASE_URL=<http://localhost:4533>
+
 ```
 
 ### Configuration Notes
@@ -40,6 +45,7 @@ NAVIDROME_BASE_URL=http://localhost:4533
 ### Per-User Authentication
 
 Required for enricher to work:
+
 1. User must connect Navidrome in Spotter preferences
 2. Provides username and password
 3. Stored securely in database
@@ -54,19 +60,23 @@ Required for enricher to work:
 ### Setup Steps
 
 1. **Configure Navidrome in Spotter**
+
    - Set `navidrome.base_url` in config
    - User connects via Spotter preferences
 
 2. **Ensure Music is Scanned**
+
    - Navidrome must have scanned your music library
    - Check Navidrome web UI: Settings → Scanning
    - Trigger manual scan if needed
 
 3. **Verify Connection**
+
    - Enricher will test connection on first use
    - Check Spotter logs for errors
 
 4. **Optional: Enable Last.fm in Navidrome**
+
    - Navidrome can fetch Last.fm data (artist info, images)
    - Settings → Integrations → Last.fm
    - Improves biography and image quality
@@ -80,14 +90,17 @@ Navidrome enricher uses the Subsonic API for metadata access.
 Uses salt + MD5 token authentication (same as provider):
 
 1. **Generate Random Salt**
+
    - 16-character hexadecimal string
    - Fresh for each request
 
 2. **Create Token**
+
    - Hash: `MD5(password + salt)`
    - Convert to hex string
 
 3. **Include in Request**
+
    - `u`: Username
    - `s`: Salt
    - `t`: Token
@@ -100,6 +113,7 @@ Uses salt + MD5 token authentication (same as provider):
 Navidrome provides two artist endpoints:
 
 **getArtist** (`/rest/getArtist`):
+
 - Basic artist data from library
 - Album list
 - Album count
@@ -107,6 +121,7 @@ Navidrome provides two artist endpoints:
 - Cover art ID
 
 **getArtistInfo2** (`/rest/getArtistInfo2`):
+
 - Extended metadata (often from Last.fm)
 - Biography
 - External URLs (Last.fm)
@@ -119,15 +134,19 @@ Spotter queries both and merges the data.
 Navidrome serves cover art via authenticated URLs:
 
 **Construction**:
-```
+
+```text
 GET /rest/getCoverArt?id={coverArtId}&u={username}&s={salt}&t={token}&c=spotter&v=1.16.1
+
 ```
 
 **Parameters**:
+
 - `id`: Cover art ID from artist/album data
 - Authentication params (u, s, t, c, v)
 
 **Spotter Handling**:
+
 - Generates authenticated URL
 - Downloads and caches locally
 - Includes in image data with full auth params
@@ -135,6 +154,7 @@ GET /rest/getCoverArt?id={coverArtId}&u={username}&s={salt}&t={token}&c=spotter&
 ## API Limitations
 
 ### Rate Limits
+
 - **Self-Hosted**: No rate limits for your own server
 - **Recommended**: Be respectful with concurrent requests
 - **Spotter**: No built-in rate limiting needed
@@ -142,15 +162,18 @@ GET /rest/getCoverArt?id={coverArtId}&u={username}&s={salt}&t={token}&c=spotter&
 ### Data Availability
 
 **Complete**:
+
 - All artists, albums, tracks in scanned library
 - File-based metadata (tags, duration, bitrate)
 
 **Partial**:
+
 - Biographies (requires Last.fm integration or file tags)
 - Images (depends on embedded artwork or Last.fm)
 - MusicBrainz IDs (only if files are tagged)
 
 **Not Available**:
+
 - Audio features (BPM in files only, no analysis)
 - Popularity scores
 - External IDs (Spotify, etc.)
@@ -158,26 +181,31 @@ GET /rest/getCoverArt?id={coverArtId}&u={username}&s={salt}&t={token}&c=spotter&
 ### Known Quirks
 
 1. **Biography Source**
+
    - If Last.fm integration enabled: fetches from Last.fm
    - Otherwise: uses comment/description tags from files
    - Quality varies by source
 
 2. **Image Sizes**
+
    - Cover art served at original file resolution
    - Navidrome may resize on-the-fly
    - Multiple sizes available via size parameter
 
 3. **MusicBrainz ID Priority**
+
    - Search by MBID more accurate than name
    - Format: `mbid:{mbid}` in search query
    - Falls back to name search if MBID not found
 
 4. **Genre Handling**
+
    - Returns genre from file tags
    - May be multiple genres separated
    - Not standardized across files
 
 5. **Search Behavior**
+
    - Case-insensitive
    - Partial matching supported
    - Returns multiple results (Spotter uses first)
@@ -187,12 +215,14 @@ GET /rest/getCoverArt?id={coverArtId}&u={username}&s={salt}&t={token}&c=spotter&
 ### Search vs Direct Lookup
 
 **Search** (`/rest/search3`):
+
 - Use when Navidrome ID unknown
 - Searches by name or MusicBrainz ID
 - Returns multiple results
 - Spotter uses first match
 
 **Direct Lookup**:
+
 - Use when Navidrome ID known
 - More efficient
 - Single entity returned
@@ -200,6 +230,7 @@ GET /rest/getCoverArt?id={coverArtId}&u={username}&s={salt}&t={token}&c=spotter&
 ### MusicBrainz Integration
 
 For accurate matching:
+
 1. Check if entity has MusicBrainz ID
 2. Search using `mbid:{mbid}` query
 3. Fall back to name search if not found
@@ -212,10 +243,10 @@ func (e *Enricher) getCoverArtURL(coverArtID string) string {
     if coverArtID == "" {
         return ""
     }
-    
+
     salt := generateSalt()
     token := generateToken(e.auth.Password, salt)
-    
+
     params := url.Values{}
     params.Set("id", coverArtID)
     params.Set("u", e.user.Username)
@@ -223,10 +254,11 @@ func (e *Enricher) getCoverArtURL(coverArtID string) string {
     params.Set("t", token)
     params.Set("c", "spotter")
     params.Set("v", "1.16.1")
-    
-    return fmt.Sprintf("%s/rest/getCoverArt?%s", 
+
+    return fmt.Sprintf("%s/rest/getCoverArt?%s",
         e.config.Navidrome.BaseURL, params.Encode())
 }
+
 ```
 
 ### Artist Enrichment Flow
@@ -258,8 +290,10 @@ func (e *Enricher) getCoverArtURL(coverArtID string) string {
 ### Duration Conversion
 
 Navidrome returns duration in seconds, Spotter uses milliseconds:
+
 ```go
 durationMs := navidromeDuration * 1000
+
 ```
 
 ## Testing
@@ -267,22 +301,29 @@ durationMs := navidromeDuration * 1000
 ### Running Tests
 
 ```bash
+
 # Run Navidrome enricher tests
+
 go test ./internal/enrichers/navidrome/...
 
 # Run with verbose output
+
 go test -v ./internal/enrichers/navidrome/...
 
 # Run with coverage
+
 go test -cover ./internal/enrichers/navidrome/...
 
 # Run specific test
+
 go test -run TestEnrichArtist ./internal/enrichers/navidrome/...
+
 ```
 
 ### Test Coverage
 
 Tests cover:
+
 - Factory creation with/without auth
 - Subsonic authentication (salt + token)
 - Artist enrichment (by ID and search)
@@ -304,7 +345,7 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
     assert.NotEmpty(t, r.URL.Query().Get("u"))
     assert.NotEmpty(t, r.URL.Query().Get("s"))
     assert.NotEmpty(t, r.URL.Query().Get("t"))
-    
+
     // Return mock Subsonic response
     response := map[string]interface{}{
         "subsonic-response": map[string]interface{}{
@@ -317,62 +358,71 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
     }
     json.NewEncoder(w).Encode(response)
 }))
+
 ```
 
 ## Troubleshooting
 
 ### "Wrong username or password" (Error 40)
+
 - Verify Navidrome credentials are correct
 - Try logging into Navidrome web UI
 - Check if account is active
 - Reconnect in Spotter preferences
 
 ### "Requested data not found" (Error 70)
+
 - Artist/album/track not in Navidrome library
 - Trigger a library scan in Navidrome
 - Verify music files are accessible
 - Check file paths are correct
 
 ### No Biography Data
+
 - Enable Last.fm integration in Navidrome
 - Navidrome Settings → Integrations → Last.fm API Key
 - Or ensure files have description/comment tags
 - Not all artists have biographies
 
 ### Cover Art Not Loading
+
 - Verify cover art embedded in files or in folder
 - Check Navidrome Settings → Cover Art preferences
 - Ensure files are readable by Navidrome
 - Try re-scanning library
 
 ### Search Returns Wrong Artist
+
 - Use MusicBrainz IDs for accurate matching
 - Tag your files with MBIDs (Picard, Beets)
 - Check for duplicate artists in library
 - Verify search query is correct
 
 ### Connection Timeouts
+
 - Check Navidrome server is running
 - Verify base URL is correct
 - Test URL in browser
 - Check firewall/network settings
 
 ### Authentication Fails After Password Change
+
 - User must reconnect in Spotter
 - Old password hash is invalid
 - Disconnect and reconnect Navidrome
 
 ## API Reference
 
-- **Navidrome Docs**: https://www.navidrome.org/docs/
-- **Subsonic API**: http://www.subsonic.org/pages/api.jsp
-- **OpenSubsonic**: https://opensubsonic.netlify.app/
+- **Navidrome Docs**: <https://www.navidrome.org/docs/>
+- **Subsonic API**: <http://www.subsonic.org/pages/api.jsp>
+- **OpenSubsonic**: <https://opensubsonic.netlify.app/>
 - **Subsonic Endpoints**:
-  - `getArtist`: http://www.subsonic.org/pages/api.jsp#getArtist
-  - `getArtistInfo2`: http://www.subsonic.org/pages/api.jsp#getArtistInfo2
-  - `getAlbum`: http://www.subsonic.org/pages/api.jsp#getAlbum
-  - `search3`: http://www.subsonic.org/pages/api.jsp#search3
-  - `getCoverArt`: http://www.subsonic.org/pages/api.jsp#getCoverArt
+
+  - `getArtist`: <http://www.subsonic.org/pages/api.jsp#getArtist>
+  - `getArtistInfo2`: <http://www.subsonic.org/pages/api.jsp#getArtistInfo2>
+  - `getAlbum`: <http://www.subsonic.org/pages/api.jsp#getAlbum>
+  - `search3`: <http://www.subsonic.org/pages/api.jsp#search3>
+  - `getCoverArt`: <http://www.subsonic.org/pages/api.jsp#getCoverArt>
 
 ## Example Usage
 
@@ -470,6 +520,7 @@ if err != nil {
 
 fmt.Printf("Duration: %d ms\n", trackData.DurationMs)
 fmt.Printf("BPM: %d\n", trackData.BPM) // If available in file
+
 ```
 
 ## Best Practices
@@ -488,9 +539,11 @@ fmt.Printf("BPM: %d\n", trackData.BPM) // If available in file
 ## Enrichment Order
 
 Navidrome enricher should run **after**:
+
 1. MusicBrainz (provides MBIDs for accurate matching)
 
 Navidrome enricher should run **before**:
+
 1. Lidarr
 2. Spotify
 3. Last.fm
@@ -514,12 +567,14 @@ This is the default order in `enrichers.DefaultOrder()`.
 ## Local vs Remote Enrichment
 
 **Local Navidrome** (localhost):
+
 - Ultra-fast enrichment
 - No network latency
 - Offline capable
 - Recommended for large libraries
 
 **Remote Navidrome** (internet-hosted):
+
 - Accessible from anywhere
 - Depends on network speed
 - Still faster than external APIs

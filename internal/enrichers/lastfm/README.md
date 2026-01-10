@@ -8,6 +8,7 @@ The Last.fm enricher provides community-curated metadata including artist biogra
 
 - **Implements**: `ArtistEnricher`, `AlbumEnricher`, `TrackEnricher`
 - **Data provided**:
+
   - **Artists**: Biography (cleaned HTML), tags, Last.fm URL, images (5 sizes)
   - **Albums**: Tags, Last.fm URL, album artwork (5 sizes)
   - **Tracks**: Tags, duration, MusicBrainz ID
@@ -22,12 +23,16 @@ The Last.fm enricher provides community-curated metadata including artist biogra
 ```yaml
 lastfm:
   api_key: "your-api-key"
+
   # shared_secret not required for enricher (only for provider auth)
+
 ```
 
 **Environment Variables** (alternative):
+
 ```bash
 LASTFM_API_KEY=your-api-key
+
 ```
 
 ### Configuration Notes
@@ -40,21 +45,26 @@ LASTFM_API_KEY=your-api-key
 ## How to Get API Keys
 
 1. **Go to Last.fm API Account Creation**
-   - Visit: https://www.last.fm/api/account/create
+
+   - Visit: <https://www.last.fm/api/account/create>
 
 2. **Fill in Application Details**
+
    - **Application name**: `Spotter` (or your custom name)
    - **Application description**: Brief description of your use case
    - **Callback URL**: Not required for enricher (leave empty or use dummy)
 
 3. **Submit the Form**
+
    - After submission, you'll receive your **API Key** and **Shared Secret**
 
 4. **Copy API Key**
+
    - Copy only the API Key (Shared Secret not needed for enricher)
    - Add to your Spotter configuration file
 
 5. **Test the Key**
+
    - Spotter will validate the key on first enrichment
    - Check logs for any API key errors
 
@@ -83,20 +93,24 @@ LASTFM_API_KEY=your-api-key
 ### Biography Data
 
 **Raw Format**:
+
 - Contains HTML tags: `<p>`, `<strong>`, `<em>`, `<a>`, `<br>`
 - Truncated with "Read more on Last.fm" link
 - May include Creative Commons attribution
 
 **Spotter Cleaning**:
+
 - Removes all HTML tags
 - Removes "Read more on Last.fm" link and everything after
 - Preserves paragraph structure
 - Trims whitespace
 
 **Example**:
-```
-Raw: "<p>Radiohead are an <strong>English</strong> rock band. <a href=\"https://www.last.fm/music/Radiohead\">Read more on Last.fm</a>.</p>"
+
+```text
+Raw: "<p>Radiohead are an <strong>English</strong> rock band. <a href=\"<https://www.last.fm/music/Radiohead\>">Read more on Last.fm</a>.</p>"
 Cleaned: "Radiohead are an English rock band."
+
 ```
 
 ### Image Sizes
@@ -157,25 +171,30 @@ Last.fm uses numeric error codes in JSON responses:
 ### Known Quirks
 
 1. **Autocorrect Parameter**
+
    - Setting `autocorrect=1` fixes typos in artist names
    - Example: "Radiohedd" → "Radiohead"
    - Always enabled in Spotter
 
 2. **MusicBrainz ID Priority**
+
    - If MBID provided, Last.fm uses it for matching
    - More accurate than name-based search
    - Recommended when available
 
 3. **Bio Truncation**
+
    - Biographies truncated to ~500 characters
    - Link to full bio on Last.fm website
    - Spotter removes truncation notice
 
 4. **Empty Image URLs**
+
    - Some images have empty `#text` field
    - Spotter filters these out automatically
 
 5. **No Pagination**
+
    - Single request returns all available data
    - No need for pagination logic
 
@@ -186,16 +205,17 @@ Last.fm uses numeric error codes in JSON responses:
 ```go
 func cleanBio(bio string) string {
     // 1. Remove "Read more on Last.fm" link
-    if idx := strings.Index(bio, "<a href=\"https://www.last.fm/"); idx != -1 {
+    if idx := strings.Index(bio, "<a href=\"<https://www.last.fm/">); idx != -1 {
         bio = bio[:idx]
     }
-    
+
     // 2. Strip HTML tags
     bio = stripHTML(bio)
-    
+
     // 3. Trim whitespace
     return strings.TrimSpace(bio)
 }
+
 ```
 
 ### HTML Stripping
@@ -223,19 +243,21 @@ func cleanBio(bio string) string {
 ### MusicBrainz Integration
 
 If entity has MusicBrainz ID:
+
 - Passes as `mbid` parameter to Last.fm
 - Last.fm uses MBID for accurate matching
 - Falls back to name if MBID not found
 
 ### API Request Format
 
-```
-GET https://ws.audioscrobbler.com/2.0/
+```text
+GET <https://ws.audioscrobbler.com/2.0/>
   ?method=artist.getinfo
   &artist=Radiohead
   &autocorrect=1
   &api_key=YOUR_KEY
   &format=json
+
 ```
 
 ## Testing
@@ -243,22 +265,29 @@ GET https://ws.audioscrobbler.com/2.0/
 ### Running Tests
 
 ```bash
+
 # Run Last.fm enricher tests
+
 go test ./internal/enrichers/lastfm/...
 
 # Run with verbose output
+
 go test -v ./internal/enrichers/lastfm/...
 
 # Run with coverage
+
 go test -cover ./internal/enrichers/lastfm/...
 
 # Run specific test
+
 go test -run TestEnrichArtist ./internal/enrichers/lastfm/...
+
 ```
 
 ### Test Coverage
 
 Tests cover:
+
 - Factory creation with/without API key
 - Artist enrichment with bio, tags, images
 - Album enrichment with tags
@@ -280,7 +309,7 @@ Tests use `httptest.NewServer`:
 server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     // Verify API key
     assert.Equal(t, "test-api-key", r.URL.Query().Get("api_key"))
-    
+
     // Return mock Last.fm response
     response := lastfmArtistResponse{
         Artist: lastfmArtist{
@@ -299,53 +328,62 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
     }
     json.NewEncoder(w).Encode(response)
 }))
+
 ```
 
 ## Troubleshooting
 
 ### "Invalid API Key" (Error 10)
+
 - Verify API key is correct in configuration
 - Check for extra whitespace or quotes
 - Ensure key is active (check Last.fm API dashboard)
-- Test key manually: `curl "http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=Radiohead&api_key=YOUR_KEY&format=json"`
+- Test key manually: `curl "<http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=Radiohead&api_key=YOUR_KEY&format=json"`>
 
 ### No Data Returned
+
 - Artist/album/track may not be in Last.fm database
-- Search manually: https://www.last.fm/music/
+- Search manually: <https://www.last.fm/music/>
 - Try autocorrect (automatically enabled)
 - Check for typos in names
 
 ### "Service Offline" (Error 11)
+
 - Last.fm is temporarily down
-- Check status: https://twitter.com/lastfmstatus
+- Check status: <https://twitter.com/lastfmstatus>
 - Wait and retry later
 - Consider caching data
 
 ### Bio Contains HTML
+
 - Should not happen - Spotter cleans automatically
 - Check cleanBio function is being called
 - Verify stripHTML is working correctly
 - Report as bug if HTML appears in final data
 
 ### Images Not Downloading
+
 - Check network connectivity
 - Verify image URLs are valid (not empty)
 - Check disk space and permissions
 - Ensure `data/images/` directory exists
 
 ### "Rate Limit Exceeded" (Error 29)
+
 - Slow down enrichment frequency
 - Add delay between requests
 - Consider caching enriched data
 - Contact Last.fm for increased limits
 
 ### Missing Tags
+
 - Some artists have no tags
 - This is expected - not an error
 - Users must tag artists on Last.fm
 - Consider using other enrichers for genres
 
 ### Empty Biographies
+
 - Many artists lack biographies
 - Especially true for new/obscure artists
 - Try other enrichers (OpenAI, MusicBrainz)
@@ -353,12 +391,12 @@ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *htt
 
 ## API Reference
 
-- **Last.fm API Docs**: https://www.last.fm/api
-- **artist.getinfo**: https://www.last.fm/api/show/artist.getInfo
-- **album.getinfo**: https://www.last.fm/api/show/album.getInfo
-- **track.getinfo**: https://www.last.fm/api/show/track.getInfo
-- **Error Codes**: https://www.last.fm/api/errorcodes
-- **API Account**: https://www.last.fm/api/account/create
+- **Last.fm API Docs**: <https://www.last.fm/api>
+- **artist.getinfo**: <https://www.last.fm/api/show/artist.getInfo>
+- **album.getinfo**: <https://www.last.fm/api/show/album.getInfo>
+- **track.getinfo**: <https://www.last.fm/api/show/track.getInfo>
+- **Error Codes**: <https://www.last.fm/api/errorcodes>
+- **API Account**: <https://www.last.fm/api/account/create>
 
 ## Example Usage
 
@@ -404,7 +442,7 @@ if err != nil {
 }
 
 for _, img := range images {
-    fmt.Printf("Image (%s): %dx%d - %s\n", 
+    fmt.Printf("Image (%s): %dx%d - %s\n",
         img.Source, img.Width, img.Height, img.URL)
     // Primary: extralarge (300x300)
     if img.IsPrimary {
@@ -446,6 +484,7 @@ if err != nil {
 
 fmt.Printf("Track tags: %v\n", trackData.Tags)
 fmt.Printf("Duration: %d ms\n", trackData.DurationMs)
+
 ```
 
 ## Best Practices
@@ -464,12 +503,14 @@ fmt.Printf("Duration: %d ms\n", trackData.DurationMs)
 ## Enrichment Order
 
 Last.fm enricher should run **after**:
+
 1. MusicBrainz (provides MBIDs for accurate matching)
 2. Lidarr
 3. Navidrome
 4. Spotify
 
 Last.fm enricher should run **before**:
+
 1. OpenAI (AI uses all metadata including Last.fm tags)
 
 This is the default order in `enrichers.DefaultOrder()`.
