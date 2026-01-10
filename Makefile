@@ -91,7 +91,7 @@ test-coverage: generate ## Run tests with coverage report
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "✓ Coverage report generated: coverage.html"
 
-lint: ## Run all linters
+lint: generate ## Run all linters
 	@echo "Running all linters..."
 	@echo ""
 	@echo "→ Go (golangci-lint)..."
