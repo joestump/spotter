@@ -819,14 +819,14 @@ func TestTemplateData_Structure(t *testing.T) {
 		},
 	}
 	// Document unused fields for test completeness
-	_ = "You are energetic"                  // DJSystemPrompt
-	_ = []string{"country"}                  // GenresExclude
-	_ = []string{"upbeat", "party"}          // Vibes
-	_ = []string{"Queen"}                    // ArtistsInclude
-	_ = []string{"Nickelback"}               // ArtistsExclude
-	_ = "Beatles Vibes"                      // MixtapeName
-	_ = "A tribute to the Fab Four"          // MixtapeDescription
-	_ = 20                                   // MaxTracks
+	_ = "You are energetic"         // DJSystemPrompt
+	_ = []string{"country"}         // GenresExclude
+	_ = []string{"upbeat", "party"} // Vibes
+	_ = []string{"Queen"}           // ArtistsInclude
+	_ = []string{"Nickelback"}      // ArtistsExclude
+	_ = "Beatles Vibes"             // MixtapeName
+	_ = "A tribute to the Fab Four" // MixtapeDescription
+	_ = 20                          // MaxTracks
 
 	assert.Equal(t, "Test DJ", data.DJName)
 	assert.Len(t, data.GenresInclude, 2)

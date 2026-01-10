@@ -988,7 +988,6 @@ type testTransport struct {
 func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Rewrite the URL to use the test server
 	req.URL.Scheme = "http"
-	req.URL.Host = req.URL.Host
 	if t.baseURL != "" {
 		// Parse test server URL
 		testURL := t.baseURL

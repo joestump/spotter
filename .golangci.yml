@@ -25,6 +25,9 @@ linters:
 linters-settings:
   govet:
     enable-all: true
+    # Disable fieldalignment - it's a memory optimization, not a correctness issue
+    disable:
+      - fieldalignment
 
   errcheck:
     check-type-assertions: true
@@ -54,3 +57,5 @@ issues:
       linters:
         - errcheck
         - goconst
+        - govet  # Allow shadow variables and self-assignment in tests
+        - gocritic  # Allow ifElseChain and other style issues in tests
