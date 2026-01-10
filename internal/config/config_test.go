@@ -13,6 +13,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -37,6 +38,7 @@ func TestLoadEnvOverrides(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -75,6 +77,7 @@ func TestSyncIntervalConfig(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	t.Setenv("SPOTTER_SYNC_INTERVAL", "10m")
 
 	cfg, err := Load()
@@ -88,6 +91,7 @@ func TestThemeConfig(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	t.Setenv("SPOTTER_THEME_AVAILABLE", "dark,light,cyberpunk,retro")
 	t.Setenv("SPOTTER_THEME_DEFAULT", "cyberpunk")
 
@@ -104,6 +108,7 @@ func TestAvailableThemesDefaultsWhenNotSet(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	// Don't set SPOTTER_THEME_AVAILABLE - should use defaults
 
 	cfg, err := Load()
@@ -118,7 +123,7 @@ func TestAvailableThemesTrimsWhitespace(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
-	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	t.Setenv("SPOTTER_THEME_AVAILABLE", " dark , light , cupcake ")
 
 	cfg, err := Load()
@@ -132,6 +137,7 @@ func TestOpenAIDefaults(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	// Explicitly clear these to test defaults (overrides any env vars from user's shell)
 	t.Setenv("SPOTTER_OPENAI_BASE_URL", "")
 	t.Setenv("SPOTTER_OPENAI_MODEL", "")
@@ -150,6 +156,7 @@ func TestOpenAIConfig(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key-12345")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	t.Setenv("SPOTTER_OPENAI_BASE_URL", "https://api.litellm.example.com/v1")
 	t.Setenv("SPOTTER_OPENAI_MODEL", "gpt-4-turbo")
 
@@ -167,6 +174,7 @@ func TestIsOpenAIEnabled(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-valid-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -179,6 +187,7 @@ func TestMetadataEnricherOrderIncludesOpenAI(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -194,7 +203,7 @@ func TestMetadataEnricherOrderCustom(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
-	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	t.Setenv("SPOTTER_METADATA_ORDER", "musicbrainz,spotify,openai")
 
 	cfg, err := Load()
@@ -209,6 +218,7 @@ func TestAIPromptsDirectoryDefault(t *testing.T) {
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -220,6 +230,7 @@ func TestAIPromptsDirectoryCustom(t *testing.T) {
 	t.Setenv("SPOTTER_NAVIDROME_BASE_URL", "http://localhost:4533")
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
 	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
 	t.Setenv("SPOTTER_METADATA_AI_PROMPTS_DIRECTORY", "/custom/prompts")
 

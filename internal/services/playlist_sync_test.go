@@ -168,6 +168,39 @@ func createTestPlaylistTracksForSync(t *testing.T, client *ent.Client, pl *ent.P
 	}
 }
 
+// createNavidromeTracksForMatching creates matching Navidrome tracks in the library
+// so the TrackMatcher can find matches for the playlist tracks
+func createNavidromeTracksForMatching(t *testing.T, client *ent.Client, user *ent.User) {
+	ctx := context.Background()
+
+	tracks := []struct {
+		name         string
+		artist       string
+		navidromeID  string
+	}{
+		{"Song One", "Artist A", "nav-track-1"},
+		{"Song Two", "Artist B", "nav-track-2"},
+		{"Song Three", "Artist C", "nav-track-3"},
+	}
+
+	for _, track := range tracks {
+		// Create artist with user
+		artist, err := client.Artist.Create().
+			SetName(track.artist).
+			SetUser(user).
+			Save(ctx)
+		require.NoError(t, err)
+
+		// Create track with navidrome ID
+		_, err = client.Track.Create().
+			SetName(track.name).
+			SetArtist(artist).
+			SetNillableNavidromeID(&track.navidromeID).
+			Save(ctx)
+		require.NoError(t, err)
+	}
+}
+
 func TestPlaylistSyncService_SyncPlaylistToNavidrome_NewPlaylist(t *testing.T) {
 	client, svc, bus, mockSyncer := setupPlaylistSyncService(t)
 	ctx := context.Background()
@@ -176,6 +209,9 @@ func TestPlaylistSyncService_SyncPlaylistToNavidrome_NewPlaylist(t *testing.T) {
 	user := createTestUserWithNavidromeAuth(t, client)
 	notifCh, cleanup := bus.Subscribe(user.ID)
 	defer cleanup()
+
+	// Create Navidrome tracks in the library for matching
+	createNavidromeTracksForMatching(t, client, user)
 
 	// Create a Spotify playlist with sync enabled
 	pl := createTestPlaylistForSync(t, client, user, "spotify", true)
@@ -554,6 +590,9 @@ func TestPlaylistSyncService_RebuildPlaylistSync_Success(t *testing.T) {
 	user := createTestUserWithNavidromeAuth(t, client)
 	notifCh, cleanup := bus.Subscribe(user.ID)
 	defer cleanup()
+
+	// Create Navidrome tracks in the library for matching
+	createNavidromeTracksForMatching(t, client, user)
 
 	// Create a playlist that was already synced
 	pl, err := client.Playlist.Create().
