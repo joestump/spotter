@@ -838,6 +838,28 @@ Documentation markdown is linted by `make lint-md`. The `.markdownlint.json` con
 5. Run `make lint-md` to verify markdown
 6. Commit changes - auto-deploys on merge to main
 
+## Adding New Features or Configuration
+
+When adding new features or configuration options, you MUST update all relevant files:
+
+### New Configuration Options
+
+| File | Action |
+|------|--------|
+| `internal/config/config.go` | Add struct field and `SetDefault()` |
+| `.env.example` | Add example with comment |
+| `website/docs/getting-started/configuration.md` | Add to appropriate table and example |
+
+### New Features or Functionality
+
+| File | Action |
+|------|--------|
+| `website/docs/` | Add or update feature documentation |
+| `AGENTS.md` | Update if workflow/standards change |
+| `README.md` | Update if user-facing features change |
+
+**CRITICAL:** Documentation updates MUST be included in the same PR as the feature. Do not create separate PRs for docs.
+
 ## Keeping AGENTS.md Updated
 
 **META-RULE:** When workflow instructions are updated (Git, Beads, testing, etc.), AGENTS.md MUST be updated to reflect the changes. This ensures the documentation stays in sync with current practices and all contributors follow the same workflow.

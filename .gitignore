@@ -9,6 +9,7 @@ server
 # Environment
 .env
 .env.*
+!.env.example
 
 # Database
 spotter.db
