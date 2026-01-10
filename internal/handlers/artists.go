@@ -27,13 +27,13 @@ import (
 )
 
 const (
-	groupByDay    = "day"
-	groupByWeek   = "week"
-	groupByMonth  = "month"
-	timeframe90d  = "90d"
-	timeframe6m   = "6m"
-	timeframe1y   = "1y"
-	timeframeAll  = "all"
+	groupByDay   = "day"
+	groupByWeek  = "week"
+	groupByMonth = "month"
+	timeframe90d = "90d"
+	timeframe6m  = "6m"
+	timeframe1y  = "1y"
+	timeframeAll = "all"
 )
 
 func (h *Handler) ArtistShow(w http.ResponseWriter, r *http.Request) {

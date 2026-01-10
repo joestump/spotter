@@ -14,9 +14,9 @@ import (
 	"spotter/ent"
 	"spotter/ent/user"
 	"spotter/internal/config"
+	"spotter/internal/crypto"
 	"spotter/internal/events"
 	"spotter/internal/handlers"
-	"spotter/internal/crypto"
 	"spotter/internal/services"
 
 	_ "github.com/mattn/go-sqlite3"

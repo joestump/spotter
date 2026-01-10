@@ -340,17 +340,20 @@ func (h *Handler) DebugPlaylistSync(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
 	// Perform synchronous sync
-	err = h.PlaylistSyncSvc.SyncPlaylistToNavidrome(ctx, playlistID)
+	syncErr := h.PlaylistSyncSvc.SyncPlaylistToNavidrome(ctx, playlistID)
 
 	duration := time.Since(startTime)
 
 	// Reload playlist to get updated state
-	updatedPl, err := h.Client.Playlist.Query().
+	updatedPl, reloadErr := h.Client.Playlist.Query().
 		Where(playlist.ID(playlistID)).
 		Only(ctx)
-	if err != nil {
-		h.Logger.Warn("failed to reload playlist after sync", "error", err)
+	if reloadErr != nil {
+		h.Logger.Warn("failed to reload playlist after sync", "error", reloadErr)
 	}
+
+	// Use sync error for response (reload error is just a warning)
+	err = syncErr
 
 	response := map[string]interface{}{
 		"playlist_id":   playlistID,

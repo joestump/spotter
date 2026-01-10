@@ -15,9 +15,9 @@ import (
 	"spotter/ent/enttest"
 	"spotter/ent/mixtape"
 	"spotter/internal/config"
+	"spotter/internal/crypto"
 	"spotter/internal/events"
 	"spotter/internal/handlers"
-	"spotter/internal/crypto"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"

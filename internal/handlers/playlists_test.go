@@ -16,9 +16,9 @@ import (
 	"spotter/ent/playlist"
 	"spotter/ent/user"
 	"spotter/internal/config"
+	"spotter/internal/crypto"
 	"spotter/internal/events"
 	"spotter/internal/handlers"
-	"spotter/internal/crypto"
 	"spotter/internal/services"
 
 	"github.com/go-chi/chi/v5"

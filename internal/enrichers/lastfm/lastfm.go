@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	baseURL          = "https://ws.audioscrobbler.com/2.0/"
-	imageSizeXLarge  = "extralarge"
+	baseURL         = "https://ws.audioscrobbler.com/2.0/"
+	imageSizeXLarge = "extralarge"
 )
 
 // Enricher implements the Last.fm metadata enricher.

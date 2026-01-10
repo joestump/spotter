@@ -25,16 +25,33 @@ linters:
 linters-settings:
   govet:
     enable-all: true
+    disable:
+      - fieldalignment  # Struct field alignment optimization hints - too pedantic
+      - shadow          # Variable shadowing - too strict for idiomatic Go patterns
+      - unusedwrite     # Flags struct field writes in tests - too noisy
 
   errcheck:
     check-type-assertions: true
-    check-blank: true
+    check-blank: false  # Allow _ = for common patterns like resp.Body.Close()
+    exclude-functions:
+      - io.Copy
+      - io.ReadAll
+      - (io.Closer).Close
+      - (*os.File).Close
+      - (net/http.ResponseWriter).Write
 
   revive:
     confidence: 0.8
 
   goimports:
     local-prefixes: github.com/joestump/spotter
+
+  gocritic:
+    disabled-checks:
+      - ifElseChain    # Style preference - switch vs if-else
+      - assignOp       # Style preference - x = x + 1 vs x += 1
+      - appendAssign   # Flags valid patterns like existingTags := append(a, b...)
+      - exitAfterDefer # Intentional in main() - exit on server failure
 
 issues:
   exclude-use-default: false

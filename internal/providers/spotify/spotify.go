@@ -195,14 +195,14 @@ func (p *Provider) fetchUserProfile(ctx context.Context, accessToken string) (*s
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := http.DefaultClient.Do(req)
-	    if err != nil {
-	        return nil, err
-	    }
-	    defer func() {
-	        if err := resp.Body.Close(); err != nil {
-	            p.logger.Warn("failed to close response body", "error", err)
-	        }
-	    }()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			p.logger.Warn("failed to close response body", "error", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("spotify API returned status %d", resp.StatusCode)
 	}

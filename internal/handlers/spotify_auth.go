@@ -102,7 +102,7 @@ func (h *Handler) SpotifyCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse state to extract CSRF token and encrypted user ID
-	parts := fmt.Sprintf("%s", stateParam)
+	parts := stateParam
 	colonIdx := -1
 	for i := len(parts) - 1; i >= 0; i-- {
 		if parts[i] == ':' {
