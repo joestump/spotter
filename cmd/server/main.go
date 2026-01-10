@@ -69,11 +69,7 @@ func main() {
 		logger.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
-	        defer func() {
-	                if err := client.Close(); err != nil {
-	                        logger.Error("failed to close database client", "error", err)
-	                }
-	        }()
+
 	// Initialize Event Bus
 	bus := events.NewBus()
 
@@ -117,7 +113,6 @@ func main() {
 
 	// Create root context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Create errgroup for managing background goroutines
 	g, gctx := errgroup.WithContext(ctx)
@@ -136,7 +131,8 @@ func main() {
 
 	// Background Metadata Enrichment Loop
 	if cfg.Metadata.Enabled {
-		metadataInterval, err := time.ParseDuration(cfg.Metadata.Interval)
+		var metadataInterval time.Duration
+		metadataInterval, err = time.ParseDuration(cfg.Metadata.Interval)
 		if err != nil {
 			logger.Error("invalid metadata interval, using default 1h", "error", err, "value", cfg.Metadata.Interval)
 			metadataInterval = 1 * time.Hour
@@ -321,6 +317,9 @@ func main() {
 		if err != nil && err != http.ErrServerClosed {
 			logger.Error("server failed", "error", err)
 			cancel() // Cancel background goroutines
+			if closeErr := client.Close(); closeErr != nil {
+				logger.Error("failed to close database client during error exit", "error", closeErr)
+			}
 			os.Exit(1)
 		}
 	case sig := <-sigCh:
@@ -349,7 +348,12 @@ func main() {
 		logger.Info("shutting down event bus")
 		bus.Shutdown()
 
-		// Database will be closed by defer
+		// Close database connection
+		logger.Info("closing database connection")
+		if closeErr := client.Close(); closeErr != nil {
+			logger.Error("failed to close database client", "error", closeErr)
+		}
+
 		logger.Info("graceful shutdown complete")
 	}
 }

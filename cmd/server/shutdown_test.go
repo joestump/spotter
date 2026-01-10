@@ -210,29 +210,29 @@ func TestBackgroundLoops_HandleEmptyDatabase(t *testing.T) {
 	cfg := &config.Config{}
 
 	tests := []struct {
-		name string
 		fn   func(context.Context) error
+		name string
 	}{
 		{
-			name: "runBackgroundSyncLoop",
 			fn: func(ctx context.Context) error {
 				syncer := services.NewSyncer(client, cfg, logger, nil)
 				return runBackgroundSyncLoop(ctx, client, syncer, 10*time.Millisecond, logger)
 			},
+			name: "runBackgroundSyncLoop",
 		},
 		{
-			name: "runMetadataEnrichmentLoop",
 			fn: func(ctx context.Context) error {
 				metadataSvc := services.NewMetadataService(client, cfg, logger, nil)
 				return runMetadataEnrichmentLoop(ctx, client, metadataSvc, 10*time.Millisecond, logger)
 			},
+			name: "runMetadataEnrichmentLoop",
 		},
 		{
-			name: "runPlaylistSyncLoop",
 			fn: func(ctx context.Context) error {
 				playlistSyncSvc := services.NewPlaylistSyncService(client, cfg, logger, nil)
 				return runPlaylistSyncLoop(ctx, client, playlistSyncSvc, 10*time.Millisecond, logger)
 			},
+			name: "runPlaylistSyncLoop",
 		},
 	}
 

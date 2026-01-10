@@ -1098,14 +1098,19 @@ When ending a work session, complete ALL steps below. **Work is NOT complete unt
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-- **ALWAYS run `make test`, `make run`, and `make lint` before EVERY `git commit` and `git push`**
+- **`make lint` and `make test` CANNOT BE SKIPPED - These are MANDATORY before every commit, push, PR, and bead closure**
+- **ALWAYS run `make lint` AND `make test` before EVERY `git commit` and `git push`**
+- **NEVER open a PR without running `make lint` and `make test` first - NO EXCEPTIONS**
+- **NEVER close a bead without running `make lint` and `make test` first - NO EXCEPTIONS**
+- **ALL linting errors in your modified files MUST be fixed - do not skip or ignore them**
+- **ALL tests MUST pass - if tests fail, fix them before proceeding**
 - **ALWAYS verify `make run` starts the application without errors**
 - **ALWAYS create a Pull Request with `gh pr create` after pushing - this is NOT OPTIONAL**
 - Work is NOT complete until feature branch is pushed AND a PR is created
 - NEVER stop before pushing and creating a PR - that leaves work incomplete
 - NEVER say "ready to push when you are" - YOU must push AND create the PR
 - If push fails, resolve and retry until it succeeds
-- DO NOT close beads unless ALL quality gates have passed
+- DO NOT close beads unless ALL quality gates have passed (lint, test, build, run)
 - DO NOT commit or push code that breaks tests, linting, or fails to start
 - ALWAYS create feature branch `bead/<id>` from `main` before starting work
 - DO NOT work directly on `main` or long-lived branches
