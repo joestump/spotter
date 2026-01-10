@@ -48,6 +48,7 @@ type VibesConfig struct {
 type Config struct {
 	Security struct {
 		EncryptionKey string `mapstructure:"encryption_key"` // 32-byte hex key for AES-256 encryption
+		SecureCookies bool   `mapstructure:"secure_cookies"` // Set Secure flag on cookies (requires HTTPS)
 	} `mapstructure:"security"`
 	Database struct {
 		Driver string `mapstructure:"driver"`
@@ -203,7 +204,8 @@ func Load() (*Config, error) {
 	v.AutomaticEnv()
 
 	// Defaults
-	v.SetDefault("security.encryption_key", "") // Must be set via environment variable
+	v.SetDefault("security.encryption_key", "")   // Must be set via environment variable
+	v.SetDefault("security.secure_cookies", true) // Secure cookies by default (requires HTTPS)
 	v.SetDefault("server.port", "8080")
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("sync.interval", "5m")

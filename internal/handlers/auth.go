@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -114,6 +115,7 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    u.Username,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   h.Config.Security.SecureCookies,
 		Expires:  time.Now().Add(24 * time.Hour),
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -134,7 +136,9 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   h.Config.Security.SecureCookies,
 		Expires:  time.Now().Add(-1 * time.Hour),
+		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 }
@@ -147,7 +151,13 @@ func (h *Handler) authenticateNavidrome(username, password string) error {
 		return fmt.Errorf("navidrome base url not configured")
 	}
 
-	salt := "spotter" // In production, generate random
+	// Generate random salt for Subsonic authentication (16 bytes = 32 hex chars)
+	saltBytes := make([]byte, 16)
+	if _, err := rand.Read(saltBytes); err != nil {
+		return fmt.Errorf("failed to generate random salt: %w", err)
+	}
+	salt := hex.EncodeToString(saltBytes)
+
 	hash := md5.New()
 	hash.Write([]byte(password + salt))
 	token := hex.EncodeToString(hash.Sum(nil))

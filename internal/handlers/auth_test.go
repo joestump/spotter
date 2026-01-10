@@ -261,3 +261,79 @@ func TestPostLogin_Regression_HTMXRedirect(t *testing.T) {
 		})
 	}
 }
+
+func TestPostLogin_SecureCookieFlag(t *testing.T) {
+	// Test that Secure flag is set based on config
+
+	testCases := []struct {
+		name           string
+		secureCookies  bool
+		expectedSecure bool
+	}{
+		{
+			name:           "Secure cookies enabled",
+			secureCookies:  true,
+			expectedSecure: true,
+		},
+		{
+			name:           "Secure cookies disabled",
+			secureCookies:  false,
+			expectedSecure: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Mock Navidrome server
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				response := map[string]interface{}{
+					"subsonic-response": map[string]interface{}{
+						"status":  "ok",
+						"version": "1.16.1",
+					},
+				}
+				if err := json.NewEncoder(w).Encode(response); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			}))
+			defer ts.Close()
+
+			client := setupTestDB(t)
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			cfg := &config.Config{}
+			cfg.Navidrome.BaseURL = ts.URL
+			cfg.Security.SecureCookies = tc.secureCookies
+
+			bus := events.NewBus()
+			syncer := services.NewSyncer(client, cfg, logger, bus)
+			encryptor, err := crypto.NewEncryptor(make([]byte, 32))
+			require.NoError(t, err)
+			h := handlers.New(client, cfg, logger, encryptor, syncer, nil, nil, nil, nil, nil, bus)
+
+			// Create POST request
+			form := url.Values{}
+			form.Add("username", "testuser")
+			form.Add("password", "secret123")
+			req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+			w := httptest.NewRecorder()
+			h.PostLogin(w, req)
+
+			// Find the session cookie
+			cookies := w.Result().Cookies()
+			var sessionCookie *http.Cookie
+			for _, c := range cookies {
+				if c.Name == "spotter_user" {
+					sessionCookie = c
+					break
+				}
+			}
+			require.NotNil(t, sessionCookie, "Session cookie should be set")
+			assert.Equal(t, tc.expectedSecure, sessionCookie.Secure, "Cookie Secure flag should match config")
+			assert.True(t, sessionCookie.HttpOnly, "Cookie should be HttpOnly")
+			assert.Equal(t, http.SameSiteLaxMode, sessionCookie.SameSite, "Cookie should have SameSite=Lax")
+		})
+	}
+}

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/hex"
 	"net/http"
 	"sort"
@@ -268,8 +269,14 @@ func (h *Handler) checkNavidromeOnline(username, password string) bool {
 	// Use a short timeout for the ping
 	client := &http.Client{Timeout: 5 * time.Second}
 
-	// Build ping URL with auth
-	salt := "spotter"
+	// Build ping URL with auth - generate random salt
+	saltBytes := make([]byte, 16)
+	if _, err := rand.Read(saltBytes); err != nil {
+		h.Logger.Error("failed to generate random salt", "error", err)
+		return false
+	}
+	salt := hex.EncodeToString(saltBytes)
+
 	hash := md5.New()
 	hash.Write([]byte(password + salt))
 	token := hex.EncodeToString(hash.Sum(nil))
