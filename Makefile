@@ -6,7 +6,7 @@ endif
 BINARY_NAME=spotter-server
 MAIN_PATH=./cmd/server/main.go
 
-.PHONY: all help deps ci-deps docker-deps generate css build build-binary run dev test test-coverage lint-templ clean docker-build docker-run
+.PHONY: all help deps ci-deps docker-deps generate css build build-binary run dev test test-coverage lint-go lint-md lint-templ clean docker-build docker-run
 
 all: build
 
@@ -23,6 +23,7 @@ deps: ## Install all dependencies (Go, Node, tools)
 	@echo "Installing development tools..."
 	go install github.com/a-h/templ/cmd/templ@latest
 	go install github.com/air-verse/air@latest
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	@echo "Installing Node dependencies..."
 	npm install
 	@echo "✓ Dependencies installed"
@@ -32,6 +33,8 @@ ci-deps: ## Install CI dependencies (minimal, no dev tools)
 	go mod download
 	@echo "Installing templ..."
 	go install github.com/a-h/templ/cmd/templ@latest
+	@echo "Installing golangci-lint..."
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	@echo "✓ CI dependencies installed"
 
 docker-deps: ## Install Docker build dependencies (Go, templ, Node)
@@ -92,6 +95,16 @@ lint-templ: ## Run templ fmt to check Templ template formatting
 	@echo "Checking Templ template formatting..."
 	@templ fmt -fail .
 	@echo "✓ Templ formatting check passed"
+
+lint-md: ## Run markdownlint on Markdown files
+	@echo "Linting Markdown files..."
+	@npx markdownlint "**/*.md" --ignore node_modules --ignore .beads
+	@echo "✓ Markdown linting passed"
+
+lint-go: ## Run golangci-lint on Go code
+	@echo "Running golangci-lint..."
+	@golangci-lint run ./...
+	@echo "✓ Go linting passed"
 
 clean: ## Remove build artifacts
 	@echo "Cleaning build artifacts..."
