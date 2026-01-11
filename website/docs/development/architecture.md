@@ -35,7 +35,9 @@ spotter/
 │   └── server/
 │       └── main.go          # Application entry point
 ├── internal/
+│   ├── auth/                # JWT authentication
 │   ├── config/              # Configuration management
+│   ├── crypto/              # Encryption utilities
 │   ├── handlers/            # HTTP handlers
 │   ├── providers/           # External service providers
 │   │   ├── navidrome/
@@ -49,7 +51,7 @@ spotter/
 │   │   ├── lidarr/
 │   │   └── openai/
 │   ├── services/            # Business logic
-│   ├── templates/           # templ templates
+│   ├── views/               # templ templates
 │   └── middleware/          # HTTP middleware
 ├── ent/
 │   └── schema/              # Database schemas

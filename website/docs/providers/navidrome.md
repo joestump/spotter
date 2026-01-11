@@ -32,10 +32,15 @@ Spotter uses Navidrome's authentication system:
 
 1. Open Spotter in your browser
 2. Enter your Navidrome username and password
-3. Spotter authenticates against Navidrome
-4. Session is maintained for subsequent requests
+3. Spotter authenticates against Navidrome via the Subsonic API
+4. A signed JWT token is issued and stored in a secure cookie
+5. The token is valid for 24 hours
 
 No separate API keys are required - your Navidrome credentials are sufficient.
+
+:::info
+Your Navidrome password is stored encrypted for background sync operations. See [Authentication](/docs/api/authentication) for details on session security.
+:::
 
 ## Synced Data
 
