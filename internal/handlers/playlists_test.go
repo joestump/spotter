@@ -15,6 +15,7 @@ import (
 	"spotter/ent"
 	"spotter/ent/playlist"
 	"spotter/ent/user"
+	"spotter/internal/auth"
 	"spotter/internal/config"
 	"spotter/internal/crypto"
 	"spotter/internal/events"
@@ -44,7 +45,8 @@ func setupPlaylistHandler(t *testing.T) (*ent.Client, *handlers.Handler, *events
 	syncer := services.NewSyncer(client, cfg, logger, bus)
 	playlistSyncSvc := services.NewPlaylistSyncService(client, cfg, logger, bus)
 	encryptor, _ := crypto.NewEncryptor(make([]byte, 32))
-	h := handlers.New(client, cfg, logger, encryptor, syncer, nil, playlistSyncSvc, nil, nil, nil, bus)
+	jwtManager := auth.NewJWTManager(testJWTSecret)
+	h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, nil, playlistSyncSvc, nil, nil, nil, bus)
 	return client, h, bus
 }
 

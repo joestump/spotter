@@ -115,15 +115,23 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}(u)
 
-	// 3. Set Session Cookie (Simple implementation for MVP)
+	// 3. Generate JWT token
+	token, err := h.JWTManager.GenerateToken(u.ID, u.Username)
+	if err != nil {
+		h.Logger.Error("Failed to generate JWT token", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Set JWT cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:     "spotter_user",
-		Value:    u.Username,
+		Name:     CookieName,
+		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   h.Config.Security.SecureCookies,
 		Expires:  time.Now().Add(24 * time.Hour),
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 	})
 
 	// Check if this is an HTMX request
@@ -138,13 +146,14 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "spotter_user",
+		Name:     CookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   h.Config.Security.SecureCookies,
 		Expires:  time.Now().Add(-1 * time.Hour),
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,
 	})
 	http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 }

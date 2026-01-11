@@ -32,6 +32,7 @@ Spotter is configured using environment variables. You can set these in your she
 | Variable | Description | Default |
 | :--- | :--- | :--- |
 | `SPOTTER_SECURITY_ENCRYPTION_KEY` | 64-character hex key for encrypting OAuth tokens at rest | *None* |
+| `SPOTTER_SECURITY_JWT_SECRET` | 32+ character secret for signing JWT authentication tokens | *None* |
 | `SPOTTER_SECURITY_SECURE_COOKIES` | Set `Secure` flag on session cookies (requires HTTPS) | `true` |
 
 :::caution Production Requirement
@@ -164,6 +165,8 @@ SPOTTER_SERVER_HOST=0.0.0.0
 # ===================
 # Generate with: openssl rand -hex 32
 SPOTTER_SECURITY_ENCRYPTION_KEY=your_64_char_hex_key_here
+# Generate with: openssl rand -base64 32
+SPOTTER_SECURITY_JWT_SECRET=your_32_char_jwt_secret_here
 # Set to false for local HTTP development
 SPOTTER_SECURITY_SECURE_COOKIES=true
 

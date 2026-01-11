@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"spotter/ent"
-	"spotter/ent/user"
+	"spotter/internal/auth"
 	"spotter/internal/config"
 	"spotter/internal/crypto"
 	"spotter/internal/database"
@@ -59,6 +59,10 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("encryption initialized for sensitive data")
+
+	// Initialize JWT Manager
+	jwtManager := auth.NewJWTManager(cfg.Security.JWTSecret)
+	logger.Info("JWT manager initialized")
 
 	// Connect to Database
 	client, err := database.NewClient(cfg.Database.Driver, cfg.Database.Source, encryptor)
@@ -110,7 +114,7 @@ func main() {
 	logger.Info("similar artists service initialized")
 
 	// Initialize Handlers
-	h := handlers.New(client, cfg, logger, encryptor, syncer, metadataSvc, playlistSyncSvc, mixtapeGenerator, playlistEnhancer, similarArtistsSvc, bus)
+	h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, metadataSvc, playlistSyncSvc, mixtapeGenerator, playlistEnhancer, similarArtistsSvc, bus)
 
 	// Background Sync Loop for listens/playlists
 	syncInterval, err := time.ParseDuration(cfg.Sync.Interval)
@@ -232,7 +236,7 @@ func main() {
 
 	// Protected Routes
 	r.Group(func(r chi.Router) {
-		r.Use(AuthMiddleware(client))
+		r.Use(AuthMiddleware(client, jwtManager, logger))
 		r.Get("/", h.Home)
 
 		r.Get("/events", h.Events)
@@ -357,28 +361,45 @@ func runMetadataSync(client *ent.Client, metadataSvc *services.MetadataService, 
 	}
 }
 
-func AuthMiddleware(client *ent.Client) func(http.Handler) http.Handler {
+func AuthMiddleware(client *ent.Client, jwtManager *auth.JWTManager, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie("spotter_user")
-			if err != nil {
+			// Helper to redirect to login, handling HTMX requests
+			redirectToLogin := func() {
+				// Clear any invalid cookie
+				http.SetCookie(w, &http.Cookie{
+					Name:     handlers.CookieName,
+					Value:    "",
+					Path:     "/",
+					HttpOnly: true,
+					MaxAge:   -1,
+				})
+
+				if r.Header.Get("HX-Request") == "true" {
+					w.Header().Set("HX-Redirect", "/auth/login")
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
 				http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+			}
+
+			cookie, err := r.Cookie(handlers.CookieName)
+			if err != nil {
+				redirectToLogin()
 				return
 			}
 
-			username := cookie.Value
-			if username == "" {
-				http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+			claims, err := jwtManager.ValidateToken(cookie.Value)
+			if err != nil {
+				logger.Debug("invalid JWT token", "error", err)
+				redirectToLogin()
 				return
 			}
 
-			u, err := client.User.Query().
-				Where(user.Username(username)).
-				Only(r.Context())
-
+			u, err := client.User.Get(r.Context(), claims.UserID)
 			if err != nil {
-				// User not found or db error, redirect to login
-				http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+				logger.Debug("user not found for JWT claims", "user_id", claims.UserID, "error", err)
+				redirectToLogin()
 				return
 			}
 

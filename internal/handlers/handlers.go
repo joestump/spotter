@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"spotter/ent"
+	"spotter/internal/auth"
 	"spotter/internal/config"
 	"spotter/internal/crypto"
 	"spotter/internal/events"
@@ -25,6 +26,9 @@ const (
 	MaxURLLength         = 2048
 )
 
+// CookieName is the name of the JWT authentication cookie
+const CookieName = "spotter_token"
+
 type contextKey string
 
 const UserContextKey contextKey = "user"
@@ -34,6 +38,7 @@ type Handler struct {
 	Config            *config.Config
 	Logger            *slog.Logger
 	Encryptor         *crypto.Encryptor
+	JWTManager        *auth.JWTManager
 	Syncer            *services.Syncer
 	MetadataSvc       *services.MetadataService
 	PlaylistSyncSvc   *services.PlaylistSyncService
@@ -43,12 +48,13 @@ type Handler struct {
 	Bus               *events.Bus
 }
 
-func New(client *ent.Client, cfg *config.Config, logger *slog.Logger, encryptor *crypto.Encryptor, syncer *services.Syncer, metadataSvc *services.MetadataService, playlistSyncSvc *services.PlaylistSyncService, mixtapeGen *vibes.MixtapeGenerator, playlistEnhancer *vibes.PlaylistEnhancer, similarArtistsSvc *services.SimilarArtistsService, bus *events.Bus) *Handler {
+func New(client *ent.Client, cfg *config.Config, logger *slog.Logger, encryptor *crypto.Encryptor, jwtManager *auth.JWTManager, syncer *services.Syncer, metadataSvc *services.MetadataService, playlistSyncSvc *services.PlaylistSyncService, mixtapeGen *vibes.MixtapeGenerator, playlistEnhancer *vibes.PlaylistEnhancer, similarArtistsSvc *services.SimilarArtistsService, bus *events.Bus) *Handler {
 	return &Handler{
 		Client:            client,
 		Config:            cfg,
 		Logger:            logger,
 		Encryptor:         encryptor,
+		JWTManager:        jwtManager,
 		Syncer:            syncer,
 		MetadataSvc:       metadataSvc,
 		PlaylistSyncSvc:   playlistSyncSvc,

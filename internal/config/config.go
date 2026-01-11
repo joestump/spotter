@@ -49,6 +49,7 @@ type Config struct {
 	Security struct {
 		EncryptionKey string `mapstructure:"encryption_key"` // 32-byte hex key for AES-256 encryption
 		SecureCookies bool   `mapstructure:"secure_cookies"` // Set Secure flag on cookies (requires HTTPS)
+		JWTSecret     string `mapstructure:"jwt_secret"`     // 32+ character secret for JWT signing
 	} `mapstructure:"security"`
 	Database struct {
 		Driver string `mapstructure:"driver"`
@@ -206,6 +207,7 @@ func Load() (*Config, error) {
 	// Defaults
 	v.SetDefault("security.encryption_key", "")   // Must be set via environment variable
 	v.SetDefault("security.secure_cookies", true) // Secure cookies by default (requires HTTPS)
+	v.SetDefault("security.jwt_secret", "")       // Must be set via environment variable
 	v.SetDefault("server.port", "8080")
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("sync.interval", "5m")
@@ -303,6 +305,14 @@ func Load() (*Config, error) {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
 			return nil, fmt.Errorf("security.encryption_key must contain only hexadecimal characters")
 		}
+	}
+
+	// Validate JWT secret
+	if cfg.Security.JWTSecret == "" {
+		return nil, fmt.Errorf("security.jwt_secret is required (set SPOTTER_SECURITY_JWT_SECRET)")
+	}
+	if len(cfg.Security.JWTSecret) < 32 {
+		return nil, fmt.Errorf("security.jwt_secret must be at least 32 characters")
 	}
 
 	return &cfg, nil

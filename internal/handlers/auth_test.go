@@ -13,6 +13,7 @@ import (
 
 	"spotter/ent"
 	"spotter/ent/user"
+	"spotter/internal/auth"
 	"spotter/internal/config"
 	"spotter/internal/crypto"
 	"spotter/internal/events"
@@ -23,6 +24,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const testJWTSecret = "test-jwt-secret-at-least-32-chars"
 
 func setupTestDB(t *testing.T) *ent.Client {
 	client, err := ent.Open("sqlite3", "file:ent?mode=memory&cache=shared&_fk=1")
@@ -41,7 +44,8 @@ func TestLogin_Get(t *testing.T) {
 	bus := events.NewBus()
 	syncer := services.NewSyncer(client, cfg, logger, bus)
 	encryptor, _ := crypto.NewEncryptor(make([]byte, 32))
-	h := handlers.New(client, cfg, logger, encryptor, syncer, nil, nil, nil, nil, nil, bus)
+	jwtManager := auth.NewJWTManager(testJWTSecret)
+	h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, nil, nil, nil, nil, nil, bus)
 
 	req := httptest.NewRequest("GET", "/auth/login", nil)
 	w := httptest.NewRecorder()
@@ -80,7 +84,8 @@ func TestPostLogin_Success(t *testing.T) {
 	bus := events.NewBus()
 	syncer := services.NewSyncer(client, cfg, logger, bus)
 	encryptor, _ := crypto.NewEncryptor(make([]byte, 32))
-	h := handlers.New(client, cfg, logger, encryptor, syncer, nil, nil, nil, nil, nil, bus)
+	jwtManager := auth.NewJWTManager(testJWTSecret)
+	h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, nil, nil, nil, nil, nil, bus)
 
 	// 3. Request
 	form := url.Values{}
@@ -99,11 +104,14 @@ func TestPostLogin_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "/", w.Header().Get("HX-Redirect"))
 
-	// Check Cookies
+	// Check Cookies - should be JWT token now
 	cookies := resp.Cookies()
 	require.Len(t, cookies, 1)
-	assert.Equal(t, "spotter_user", cookies[0].Name)
-	assert.Equal(t, "testuser", cookies[0].Value)
+	assert.Equal(t, handlers.CookieName, cookies[0].Name)
+	// Verify it's a valid JWT by parsing it
+	claims, err := jwtManager.ValidateToken(cookies[0].Value)
+	require.NoError(t, err)
+	assert.Equal(t, "testuser", claims.Username)
 
 	// 6. Assert Database State
 	u, err := client.User.Query().
@@ -114,6 +122,8 @@ func TestPostLogin_Success(t *testing.T) {
 	assert.NotNil(t, u)
 	assert.NotNil(t, u.Edges.NavidromeAuth)
 	assert.Equal(t, "secret123", u.Edges.NavidromeAuth.Password)
+	// Verify JWT claims match the created user
+	assert.Equal(t, u.ID, claims.UserID)
 }
 
 func TestPostLogin_InvalidCredentials(t *testing.T) {
@@ -141,7 +151,8 @@ func TestPostLogin_InvalidCredentials(t *testing.T) {
 	bus := events.NewBus()
 	syncer := services.NewSyncer(client, cfg, logger, bus)
 	encryptor, _ := crypto.NewEncryptor(make([]byte, 32))
-	h := handlers.New(client, cfg, logger, encryptor, syncer, nil, nil, nil, nil, nil, bus)
+	jwtManager := auth.NewJWTManager(testJWTSecret)
+	h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, nil, nil, nil, nil, nil, bus)
 
 	// 3. Request
 	form := url.Values{}
@@ -188,7 +199,8 @@ func TestPostLogin_Regression_HTMXRedirect(t *testing.T) {
 	bus := events.NewBus()
 	syncer := services.NewSyncer(client, cfg, logger, bus)
 	encryptor, _ := crypto.NewEncryptor(make([]byte, 32))
-	h := handlers.New(client, cfg, logger, encryptor, syncer, nil, nil, nil, nil, nil, bus)
+	jwtManager := auth.NewJWTManager(testJWTSecret)
+	h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, nil, nil, nil, nil, nil, bus)
 
 	testCases := []struct {
 		name               string
@@ -250,13 +262,16 @@ func TestPostLogin_Regression_HTMXRedirect(t *testing.T) {
 			cookies := w.Result().Cookies()
 			var sessionCookie *http.Cookie
 			for _, c := range cookies {
-				if c.Name == "spotter_user" {
+				if c.Name == handlers.CookieName {
 					sessionCookie = c
 					break
 				}
 			}
 			require.NotNil(t, sessionCookie, "Session cookie should be set")
-			assert.Equal(t, "testuser", sessionCookie.Value)
+			// Verify it's a valid JWT token
+			claims, err := jwtManager.ValidateToken(sessionCookie.Value)
+			require.NoError(t, err)
+			assert.Equal(t, "testuser", claims.Username)
 			assert.True(t, sessionCookie.HttpOnly, "Cookie should be HttpOnly")
 		})
 	}
@@ -309,7 +324,8 @@ func TestPostLogin_SecureCookieFlag(t *testing.T) {
 			syncer := services.NewSyncer(client, cfg, logger, bus)
 			encryptor, err := crypto.NewEncryptor(make([]byte, 32))
 			require.NoError(t, err)
-			h := handlers.New(client, cfg, logger, encryptor, syncer, nil, nil, nil, nil, nil, bus)
+			jwtManager := auth.NewJWTManager(testJWTSecret)
+			h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, nil, nil, nil, nil, nil, bus)
 
 			// Create POST request
 			form := url.Values{}
@@ -325,7 +341,7 @@ func TestPostLogin_SecureCookieFlag(t *testing.T) {
 			cookies := w.Result().Cookies()
 			var sessionCookie *http.Cookie
 			for _, c := range cookies {
-				if c.Name == "spotter_user" {
+				if c.Name == handlers.CookieName {
 					sessionCookie = c
 					break
 				}
@@ -333,7 +349,7 @@ func TestPostLogin_SecureCookieFlag(t *testing.T) {
 			require.NotNil(t, sessionCookie, "Session cookie should be set")
 			assert.Equal(t, tc.expectedSecure, sessionCookie.Secure, "Cookie Secure flag should match config")
 			assert.True(t, sessionCookie.HttpOnly, "Cookie should be HttpOnly")
-			assert.Equal(t, http.SameSiteLaxMode, sessionCookie.SameSite, "Cookie should have SameSite=Lax")
+			assert.Equal(t, http.SameSiteStrictMode, sessionCookie.SameSite, "Cookie should have SameSite=Strict")
 		})
 	}
 }

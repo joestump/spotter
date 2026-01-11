@@ -14,6 +14,7 @@ import (
 	"spotter/ent"
 	"spotter/ent/enttest"
 	"spotter/ent/mixtape"
+	"spotter/internal/auth"
 	"spotter/internal/config"
 	"spotter/internal/crypto"
 	"spotter/internal/events"
@@ -41,7 +42,8 @@ func setupVibesHandler(t *testing.T) (*ent.Client, *handlers.Handler, *events.Bu
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	encryptor, _ := crypto.NewEncryptor(make([]byte, 32))
-	h := handlers.New(client, cfg, logger, encryptor, nil, nil, nil, nil, nil, nil, bus)
+	jwtManager := auth.NewJWTManager(testJWTSecret)
+	h := handlers.New(client, cfg, logger, encryptor, jwtManager, nil, nil, nil, nil, nil, nil, bus)
 	return client, h, bus
 }
 
