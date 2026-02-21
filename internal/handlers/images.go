@@ -177,22 +177,35 @@ func (h *Handler) PlaylistImage(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveImage serves an image from a local path
-// serveImage serves an image from a local path
+// Governing: filepath.Abs + HasPrefix validates path stays within ./data to prevent traversal
 func (h *Handler) serveImage(w http.ResponseWriter, r *http.Request, localPath string) {
 	// Try to serve local file first
 	if localPath != "" {
 		// Clean and validate the path
 		cleanPath := filepath.Clean(localPath)
 
+		// Get the absolute path of the images directory for validation
+		baseDir, err := filepath.Abs("./data")
+		if err != nil {
+			http.Error(w, "No image available", http.StatusNotFound)
+			return
+		}
+		absPath, err := filepath.Abs(cleanPath)
+		if err != nil || !strings.HasPrefix(absPath, baseDir+string(filepath.Separator)) {
+			h.Logger.Warn("path traversal attempt blocked", "path", localPath, "cleaned", cleanPath)
+			http.Error(w, "No image available", http.StatusNotFound)
+			return
+		}
+
 		// Check if file exists
-		if _, err := os.Stat(cleanPath); err == nil {
+		if _, err := os.Stat(absPath); err == nil {
 			// All images are converted to PNG on download
 			w.Header().Set("Content-Type", "image/png")
 
 			// Set cache headers for images
 			w.Header().Set("Cache-Control", "public, max-age=86400") // 24 hours
 
-			http.ServeFile(w, r, cleanPath)
+			http.ServeFile(w, r, absPath)
 			return
 		}
 	}
