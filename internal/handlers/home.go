@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/rand"
+	"html"
 	"encoding/hex"
 	"net/http"
 	"sort"
@@ -297,6 +298,7 @@ func (h *Handler) checkNavidromeOnline(username, password string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// Governing: html.EscapeString used to prevent XSS from user-supplied prompt
 func (h *Handler) GeneratePlaylist(w http.ResponseWriter, r *http.Request) {
 	prompt := r.FormValue("prompt")
 
@@ -306,7 +308,7 @@ func (h *Handler) GeneratePlaylist(w http.ResponseWriter, r *http.Request) {
 	// Simulate work
 	time.Sleep(2 * time.Second)
 
-	if _, err := w.Write([]byte("<div class=\"alert alert-success\" role=\"alert\"><span class=\"icon-[heroicons--check-circle] w-5 h-5\"></span><span>Playlist generation started based on prompt: \"" + prompt + "\". Check Navidrome shortly.</span></div>")); err != nil {
+	if _, err := w.Write([]byte("<div class=\"alert alert-success\" role=\"alert\"><span class=\"icon-[heroicons--check-circle] w-5 h-5\"></span><span>Playlist generation started based on prompt: \"" + html.EscapeString(prompt) + "\". Check Navidrome shortly.</span></div>")); err != nil {
 		h.Logger.Error("failed to write response", "error", err)
 	}
 }
