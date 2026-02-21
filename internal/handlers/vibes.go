@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -657,7 +658,8 @@ func (h *Handler) GenerateMixtape(w http.ResponseWriter, r *http.Request) {
 
 	// Run generation (this can take a while, so we do it in a goroutine for async UX)
 	go func() {
-		ctx := r.Context()
+		// Governing: context.Background() prevents premature cancellation when HTTP handler returns
+		ctx := context.Background()
 
 		// Publish generating event
 		if h.Bus != nil {
