@@ -136,6 +136,8 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		var innerWg sync.WaitGroup
+		defer innerWg.Wait()
 		ticker := time.NewTicker(syncInterval)
 		defer ticker.Stop()
 		for {
@@ -143,15 +145,17 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				ctx := context.Background()
-				users, err := client.User.Query().All(ctx)
+				bgCtx := context.Background()
+				users, err := client.User.Query().All(bgCtx)
 				if err != nil {
 					logger.Error("failed to fetch users for background sync", "error", err)
 					continue
 				}
 				for _, u := range users {
+					innerWg.Add(1)
 					go func(user *ent.User) {
-						if err := syncer.Sync(ctx, user); err != nil {
+						defer innerWg.Done()
+						if err := syncer.Sync(bgCtx, user); err != nil {
 							logger.Error("background sync failed", "username", user.Username, "error", err)
 						}
 					}(u)
@@ -174,6 +178,27 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			var innerWg sync.WaitGroup
+			defer innerWg.Wait()
+
+			syncMetadataForUsers := func() {
+				bgCtx := context.Background()
+				users, err := client.User.Query().All(bgCtx)
+				if err != nil {
+					logger.Error("failed to fetch users for metadata sync", "error", err)
+					return
+				}
+				for _, u := range users {
+					innerWg.Add(1)
+					go func(user *ent.User) {
+						defer innerWg.Done()
+						if err := metadataSvc.SyncAll(bgCtx, user); err != nil {
+							logger.Error("metadata sync failed", "username", user.Username, "error", err)
+						}
+					}(u)
+				}
+			}
+
 			// Initial delay to let the app start up
 			select {
 			case <-ctx.Done():
@@ -182,7 +207,7 @@ func main() {
 			}
 
 			// Run immediately on startup
-			runMetadataSync(client, metadataSvc, logger)
+			syncMetadataForUsers()
 
 			ticker := time.NewTicker(metadataInterval)
 			defer ticker.Stop()
@@ -191,7 +216,7 @@ func main() {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					runMetadataSync(client, metadataSvc, logger)
+					syncMetadataForUsers()
 				}
 			}
 		}()
@@ -210,6 +235,8 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		var innerWg sync.WaitGroup
+		defer innerWg.Wait()
 		// Initial delay to let the app start up
 		select {
 		case <-ctx.Done():
@@ -224,15 +251,17 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				ctx := context.Background()
-				users, err := client.User.Query().All(ctx)
+				bgCtx := context.Background()
+				users, err := client.User.Query().All(bgCtx)
 				if err != nil {
 					logger.Error("failed to fetch users for playlist sync", "error", err)
 					continue
 				}
 				for _, u := range users {
+					innerWg.Add(1)
 					go func(user *ent.User) {
-						if err := playlistSyncSvc.SyncAllEnabledPlaylists(ctx, user.ID); err != nil {
+						defer innerWg.Done()
+						if err := playlistSyncSvc.SyncAllEnabledPlaylists(bgCtx, user.ID); err != nil {
 							logger.Error("playlist sync failed", "username", user.Username, "error", err)
 						}
 					}(u)
@@ -412,23 +441,6 @@ func main() {
 		logger.Info("all background jobs finished cleanly")
 	case <-shutdownCtx.Done():
 		logger.Warn("shutdown timeout exceeded, forcing exit")
-	}
-}
-
-// runMetadataSync runs metadata enrichment for all users.
-func runMetadataSync(client *ent.Client, metadataSvc *services.MetadataService, logger *slog.Logger) {
-	ctx := context.Background()
-	users, err := client.User.Query().All(ctx)
-	if err != nil {
-		logger.Error("failed to fetch users for metadata sync", "error", err)
-		return
-	}
-	for _, u := range users {
-		go func(user *ent.User) {
-			if err := metadataSvc.SyncAll(ctx, user); err != nil {
-				logger.Error("metadata sync failed", "username", user.Username, "error", err)
-			}
-		}(u)
 	}
 }
 
