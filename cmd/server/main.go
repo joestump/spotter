@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"spotter/ent"
@@ -116,6 +119,12 @@ func main() {
 	// Initialize Handlers
 	h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, metadataSvc, playlistSyncSvc, mixtapeGenerator, playlistEnhancer, similarArtistsSvc, bus)
 
+	// Governing: ADR-0007 (graceful shutdown), SPEC graceful-shutdown REQ "SHUTDOWN-001"
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	var wg sync.WaitGroup
+
 	// Background Sync Loop for listens/playlists
 	syncInterval, err := time.ParseDuration(cfg.Sync.Interval)
 	if err != nil {
@@ -124,22 +133,29 @@ func main() {
 	}
 	logger.Info("background sync configured", "interval", syncInterval)
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		ticker := time.NewTicker(syncInterval)
 		defer ticker.Stop()
-		for range ticker.C {
-			ctx := context.Background()
-			users, err := client.User.Query().All(ctx)
-			if err != nil {
-				logger.Error("failed to fetch users for background sync", "error", err)
-				continue
-			}
-			for _, u := range users {
-				go func(user *ent.User) {
-					if err := syncer.Sync(ctx, user); err != nil {
-						logger.Error("background sync failed", "username", user.Username, "error", err)
-					}
-				}(u)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				ctx := context.Background()
+				users, err := client.User.Query().All(ctx)
+				if err != nil {
+					logger.Error("failed to fetch users for background sync", "error", err)
+					continue
+				}
+				for _, u := range users {
+					go func(user *ent.User) {
+						if err := syncer.Sync(ctx, user); err != nil {
+							logger.Error("background sync failed", "username", user.Username, "error", err)
+						}
+					}(u)
+				}
 			}
 		}
 	}()
@@ -155,17 +171,28 @@ func main() {
 			"interval", metadataInterval,
 			"order", cfg.MetadataEnricherOrder())
 
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			// Initial delay to let the app start up
-			time.Sleep(30 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(30 * time.Second):
+			}
 
 			// Run immediately on startup
 			runMetadataSync(client, metadataSvc, logger)
 
 			ticker := time.NewTicker(metadataInterval)
 			defer ticker.Stop()
-			for range ticker.C {
-				runMetadataSync(client, metadataSvc, logger)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					runMetadataSync(client, metadataSvc, logger)
+				}
 			}
 		}()
 	} else {
@@ -180,25 +207,36 @@ func main() {
 	}
 	logger.Info("playlist sync configured", "interval", playlistSyncInterval)
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		// Initial delay to let the app start up
-		time.Sleep(1 * time.Minute)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(1 * time.Minute):
+		}
 
 		ticker := time.NewTicker(playlistSyncInterval)
 		defer ticker.Stop()
-		for range ticker.C {
-			ctx := context.Background()
-			users, err := client.User.Query().All(ctx)
-			if err != nil {
-				logger.Error("failed to fetch users for playlist sync", "error", err)
-				continue
-			}
-			for _, u := range users {
-				go func(user *ent.User) {
-					if err := playlistSyncSvc.SyncAllEnabledPlaylists(ctx, user.ID); err != nil {
-						logger.Error("playlist sync failed", "username", user.Username, "error", err)
-					}
-				}(u)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				ctx := context.Background()
+				users, err := client.User.Query().All(ctx)
+				if err != nil {
+					logger.Error("failed to fetch users for playlist sync", "error", err)
+					continue
+				}
+				for _, u := range users {
+					go func(user *ent.User) {
+						if err := playlistSyncSvc.SyncAllEnabledPlaylists(ctx, user.ID); err != nil {
+							logger.Error("playlist sync failed", "username", user.Username, "error", err)
+						}
+					}(u)
+				}
 			}
 		}
 	}()
@@ -337,10 +375,43 @@ func main() {
 	})
 
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
-	logger.Info("starting server", "addr", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		logger.Error("server failed", "error", err)
-		os.Exit(1)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+
+	// Start the HTTP server in a goroutine
+	go func() {
+		logger.Info("starting server", "addr", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+	logger.Info("shutting down, waiting for background jobs to finish")
+
+	// Give server and background jobs up to 30 seconds to finish
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("server shutdown error", "error", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		logger.Info("all background jobs finished cleanly")
+	case <-shutdownCtx.Done():
+		logger.Warn("shutdown timeout exceeded, forcing exit")
 	}
 }
 
