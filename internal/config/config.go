@@ -273,6 +273,20 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	// Governing: SPEC-0014 REQ "Driver Validation", ADR-0023
+	validDrivers := map[string]bool{"sqlite3": true, "postgres": true, "mysql": true}
+	if !validDrivers[cfg.Database.Driver] {
+		return nil, fmt.Errorf("unsupported database driver %q: must be one of sqlite3, postgres, mysql", cfg.Database.Driver)
+	}
+
+	// Governing: SPEC-0014 REQ "Driver-Specific Default Source", ADR-0023
+	const sqliteDefault = "file:spotter.db?cache=shared&_fk=1"
+	if cfg.Database.Driver == "postgres" && (cfg.Database.Source == "" || cfg.Database.Source == sqliteDefault) {
+		cfg.Database.Source = "host=localhost port=5432 dbname=spotter sslmode=disable"
+	} else if cfg.Database.Driver == "mysql" && (cfg.Database.Source == "" || cfg.Database.Source == sqliteDefault) {
+		cfg.Database.Source = "spotter:spotter@tcp(localhost:3306)/spotter?parseTime=true&charset=utf8mb4"
+	}
+
 	// Apply defaults for OpenAI config when env vars are empty strings
 	// (Viper treats empty string env vars as "set", overriding defaults)
 	if cfg.OpenAI.BaseURL == "" {

@@ -267,3 +267,56 @@ func TestAIPromptsDirectoryCustom(t *testing.T) {
 
 	assert.Equal(t, "/custom/prompts", cfg.Metadata.AI.PromptsDirectory)
 }
+
+// setRequiredEnvVars sets all required environment variables for config loading.
+func setRequiredEnvVars(t *testing.T) {
+	t.Helper()
+	t.Setenv("SPOTTER_NAVIDROME_BASE_URL", "http://localhost:4533")
+	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")
+	t.Setenv("SPOTTER_LIDARR_BASE_URL", "http://localhost:8686")
+	t.Setenv("SPOTTER_LIDARR_API_KEY", "test-api-key")
+	t.Setenv("SPOTTER_SECURITY_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("SPOTTER_SECURITY_JWT_SECRET", "test-jwt-secret-at-least-32-chars")
+}
+
+func TestConfig_ValidDrivers(t *testing.T) {
+	for _, driver := range []string{"sqlite3", "postgres", "mysql"} {
+		t.Run(driver, func(t *testing.T) {
+			setRequiredEnvVars(t)
+			t.Setenv("SPOTTER_DATABASE_DRIVER", driver)
+
+			cfg, err := Load()
+			require.NoError(t, err)
+			assert.Equal(t, driver, cfg.Database.Driver)
+		})
+	}
+}
+
+func TestConfig_InvalidDriver(t *testing.T) {
+	setRequiredEnvVars(t)
+	t.Setenv("SPOTTER_DATABASE_DRIVER", "cockroachdb")
+
+	_, err := Load()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported database driver")
+}
+
+func TestConfig_PostgresDefaultSource(t *testing.T) {
+	setRequiredEnvVars(t)
+	t.Setenv("SPOTTER_DATABASE_DRIVER", "postgres")
+	// Do not set SPOTTER_DATABASE_SOURCE — should get postgres default
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, "host=localhost port=5432 dbname=spotter sslmode=disable", cfg.Database.Source)
+}
+
+func TestConfig_MySQLDefaultSource(t *testing.T) {
+	setRequiredEnvVars(t)
+	t.Setenv("SPOTTER_DATABASE_DRIVER", "mysql")
+	// Do not set SPOTTER_DATABASE_SOURCE — should get mysql default
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, "spotter:spotter@tcp(localhost:3306)/spotter?parseTime=true&charset=utf8mb4", cfg.Database.Source)
+}

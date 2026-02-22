@@ -1,5 +1,6 @@
 package database
 
+// Governing: SPEC-0014 REQ "Driver Registration", ADR-0023
 import (
 	"context"
 	"fmt"
@@ -7,6 +8,8 @@ import (
 	"spotter/ent"
 	"spotter/internal/crypto"
 
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
