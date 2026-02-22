@@ -1,0 +1,41 @@
+# Governing: SPEC-0014 REQ "Docker Compose Examples", ADR-0023
+# Spotter + PostgreSQL deployment example
+# Usage: docker compose -f docker-compose.postgres.yml up
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: spotter
+      POSTGRES_USER: spotter
+      POSTGRES_PASSWORD: spotter
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spotter"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  spotter:
+    image: ghcr.io/joestump/spotter:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPOTTER_DATABASE_DRIVER: postgres
+      SPOTTER_DATABASE_SOURCE: "host=postgres port=5432 dbname=spotter user=spotter password=spotter sslmode=disable"
+      SPOTTER_NAVIDROME_BASE_URL: "https://your-navidrome-instance"
+      SPOTTER_OPENAI_API_KEY: "sk-your-api-key"
+      SPOTTER_SECURITY_ENCRYPTION_KEY: "replace-with-64-hex-chars"
+      SPOTTER_SECURITY_JWT_SECRET: "replace-with-at-least-32-chars"
+      SPOTTER_SECURITY_SECURE_COOKIES: "true"
+    volumes:
+      - spotter_data:/app/data
+
+volumes:
+  postgres_data:
+  spotter_data:

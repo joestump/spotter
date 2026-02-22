@@ -1,0 +1,42 @@
+# Governing: SPEC-0014 REQ "Docker Compose Examples", ADR-0023
+# Spotter + MariaDB deployment example
+# Usage: docker compose -f docker-compose.mariadb.yml up
+version: "3.9"
+
+services:
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: spotter
+      MARIADB_USER: spotter
+      MARIADB_PASSWORD: spotter
+      MARIADB_ROOT_PASSWORD: rootpassword
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  spotter:
+    image: ghcr.io/joestump/spotter:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      SPOTTER_DATABASE_DRIVER: mysql
+      SPOTTER_DATABASE_SOURCE: "spotter:spotter@tcp(mariadb:3306)/spotter?parseTime=true&charset=utf8mb4"
+      SPOTTER_NAVIDROME_BASE_URL: "https://your-navidrome-instance"
+      SPOTTER_OPENAI_API_KEY: "sk-your-api-key"
+      SPOTTER_SECURITY_ENCRYPTION_KEY: "replace-with-64-hex-chars"
+      SPOTTER_SECURITY_JWT_SECRET: "replace-with-at-least-32-chars"
+      SPOTTER_SECURITY_SECURE_COOKIES: "true"
+    volumes:
+      - spotter_data:/app/data
+
+volumes:
+  mariadb_data:
+  spotter_data:

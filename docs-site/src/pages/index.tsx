@@ -252,12 +252,12 @@ export default function Home(): React.ReactElement {
         <section className="features-section">
           <div className="container">
             <h2 className="section-title">Built With</h2>
-            <p className="section-subtitle">A modern Go stack — small binary, no runtime dependencies</p>
+            <p className="section-subtitle">A modern Go stack — small binary, multiple database backends</p>
             <div className="row" style={{ justifyContent: 'center' }}>
               {[
                 { icon: '🐹', label: 'Go', sub: 'Language' },
                 { icon: '🌐', label: 'HTMX', sub: 'UI' },
-                { icon: '🗄️', label: 'SQLite', sub: 'Database' },
+                { icon: '🗄️', label: 'SQLite / Postgres / MariaDB', sub: 'Database' },
                 { icon: '🐳', label: 'Docker', sub: 'Deployment' },
                 { icon: '🎵', label: 'Navidrome', sub: 'Music Server' },
                 { icon: '🤖', label: 'LiteLLM', sub: 'AI Backend' },

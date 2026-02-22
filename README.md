@@ -44,6 +44,30 @@ Spotter is configured via environment variables. The only required ones to get s
 | `SPOTTER_NAVIDROME_BASE_URL` | URL of your Navidrome instance |
 | `SPOTTER_OPENAI_API_KEY` | OpenAI (or LiteLLM-compatible) API key |
 
+### Database
+
+Spotter supports multiple database backends. SQLite is the default and requires no additional setup.
+
+| Driver | `SPOTTER_DATABASE_DRIVER` | `SPOTTER_DATABASE_SOURCE` example |
+| :--- | :--- | :--- |
+| SQLite (default) | `sqlite3` | `file:./data/spotter.db?_fk=1` |
+| PostgreSQL | `postgres` | `host=localhost port=5432 dbname=spotter user=spotter password=secret sslmode=disable` |
+| MariaDB / MySQL | `mysql` | `user:pass@tcp(localhost:3306)/spotter?parseTime=true&charset=utf8mb4` |
+
+> **Note:** PostgreSQL and MySQL drivers require CGO to be enabled at build time. The official Docker image includes all three drivers.
+
+### Docker Compose Examples
+
+Ready-to-use Compose files are provided for PostgreSQL and MariaDB:
+
+```bash
+# PostgreSQL
+docker compose -f docker-compose.postgres.yml up
+
+# MariaDB
+docker compose -f docker-compose.mariadb.yml up
+```
+
 For the full configuration reference, see the **[documentation site](https://joestump.github.io/spotter/)**.
 
 ## Development
