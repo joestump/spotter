@@ -1,6 +1,5 @@
 ---
 id: SPEC-0014
-title: Multi-Database Support (PostgreSQL and MariaDB)
 status: accepted
 date: 2026-02-22
 authors: joestump
