@@ -56,24 +56,30 @@ func (h *Handler) ArtistImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prefer primary thumbnail, then any primary, then first image
+	// Governing: issue #127 — skip records with empty local_path to avoid serving 404 when primary image wasn't downloaded
+	// Prefer primary thumbnail, then any primary, then first image with a valid path
 	var localPath string
 	for _, img := range a.Edges.Images {
-		if img.IsPrimary && string(img.ImageType) == "thumbnail" {
+		if img.IsPrimary && string(img.ImageType) == "thumbnail" && img.LocalPath != "" {
 			localPath = img.LocalPath
 			break
 		}
 	}
 	if localPath == "" {
 		for _, img := range a.Edges.Images {
-			if img.IsPrimary {
+			if img.IsPrimary && img.LocalPath != "" {
 				localPath = img.LocalPath
 				break
 			}
 		}
 	}
 	if localPath == "" {
-		localPath = a.Edges.Images[0].LocalPath
+		for _, img := range a.Edges.Images {
+			if img.LocalPath != "" {
+				localPath = img.LocalPath
+				break
+			}
+		}
 	}
 
 	h.serveImage(w, r, localPath)
@@ -119,16 +125,22 @@ func (h *Handler) AlbumImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prefer primary image, then first image
+	// Governing: issue #127 — skip records with empty local_path to avoid serving 404 when primary image wasn't downloaded
+	// Prefer primary image, then first image with a valid path
 	var localPath string
 	for _, img := range a.Edges.Images {
-		if img.IsPrimary {
+		if img.IsPrimary && img.LocalPath != "" {
 			localPath = img.LocalPath
 			break
 		}
 	}
 	if localPath == "" {
-		localPath = a.Edges.Images[0].LocalPath
+		for _, img := range a.Edges.Images {
+			if img.LocalPath != "" {
+				localPath = img.LocalPath
+				break
+			}
+		}
 	}
 
 	h.serveImage(w, r, localPath)
