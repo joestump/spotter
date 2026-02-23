@@ -46,6 +46,7 @@ func (s *Syncer) Register(factory providers.Factory) {
 }
 
 // Governing: ADR-0019 (structured metrics), SPEC observability REQ "BG-003"
+// Governing: SPEC graceful-shutdown REQ-REC-004 (ctx propagated to DB ops; cancellation leaves DB consistent)
 // Sync performs a full synchronization (history and playlists) for the user.
 func (s *Syncer) Sync(ctx context.Context, u *ent.User) error {
 	s.Logger.Info("starting full sync", "username", u.Username)
@@ -475,6 +476,7 @@ func (s *Syncer) persistListens(ctx context.Context, u *ent.User, source provide
 			continue
 		}
 
+		// Governing: SPEC graceful-shutdown REQ-REC-001 (idempotent sync), REQ-REC-003 (existence check before insert)
 		// Check if it exists to avoid unique constraint violations.
 		// We use the fields defined in the unique index: played_at, source, track_name, artist_name, user.
 		exists, err := s.Client.Listen.Query().
@@ -633,6 +635,7 @@ func (s *Syncer) persistPlaylists(ctx context.Context, u *ent.User, source provi
 			continue
 		}
 
+		// Governing: SPEC graceful-shutdown REQ-REC-001 (idempotent sync), REQ-REC-003 (existence check before insert)
 		// Check if playlist exists
 		existingPlaylist, err := s.Client.Playlist.Query().
 			Where(

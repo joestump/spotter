@@ -136,9 +136,13 @@ func main() {
 	h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, metadataSvc, playlistSyncSvc, mixtapeGenerator, playlistEnhancer, similarArtistsSvc, bus)
 
 	// Governing: ADR-0007 (graceful shutdown), ADR-0018 (graceful shutdown), SPEC graceful-shutdown REQ "SHUTDOWN-001"
+	// Governing: SPEC graceful-shutdown REQ-SIG-001 (signal.NotifyContext for SIGTERM/SIGINT)
+	// Governing: SPEC graceful-shutdown REQ-SIG-002 (root context is parent for all background loops)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	// Governing: SPEC graceful-shutdown REQ-SIG-003 (defer stop to release signal resources)
 	defer stop()
 
+	// Governing: SPEC graceful-shutdown REQ-TMO-001 (30s default shutdown budget)
 	// Governing: SPEC graceful-shutdown REQ-TMO-005 (configurable shutdown timeout)
 	shutdownTimeout := 30 * time.Second
 	if s := os.Getenv("SPOTTER_SHUTDOWN_TIMEOUT"); s != "" {
@@ -148,6 +152,7 @@ func main() {
 	}
 
 	// Governing: SPEC graceful-shutdown REQ-SEM-001 through REQ-SEM-004 (bounded concurrency semaphore)
+	// Governing: SPEC graceful-shutdown REQ-SEM-002 (configurable semaphore capacity, default 10)
 	maxJobs := 10
 	if s := os.Getenv("SPOTTER_MAX_CONCURRENT_JOBS"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
@@ -173,6 +178,7 @@ func main() {
 		defer wg.Done()
 		ticker := time.NewTicker(syncInterval)
 		defer ticker.Stop()
+		// Governing: SPEC graceful-shutdown REQ-CTX-001 (select on ctx.Done vs ticker.C)
 		for {
 			select {
 			case <-ctx.Done():
@@ -198,6 +204,7 @@ func main() {
 						case <-ctx.Done():
 							return
 						}
+						// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
 						if err := syncer.Sync(ctx, user); err != nil {
 							logger.Error("background sync failed", "username", user.Username, "error", err)
 							syncErrors++
@@ -250,6 +257,7 @@ func main() {
 						case <-ctx.Done():
 							return
 						}
+						// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
 						if err := metadataSvc.SyncAll(ctx, user); err != nil {
 							logger.Error("metadata sync failed", "username", user.Username, "error", err)
 							metadataErrors++
@@ -275,6 +283,7 @@ func main() {
 
 			ticker := time.NewTicker(metadataInterval)
 			defer ticker.Stop()
+			// Governing: SPEC graceful-shutdown REQ-CTX-001 (select on ctx.Done vs ticker.C)
 			for {
 				select {
 				case <-ctx.Done():
@@ -309,6 +318,7 @@ func main() {
 
 		ticker := time.NewTicker(playlistSyncInterval)
 		defer ticker.Stop()
+		// Governing: SPEC graceful-shutdown REQ-CTX-001 (select on ctx.Done vs ticker.C)
 		for {
 			select {
 			case <-ctx.Done():
@@ -334,6 +344,7 @@ func main() {
 						case <-ctx.Done():
 							return
 						}
+						// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
 						if err := playlistSyncSvc.SyncAllEnabledPlaylists(ctx, user.ID); err != nil {
 							logger.Error("playlist sync failed", "username", user.Username, "error", err)
 							plSyncErrors++
@@ -552,13 +563,14 @@ func main() {
 	}()
 
 	// Governing: SPEC graceful-shutdown REQ-TMO-002 (hard exit timer)
+	// Governing: SPEC graceful-shutdown REQ-TMO-004 (non-zero exit code on timeout)
 	timer := time.AfterFunc(shutdownTimeout, func() {
 		logger.Error("shutdown timeout exceeded, forcing exit")
 		os.Exit(1)
 	})
 	defer timer.Stop()
 
-	// Shut down the HTTP server
+	// Governing: SPEC graceful-shutdown REQ-CTX-004 (HTTP server uses Shutdown(ctx) for graceful drain)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
@@ -573,8 +585,10 @@ func main() {
 		close(done)
 	}()
 
+	// Governing: SPEC graceful-shutdown REQ-WG-004 (wg.Wait combined with shutdown timeout to avoid indefinite blocking)
 	select {
 	case <-done:
+		// Governing: SPEC graceful-shutdown REQ-TMO-005 (clean shutdown exits with code 0)
 		logger.Info("all background jobs finished cleanly")
 	case <-shutdownCtx.Done():
 		logger.Warn("shutdown timeout exceeded")

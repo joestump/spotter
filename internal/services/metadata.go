@@ -384,6 +384,8 @@ func (s *MetadataService) linkPlaylistTracks(ctx context.Context, u *ent.User) (
 }
 
 // getOrCreateArtist finds or creates an artist in the catalog.
+// Governing: SPEC graceful-shutdown REQ-REC-003 (get-or-create ensures idempotent catalog building)
+// Governing: SPEC graceful-shutdown REQ-REC-004 (ctx passed to DB ops; cancellation leaves DB consistent)
 func (s *MetadataService) getOrCreateArtist(ctx context.Context, u *ent.User, name string) (*ent.Artist, bool, error) {
 	// Try to find existing artist
 	existing, err := s.Client.Artist.Query().
