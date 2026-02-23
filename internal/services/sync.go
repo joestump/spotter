@@ -40,6 +40,7 @@ func NewSyncer(client *ent.Client, cfg *config.Config, logger *slog.Logger, bus 
 	}
 }
 
+// Governing: ADR-0016 (pluggable provider factory), SPEC listen-playlist-sync REQ-SYNC-001
 // Register adds a new provider factory to the syncer.
 func (s *Syncer) Register(factory providers.Factory) {
 	s.Factories = append(s.Factories, factory)
@@ -47,6 +48,8 @@ func (s *Syncer) Register(factory providers.Factory) {
 
 // Governing: ADR-0019 (structured metrics), SPEC observability REQ "BG-003"
 // Governing: SPEC graceful-shutdown REQ-REC-004 (ctx propagated to DB ops; cancellation leaves DB consistent)
+// Governing: SPEC listen-playlist-sync REQ-SYNC-010 (full sync: providers -> history -> playlists)
+// Governing: SPEC listen-playlist-sync REQ-SYNC-011 (history failure does not abort playlist sync)
 // Sync performs a full synchronization (history and playlists) for the user.
 func (s *Syncer) Sync(ctx context.Context, u *ent.User) error {
 	s.Logger.Info("starting full sync", "username", u.Username)
@@ -150,6 +153,7 @@ func (s *Syncer) SyncPlaylists(ctx context.Context, u *ent.User) error {
 	return err
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-002 (nil factories silently skipped), REQ-SYNC-003 (factory errors logged and skipped)
 // getActiveProviders returns the refreshed user with all auth edges loaded and a list of active providers.
 func (s *Syncer) getActiveProviders(ctx context.Context, u *ent.User) (*ent.User, []providers.Provider, error) {
 	// Refresh user to ensure we have all auth edges loaded so factories can check configuration.
@@ -197,6 +201,9 @@ func (s *Syncer) logEvent(ctx context.Context, u *ent.User, eventType syncevent.
 	}
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (since timestamp from last listen)
+// Governing: SPEC listen-playlist-sync REQ-SYNC-022 (per-track errors logged, sync continues)
+// Governing: SPEC listen-playlist-sync REQ-SYNC-023 (notification published on new listens)
 func (s *Syncer) syncHistory(ctx context.Context, u *ent.User, activeProviders []providers.Provider) (int, error) {
 	allAdded := 0
 	for _, provider := range activeProviders {
@@ -331,6 +338,7 @@ func (s *Syncer) syncHistory(ctx context.Context, u *ent.User, activeProviders [
 	return allAdded, nil
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-030 (fetch playlists from each PlaylistManager provider)
 func (s *Syncer) syncPlaylists(ctx context.Context, u *ent.User, activeProviders []providers.Provider) (int, error) {
 	allAdded := 0
 	for _, provider := range activeProviders {
@@ -450,6 +458,7 @@ func (s *Syncer) publishFatalNotification(userID int, key BackoffKey, providerNa
 	s.Backoff.MarkNotified(key)
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (upsert Listen with dedup by provider+track+played_at)
 func (s *Syncer) persistListens(ctx context.Context, u *ent.User, source providers.Type, tracks []providers.Track) (int, int, error) {
 	savedCount := 0
 	skippedCount := 0
@@ -567,6 +576,7 @@ func (s *Syncer) isDuplicateListen(ctx context.Context, u *ent.User, track provi
 	return exists
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-012 (sync cursor updated after each provider sync)
 func (s *Syncer) updateLastSyncedAt(ctx context.Context, u *ent.User, providerType providers.Type) error {
 	now := time.Now()
 	switch providerType {
@@ -586,6 +596,7 @@ func (s *Syncer) updateLastSyncedAt(ctx context.Context, u *ent.User, providerTy
 	return nil
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-031 (upsert Playlist by source+remoteID)
 func (s *Syncer) persistPlaylists(ctx context.Context, u *ent.User, source providers.Type, playlists []providers.Playlist) (int, int, error) {
 	addedCount := 0
 	updatedCount := 0
@@ -711,6 +722,7 @@ func (s *Syncer) persistPlaylists(ctx context.Context, u *ent.User, source provi
 	return addedCount, updatedCount, nil
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-031 (upsert PlaylistTrack with position), REQ-SYNC-032 (removed tracks deleted)
 // persistPlaylistTracks saves tracks for a playlist, upserting to preserve catalog links
 func (s *Syncer) persistPlaylistTracks(ctx context.Context, playlistID int, tracks []providers.Track) error {
 	// Get the playlist to access user and provider info

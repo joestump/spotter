@@ -166,6 +166,7 @@ func (h *Handler) DisconnectLastFM(w http.ResponseWriter, r *http.Request) {
 
 // SyncNavidrome triggers a sync for Navidrome data
 // Governing: SPEC graceful-shutdown REQ "background goroutines must not capture *ent.User pointer"
+// Governing: SPEC listen-playlist-sync REQ-SYNC-050 (on-demand sync via HTTP), REQ-SYNC-051 (returns immediately, sync in background)
 func (h *Handler) SyncNavidrome(w http.ResponseWriter, r *http.Request) {
 	u := h.GetUser(r.Context())
 	if u == nil {
@@ -694,6 +695,7 @@ func (h *Handler) getTasksWithLastRun(ctx context.Context, u *ent.User) []types.
 
 // TaskSyncListens triggers a sync of all listens
 // Governing: SPEC graceful-shutdown REQ "background goroutines must not capture *ent.User pointer"
+// Governing: SPEC listen-playlist-sync REQ-SYNC-050 (on-demand sync via HTTP), REQ-SYNC-051 (returns immediately, sync in background)
 func (h *Handler) TaskSyncListens(w http.ResponseWriter, r *http.Request) {
 	u := h.GetUser(r.Context())
 	if u == nil {
@@ -726,6 +728,7 @@ func (h *Handler) TaskSyncListens(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-050 (on-demand sync via HTTP), REQ-SYNC-051 (returns immediately, sync in background)
 // TaskSyncPlaylists triggers a sync of all playlists
 // Governing: SPEC graceful-shutdown REQ "background goroutines must not capture *ent.User pointer"
 func (h *Handler) TaskSyncPlaylists(w http.ResponseWriter, r *http.Request) {

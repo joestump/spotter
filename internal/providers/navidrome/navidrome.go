@@ -38,6 +38,7 @@ var _ providers.PlaylistManager = (*Provider)(nil)
 var _ providers.Authenticator = (*Provider)(nil)
 var _ providers.PlaylistSyncer = (*Provider)(nil)
 
+// Governing: ADR-0016 (pluggable provider factory), SPEC listen-playlist-sync REQ-SYNC-002 (factory returns nil if unconfigured)
 // New returns a factory that creates Navidrome providers for a given user.
 func New(logger *slog.Logger, cfg *config.Config) providers.Factory {
 	return func(ctx context.Context, user *ent.User) (providers.Provider, error) {

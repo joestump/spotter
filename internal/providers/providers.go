@@ -120,6 +120,7 @@ type Authenticator interface {
 	Disconnect(ctx context.Context) error
 }
 
+// Governing: ADR-0016 (pluggable provider factory), SPEC listen-playlist-sync REQ-SYNC-001, REQ-SYNC-002
 // Factory defines the function signature for creating a provider instance for a specific user.
 // Implementations should return nil, nil if the user is not configured for the provider.
 type Factory func(ctx context.Context, user *ent.User) (Provider, error)

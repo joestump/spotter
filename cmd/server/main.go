@@ -97,6 +97,7 @@ func main() {
 	// Initialize Event Bus
 	bus := events.NewBus()
 
+	// Governing: ADR-0016 (pluggable provider factory), SPEC listen-playlist-sync REQ-SYNC-001 (factory registration at startup)
 	// Initialize Sync Service (for playlists and listens)
 	syncer := services.NewSyncer(client, cfg, logger, bus)
 	syncer.Register(navidrome.New(logger, cfg))
@@ -164,6 +165,8 @@ func main() {
 	// Governing: SPEC graceful-shutdown REQ-WG-001 (single shared WaitGroup for all per-user goroutines)
 	var wg sync.WaitGroup
 
+	// Governing: ADR-0013 (goroutine ticker scheduling), SPEC listen-playlist-sync REQ-SYNC-040 (configurable ticker interval)
+	// Governing: SPEC listen-playlist-sync REQ-SYNC-041 (per-user goroutines for parallel sync)
 	// Background Sync Loop for listens/playlists
 	syncInterval, err := time.ParseDuration(cfg.Sync.Interval)
 	if err != nil {
