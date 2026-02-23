@@ -10,6 +10,7 @@ import (
 	"spotter/ent/enttest"
 	"spotter/internal/config"
 	"spotter/internal/events"
+	"spotter/internal/llm"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +34,7 @@ func TestNewPlaylistEnhancer(t *testing.T) {
 
 	enhancer := NewPlaylistEnhancer(client, cfg, nil, bus)
 	assert.NotNil(t, enhancer)
-	assert.NotNil(t, enhancer.httpClient)
+	assert.NotNil(t, enhancer.llm)
 	assert.NotNil(t, enhancer.templates)
 }
 
@@ -492,19 +493,12 @@ func TestEnhancePlaylist_Success(t *testing.T) {
 
 	// Mock OpenAI server
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := ChatResponse{
+		resp := llm.ChatResponse{
 			ID:      "test-id",
 			Object:  "chat.completion",
 			Created: 1234567890,
 			Model:   "gpt-4o",
-			Choices: []struct {
-				Index   int `json:"index"`
-				Message struct {
-					Role    string `json:"role"`
-					Content string `json:"content"`
-				} `json:"message"`
-				FinishReason string `json:"finish_reason"`
-			}{
+			Choices: []llm.ChatChoice{
 				{
 					Index: 0,
 					Message: struct {
@@ -525,11 +519,7 @@ func TestEnhancePlaylist_Success(t *testing.T) {
 					FinishReason: "stop",
 				},
 			},
-			Usage: &struct {
-				PromptTokens     int `json:"prompt_tokens"`
-				CompletionTokens int `json:"completion_tokens"`
-				TotalTokens      int `json:"total_tokens"`
-			}{
+			Usage: &llm.ChatUsage{
 				PromptTokens:     100,
 				CompletionTokens: 50,
 				TotalTokens:      150,

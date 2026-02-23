@@ -10,9 +10,7 @@ import (
 	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +20,7 @@ import (
 	"spotter/ent"
 	"spotter/internal/config"
 	"spotter/internal/enrichers"
+	"spotter/internal/llm"
 
 	"github.com/nfnt/resize"
 	_ "golang.org/x/image/webp"
@@ -42,10 +41,10 @@ const (
 
 // Enricher implements the OpenAI metadata enricher.
 type Enricher struct {
-	logger     *slog.Logger
-	config     *config.Config
-	httpClient *http.Client
-	templates  map[string]*template.Template
+	logger    *slog.Logger
+	config    *config.Config
+	llm       *llm.Client
+	templates map[string]*template.Template
 }
 
 // Ensure Enricher implements interfaces
@@ -164,61 +163,6 @@ type TrackTemplateData struct {
 	AlbumGenre       string
 }
 
-// OpenAI API types
-type ChatMessage struct {
-	Role    string        `json:"role"`
-	Content []ContentPart `json:"content"`
-}
-
-type ContentPart struct {
-	Type     string    `json:"type"`
-	Text     string    `json:"text,omitempty"`
-	ImageURL *ImageURL `json:"image_url,omitempty"`
-}
-
-type ImageURL struct {
-	URL    string `json:"url"`
-	Detail string `json:"detail,omitempty"`
-}
-
-// ResponseFormat specifies the format of the response from OpenAI.
-type ResponseFormat struct {
-	Type string `json:"type"`
-}
-
-type ChatRequest struct {
-	Model          string          `json:"model"`
-	Messages       []ChatMessage   `json:"messages"`
-	MaxTokens      int             `json:"max_tokens,omitempty"`
-	Temperature    float64         `json:"temperature,omitempty"`
-	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
-}
-
-type ChatResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index   int `json:"index"`
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-	Error *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-		Code    string `json:"code"`
-	} `json:"error,omitempty"`
-}
-
 // New creates a new OpenAI enricher factory.
 func New(logger *slog.Logger, cfg *config.Config) enrichers.Factory {
 	return func(ctx context.Context, user *ent.User) (enrichers.Enricher, error) {
@@ -234,9 +178,11 @@ func New(logger *slog.Logger, cfg *config.Config) enrichers.Factory {
 		e := &Enricher{
 			logger: logger,
 			config: cfg,
-			httpClient: &http.Client{
+			llm: llm.NewClient(llm.ClientConfig{
+				APIKey:  cfg.OpenAI.APIKey,
+				BaseURL: cfg.OpenAI.BaseURL,
 				Timeout: defaultTimeout,
-			},
+			}),
 			templates: make(map[string]*template.Template),
 		}
 
@@ -299,22 +245,15 @@ func (e *Enricher) loadTemplates() error {
 
 // callOpenAI makes a request to the OpenAI API.
 func (e *Enricher) callOpenAI(ctx context.Context, prompt string, images []string) (string, error) {
-	baseURL := e.config.OpenAI.BaseURL
-	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
-	}
-	// Ensure no trailing slash
-	baseURL = strings.TrimSuffix(baseURL, "/")
-
 	model := e.config.OpenAI.Model
 	if model == "" {
 		model = defaultModel
 	}
 
-	e.logger.Debug("preparing OpenAI request", "base_url", baseURL, "model", model, "prompt_length", len(prompt), "image_count", len(images))
+	e.logger.Debug("preparing OpenAI request", "model", model, "prompt_length", len(prompt), "image_count", len(images))
 
 	// Build content parts
-	content := []ContentPart{
+	content := []llm.ContentPart{
 		{
 			Type: "text",
 			Text: prompt,
@@ -329,18 +268,18 @@ func (e *Enricher) callOpenAI(ctx context.Context, prompt string, images []strin
 			continue
 		}
 
-		content = append(content, ContentPart{
+		content = append(content, llm.ContentPart{
 			Type: "image_url",
-			ImageURL: &ImageURL{
+			ImageURL: &llm.ImageURL{
 				URL:    fmt.Sprintf("data:image/jpeg;base64,%s", imgData),
 				Detail: "low", // Use low detail to save tokens
 			},
 		})
 	}
 
-	req := ChatRequest{
+	req := llm.ChatRequest{
 		Model: model,
-		Messages: []ChatMessage{
+		Messages: []llm.ChatMessage{
 			{
 				Role:    "user",
 				Content: content,
@@ -348,63 +287,18 @@ func (e *Enricher) callOpenAI(ctx context.Context, prompt string, images []strin
 		},
 		MaxTokens:   2000,
 		Temperature: 0.7,
-		ResponseFormat: &ResponseFormat{
+		ResponseFormat: &llm.ResponseFormat{
 			Type: "json_object",
 		},
 	}
 
-	reqBody, err := json.Marshal(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(reqBody))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+e.config.OpenAI.APIKey)
-
-	e.logger.Debug("sending OpenAI request", "url", baseURL+"/chat/completions")
-
-	resp, err := e.httpClient.Do(httpReq)
+	resp, err := e.llm.Chat(ctx, req)
 	if err != nil {
 		e.logger.Error("OpenAI request failed", "error", err)
 		return "", fmt.Errorf("request failed: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			e.logger.Warn("failed to close response body", "error", err)
-		}
-	}()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	e.logger.Debug("received OpenAI response", "status", resp.StatusCode, "body_length", len(body))
-
-	if resp.StatusCode != http.StatusOK {
-		e.logger.Error("OpenAI API error", "status", resp.StatusCode, "body", string(body))
-		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var chatResp ChatResponse
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if chatResp.Error != nil {
-		return "", fmt.Errorf("API error: %s", chatResp.Error.Message)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
-	}
-
-	return chatResp.Choices[0].Message.Content, nil
+	return resp.Choices[0].Message.Content, nil
 }
 
 // loadImageAsBase64 loads an image file and returns it as base64.

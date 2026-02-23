@@ -11,6 +11,7 @@ import (
 	"spotter/ent/enttest"
 	"spotter/internal/config"
 	"spotter/internal/events"
+	"spotter/internal/llm"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
@@ -573,19 +574,12 @@ func TestMixtapeGenerator_MatchTracksToLibrary(t *testing.T) {
 
 func TestMixtapeGenerator_Integration(t *testing.T) {
 	// Create a mock OpenAI server
-	mockResponse := ChatResponse{
+	mockResponse := llm.ChatResponse{
 		ID:      "test-id",
 		Object:  "chat.completion",
 		Created: 1234567890,
 		Model:   "gpt-4o",
-		Choices: []struct {
-			Index   int `json:"index"`
-			Message struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			} `json:"message"`
-			FinishReason string `json:"finish_reason"`
-		}{
+		Choices: []llm.ChatChoice{
 			{
 				Index: 0,
 				Message: struct {
@@ -605,11 +599,7 @@ func TestMixtapeGenerator_Integration(t *testing.T) {
 				FinishReason: "stop",
 			},
 		},
-		Usage: &struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens      int `json:"total_tokens"`
-		}{
+		Usage: &llm.ChatUsage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
 			TotalTokens:      150,

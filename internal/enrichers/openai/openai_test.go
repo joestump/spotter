@@ -13,6 +13,7 @@ import (
 	"spotter/ent"
 	"spotter/internal/config"
 	"spotter/internal/enrichers"
+	"spotter/internal/llm"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -215,15 +216,8 @@ func TestEnrichArtist_MockAPI(t *testing.T) {
 		assert.Equal(t, "/chat/completions", r.URL.Path)
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
-		response := ChatResponse{
-			Choices: []struct {
-				Index   int `json:"index"`
-				Message struct {
-					Role    string `json:"role"`
-					Content string `json:"content"`
-				} `json:"message"`
-				FinishReason string `json:"finish_reason"`
-			}{
+		response := llm.ChatResponse{
+			Choices: []llm.ChatChoice{
 				{
 					Index: 0,
 					Message: struct {
@@ -295,15 +289,8 @@ func TestEnrichArtist_SkipRecentlyEnriched(t *testing.T) {
 func TestEnrichAlbum_MockAPI(t *testing.T) {
 	// Create mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := ChatResponse{
-			Choices: []struct {
-				Index   int `json:"index"`
-				Message struct {
-					Role    string `json:"role"`
-					Content string `json:"content"`
-				} `json:"message"`
-				FinishReason string `json:"finish_reason"`
-			}{
+		response := llm.ChatResponse{
+			Choices: []llm.ChatChoice{
 				{
 					Index: 0,
 					Message: struct {
@@ -353,15 +340,8 @@ func TestEnrichAlbum_MockAPI(t *testing.T) {
 func TestEnrichTrack_MockAPI(t *testing.T) {
 	// Create mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := ChatResponse{
-			Choices: []struct {
-				Index   int `json:"index"`
-				Message struct {
-					Role    string `json:"role"`
-					Content string `json:"content"`
-				} `json:"message"`
-				FinishReason string `json:"finish_reason"`
-			}{
+		response := llm.ChatResponse{
+			Choices: []llm.ChatChoice{
 				{
 					Index: 0,
 					Message: struct {

@@ -6,9 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,22 +23,23 @@ import (
 	"spotter/ent/user"
 	"spotter/internal/config"
 	"spotter/internal/events"
+	"spotter/internal/llm"
 )
 
 // PlaylistEnhancer implements playlist enhancement using AI.
 type PlaylistEnhancer struct {
-	client     *ent.Client
-	config     *config.Config
-	logger     *slog.Logger
-	bus        *events.Bus
-	httpClient *http.Client
-	templates  map[string]*template.Template
+	client    *ent.Client
+	config    *config.Config
+	logger    *slog.Logger
+	bus       *events.Bus
+	llm       *llm.Client
+	templates map[string]*template.Template
 }
 
 // NewPlaylistEnhancer creates a new PlaylistEnhancer service.
 func NewPlaylistEnhancer(client *ent.Client, cfg *config.Config, logger *slog.Logger, bus *events.Bus) *PlaylistEnhancer {
 	if logger == nil {
-		logger = slog.New(nopHandler{})
+		logger = slog.New(slog.DiscardHandler)
 	}
 
 	timeout := time.Duration(cfg.Vibes.TimeoutSeconds) * time.Second
@@ -53,9 +52,11 @@ func NewPlaylistEnhancer(client *ent.Client, cfg *config.Config, logger *slog.Lo
 		config: cfg,
 		logger: logger,
 		bus:    bus,
-		httpClient: &http.Client{
+		llm: llm.NewClient(llm.ClientConfig{
+			APIKey:  cfg.OpenAI.APIKey,
+			BaseURL: cfg.OpenAI.BaseURL,
 			Timeout: timeout,
-		},
+		}),
 		templates: make(map[string]*template.Template),
 	}
 
@@ -492,62 +493,32 @@ func (e *PlaylistEnhancer) fallbackPrompt(data *EnhancementTemplateData) string 
 
 // callOpenAI calls the OpenAI API with the prompt.
 func (e *PlaylistEnhancer) callOpenAI(ctx context.Context, prompt string) (string, int, error) {
-	reqBody := ChatRequest{
+	req := llm.ChatRequest{
 		Model: e.config.GetVibesModel(),
-		Messages: []ChatMessage{
+		Messages: []llm.ChatMessage{
 			{Role: "user", Content: prompt},
 		},
 		MaxTokens:   e.config.Vibes.MaxTokens,
 		Temperature: e.config.Vibes.Temperature,
-		ResponseFormat: &ResponseFormat{
+		ResponseFormat: &llm.ResponseFormat{
 			Type: "json_object",
 		},
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	apiURL := fmt.Sprintf("%s/chat/completions", strings.TrimSuffix(e.config.OpenAI.BaseURL, "/"))
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+e.config.OpenAI.APIKey)
-
-	resp, err := e.httpClient.Do(req)
+	resp, err := e.llm.Chat(ctx, req)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		var errorResp ChatResponse
-		if json.Unmarshal(body, &errorResp) == nil && errorResp.Error.Message != "" {
-			return "", 0, fmt.Errorf("API error: %s", errorResp.Error.Message)
-		}
-		return "", 0, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var chatResp ChatResponse
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return "", 0, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if len(chatResp.Choices) == 0 {
+	if len(resp.Choices) == 0 {
 		return "", 0, fmt.Errorf("no response from AI")
 	}
 
-	content := chatResp.Choices[0].Message.Content
-	tokensUsed := chatResp.Usage.TotalTokens
+	content := resp.Choices[0].Message.Content
+	tokensUsed := 0
+	if resp.Usage != nil {
+		tokensUsed = resp.Usage.TotalTokens
+	}
 
 	return content, tokensUsed, nil
 }

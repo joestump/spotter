@@ -7,9 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"strings"
 	"text/template"
@@ -21,6 +19,7 @@ import (
 	"spotter/ent/user"
 	"spotter/internal/config"
 	"spotter/internal/events"
+	"spotter/internal/llm"
 )
 
 const (
@@ -35,12 +34,12 @@ const (
 
 // SimilarArtistsService handles finding and storing similar artist relationships.
 type SimilarArtistsService struct {
-	client     *ent.Client
-	config     *config.Config
-	logger     *slog.Logger
-	bus        *events.Bus
-	httpClient *http.Client
-	templates  *template.Template
+	client    *ent.Client
+	config    *config.Config
+	logger    *slog.Logger
+	bus       *events.Bus
+	llm       *llm.Client
+	templates *template.Template
 }
 
 // NewSimilarArtistsService creates a new SimilarArtistsService.
@@ -54,9 +53,11 @@ func NewSimilarArtistsService(client *ent.Client, cfg *config.Config, logger *sl
 		config: cfg,
 		logger: logger,
 		bus:    bus,
-		httpClient: &http.Client{
+		llm: llm.NewClient(llm.ClientConfig{
+			APIKey:  cfg.OpenAI.APIKey,
+			BaseURL: cfg.OpenAI.BaseURL,
 			Timeout: defaultSimilarArtistsTimeout,
-		},
+		}),
 	}
 
 	// Load templates
@@ -257,39 +258,6 @@ func (s *SimilarArtistsService) fallbackPrompt(data SimilarArtistTemplateData) s
 	return sb.String()
 }
 
-// ChatMessage represents a message in the OpenAI chat format.
-type similarArtistChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-// ResponseFormat specifies the format of the response from OpenAI.
-type similarArtistResponseFormat struct {
-	Type string `json:"type"`
-}
-
-// ChatRequest represents a request to the OpenAI chat API.
-type similarArtistChatRequest struct {
-	Model          string                       `json:"model"`
-	Messages       []similarArtistChatMessage   `json:"messages"`
-	MaxTokens      int                          `json:"max_tokens"`
-	Temperature    float64                      `json:"temperature"`
-	ResponseFormat *similarArtistResponseFormat `json:"response_format,omitempty"`
-}
-
-// ChatResponse represents a response from the OpenAI chat API.
-type similarArtistChatResponse struct {
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-	} `json:"error"`
-}
-
 // callOpenAI sends the prompt to OpenAI and returns the response.
 func (s *SimilarArtistsService) callOpenAI(ctx context.Context, prompt string) (string, error) {
 	if s.config.OpenAI.APIKey == "" {
@@ -297,65 +265,24 @@ func (s *SimilarArtistsService) callOpenAI(ctx context.Context, prompt string) (
 	}
 
 	model := s.config.GetVibesModel()
-	reqBody := similarArtistChatRequest{
+	req := llm.ChatRequest{
 		Model: model,
-		Messages: []similarArtistChatMessage{
+		Messages: []llm.ChatMessage{
 			{Role: "user", Content: prompt},
 		},
 		MaxTokens:   2000,
 		Temperature: 0.7,
-		ResponseFormat: &similarArtistResponseFormat{
+		ResponseFormat: &llm.ResponseFormat{
 			Type: "json_object",
 		},
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	resp, err := s.llm.Chat(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", err
 	}
 
-	baseURL := s.config.OpenAI.BaseURL
-	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.config.OpenAI.APIKey)
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var chatResp similarArtistChatResponse
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	if chatResp.Error != nil {
-		return "", fmt.Errorf("API error: %s", chatResp.Error.Message)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned")
-	}
-
-	return chatResp.Choices[0].Message.Content, nil
+	return resp.Choices[0].Message.Content, nil
 }
 
 // parseJSONFromResponse extracts and parses JSON from the AI response.

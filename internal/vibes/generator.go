@@ -6,9 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,6 +21,7 @@ import (
 	"spotter/ent/user"
 	"spotter/internal/config"
 	"spotter/internal/events"
+	"spotter/internal/llm"
 )
 
 // nopHandler is a slog handler that discards all log records.
@@ -35,12 +34,12 @@ func (h nopHandler) WithGroup(string) slog.Handler           { return h }
 
 // MixtapeGenerator implements the Generator interface for creating AI-powered mixtapes.
 type MixtapeGenerator struct {
-	client     *ent.Client
-	config     *config.Config
-	logger     *slog.Logger
-	bus        *events.Bus
-	httpClient *http.Client
-	templates  map[string]*template.Template
+	client    *ent.Client
+	config    *config.Config
+	logger    *slog.Logger
+	bus       *events.Bus
+	llm       *llm.Client
+	templates map[string]*template.Template
 }
 
 // NewMixtapeGenerator creates a new MixtapeGenerator service.
@@ -62,9 +61,11 @@ func NewMixtapeGenerator(client *ent.Client, cfg *config.Config, logger *slog.Lo
 		config: cfg,
 		logger: logger,
 		bus:    bus,
-		httpClient: &http.Client{
+		llm: llm.NewClient(llm.ClientConfig{
+			APIKey:  cfg.OpenAI.APIKey,
+			BaseURL: cfg.OpenAI.BaseURL,
 			Timeout: timeout,
-		},
+		}),
 		templates: make(map[string]*template.Template),
 	}
 
@@ -606,60 +607,8 @@ func (g *MixtapeGenerator) fallbackPrompt(data *TemplateData) string {
 	return sb.String()
 }
 
-// ChatMessage represents a message in the OpenAI chat format.
-type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-// ResponseFormat specifies the format of the response from OpenAI.
-type ResponseFormat struct {
-	Type string `json:"type"`
-}
-
-// ChatRequest represents an OpenAI chat completion request.
-type ChatRequest struct {
-	Model          string          `json:"model"`
-	Messages       []ChatMessage   `json:"messages"`
-	MaxTokens      int             `json:"max_tokens,omitempty"`
-	Temperature    float64         `json:"temperature,omitempty"`
-	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
-}
-
-// ChatResponse represents an OpenAI chat completion response.
-type ChatResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index   int `json:"index"`
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-	Error *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-		Code    string `json:"code"`
-	} `json:"error"`
-}
-
 // callOpenAI makes a request to the OpenAI API.
 func (g *MixtapeGenerator) callOpenAI(ctx context.Context, prompt string) (string, int, error) {
-	baseURL := g.config.OpenAI.BaseURL
-	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
-	}
-	baseURL = strings.TrimSuffix(baseURL, "/")
-
 	model := g.config.GetVibesModel()
 	temperature := g.config.Vibes.Temperature
 	if temperature <= 0 {
@@ -671,15 +620,14 @@ func (g *MixtapeGenerator) callOpenAI(ctx context.Context, prompt string) (strin
 	}
 
 	g.logger.Debug("preparing OpenAI request",
-		"base_url", baseURL,
 		"model", model,
 		"temperature", temperature,
 		"max_tokens", maxTokens,
 		"prompt_length", len(prompt))
 
-	req := ChatRequest{
+	req := llm.ChatRequest{
 		Model: model,
-		Messages: []ChatMessage{
+		Messages: []llm.ChatMessage{
 			{
 				Role:    "user",
 				Content: prompt,
@@ -687,72 +635,27 @@ func (g *MixtapeGenerator) callOpenAI(ctx context.Context, prompt string) (strin
 		},
 		MaxTokens:   maxTokens,
 		Temperature: temperature,
-		ResponseFormat: &ResponseFormat{
+		ResponseFormat: &llm.ResponseFormat{
 			Type: "json_object",
 		},
 	}
 
-	reqBody, err := json.Marshal(req)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(reqBody))
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+g.config.OpenAI.APIKey)
-
-	g.logger.Debug("sending OpenAI request", "url", baseURL+"/chat/completions")
-
-	resp, err := g.httpClient.Do(httpReq)
+	resp, err := g.llm.Chat(ctx, req)
 	if err != nil {
 		g.logger.Error("OpenAI request failed", "error", err)
 		return "", 0, fmt.Errorf("request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	g.logger.Debug("received OpenAI response",
-		"status", resp.StatusCode,
-		"body_length", len(body))
-
-	if resp.StatusCode != http.StatusOK {
-		g.logger.Error("OpenAI API error",
-			"status", resp.StatusCode,
-			"body", string(body))
-		return "", 0, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var chatResp ChatResponse
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return "", 0, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if chatResp.Error != nil {
-		return "", 0, fmt.Errorf("API error: %s", chatResp.Error.Message)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", 0, fmt.Errorf("no choices in response")
-	}
 
 	tokensUsed := 0
-	if chatResp.Usage != nil {
-		tokensUsed = chatResp.Usage.TotalTokens
+	if resp.Usage != nil {
+		tokensUsed = resp.Usage.TotalTokens
 		g.logger.Info("OpenAI token usage",
-			"prompt_tokens", chatResp.Usage.PromptTokens,
-			"completion_tokens", chatResp.Usage.CompletionTokens,
-			"total_tokens", chatResp.Usage.TotalTokens)
+			"prompt_tokens", resp.Usage.PromptTokens,
+			"completion_tokens", resp.Usage.CompletionTokens,
+			"total_tokens", resp.Usage.TotalTokens)
 	}
 
-	return chatResp.Choices[0].Message.Content, tokensUsed, nil
+	return resp.Choices[0].Message.Content, tokensUsed, nil
 }
 
 // parseAIResponse parses the AI response JSON.
