@@ -1,3 +1,4 @@
+// Governing: ADR-0007 (in-memory event bus), SPEC event-bus-sse REQ-BUS-001 through REQ-BUS-005
 package events
 
 import (
@@ -125,6 +126,8 @@ type PlaylistEnhanceErrorPayload struct {
 	Error      string
 }
 
+// Bus is the in-memory event bus. Governing: SPEC event-bus-sse REQ-BUS-001
+// (map of userID to slice of subscriber channels, protected by sync.RWMutex)
 type Bus struct {
 	mu          sync.RWMutex
 	subscribers map[int][]chan Event
@@ -138,6 +141,7 @@ func NewBus() *Bus {
 
 // Subscribe returns a channel that receives events for the given user,
 // and a cleanup function that must be called when the subscription is no longer needed.
+// Governing: SPEC event-bus-sse REQ-BUS-002 (buffered chan cap 10, read-only return, cleanup removes and closes)
 func (b *Bus) Subscribe(userID int) (<-chan Event, func()) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -166,6 +170,10 @@ func (b *Bus) Subscribe(userID int) (<-chan Event, func()) {
 	return ch, cleanup
 }
 
+// Publish fans out to all subscriber channels for the given user.
+// Governing: SPEC event-bus-sse REQ-BUS-003 (RLock, non-blocking send, drop if full)
+// Governing: SPEC event-bus-sse REQ-BUS-004 (all active subscribers receive event)
+// Governing: SPEC event-bus-sse REQ-BUS-005 (no-op when zero subscribers)
 func (b *Bus) Publish(userID int, event Event) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
