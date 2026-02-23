@@ -34,6 +34,7 @@ func isVibesSection(currentPath string) bool {
 
 templ Dashboard(title string, cfg *config.Config, currentPath string) {
 	@BaseWithTheme(title, cfg.Theme.Default) {
+		<!-- Governing: SPEC event-bus-sse REQ-SSE-011 (hx-ext="sse" and sse-connect="/events") -->
 		<div class="drawer lg:drawer-open" hx-ext="sse" sse-connect="/events">
 			<input id="drawer-toggle" type="checkbox" class="drawer-toggle"/>
 			<!-- Main Content -->

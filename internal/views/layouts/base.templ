@@ -20,6 +20,7 @@ templ BaseWithTheme(title string, defaultTheme string) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ title }</title>
 			<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+			<!-- Governing: SPEC event-bus-sse REQ-SSE-010 (load HTMX SSE extension) -->
 			<script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
 			// Hyperscript: required for _="..." attributes in create_mixtape_modal, enhance_vibes_modal
 			<script src="https://unpkg.com/hyperscript.org@0.9.12"></script>

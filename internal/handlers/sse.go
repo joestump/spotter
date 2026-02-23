@@ -1,4 +1,4 @@
-// Governing: ADR-0007 (in-memory event bus), SPEC event-bus-sse
+// Governing: ADR-0007 (in-memory event bus), ADR-0001 (HTMX+Templ), SPEC event-bus-sse REQ-SSE-001 through REQ-SSE-005
 package handlers
 
 import (
@@ -11,6 +11,10 @@ import (
 	"spotter/internal/views/components"
 )
 
+// Events serves the SSE endpoint for real-time event streaming.
+// Governing: SPEC event-bus-sse REQ-SSE-001 (auth-gated SSE endpoint with required headers)
+// Governing: SPEC event-bus-sse REQ-SSE-003 (http.Flusher check, 500 if unsupported)
+// Governing: SPEC event-bus-sse REQ-SSE-004 (context cancellation for client disconnect)
 func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 	u := h.GetUser(r.Context())
 	if u == nil {
@@ -173,6 +177,7 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
+			// Governing: SPEC event-bus-sse REQ-SSE-002 (render to HTML fragment), REQ-SSE-005 (named event field)
 			if buf.Len() > 0 {
 				if _, err := fmt.Fprintf(w, "event: %s\n", event.Type); err != nil {
 					h.Logger.Error("failed to write SSE event type", "error", err)

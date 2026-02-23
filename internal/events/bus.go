@@ -4,6 +4,7 @@ import (
 	"sync"
 )
 
+// Governing: SPEC event-bus-sse REQ-BUS-011 (EventType string constants)
 type EventType string
 
 const (
@@ -29,11 +30,13 @@ const (
 	EventTypeSimilarArtistsError     EventType = "similar-artists-error"
 )
 
+// Governing: SPEC event-bus-sse REQ-BUS-010 (Event struct with Type and Payload)
 type Event struct {
 	Type    EventType
 	Payload any
 }
 
+// Governing: SPEC event-bus-sse REQ-BUS-012 (typed payload structs), REQ-BUS-013 (IconType field)
 type NotificationPayload struct {
 	Title    string
 	Message  string

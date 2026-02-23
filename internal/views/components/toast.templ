@@ -76,6 +76,7 @@ templ Toast(title, message, iconType string) {
 	@initToast(id)
 }
 
+// Governing: SPEC event-bus-sse REQ-SSE-012 (sse-swap="notification" with hx-swap for DOM swapping)
 templ ToastContainer() {
 	<div
 		id="toasts"
