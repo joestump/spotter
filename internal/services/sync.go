@@ -284,8 +284,8 @@ func (s *Syncer) syncHistory(ctx context.Context, u *ent.User, activeProviders [
 				"error", err,
 				"error_class", errClass.String(),
 			)
-			// Publish fatal error notification
-			// Governing: SPEC error-handling REQ-NOTIFY-001, REQ-NOTIFY-002
+			// Publish fatal error notification (retriable errors do not trigger notifications)
+			// Governing: SPEC error-handling REQ-NOTIFY-001, REQ-NOTIFY-002, REQ-NOTIFY-003
 			if errClass == ErrorClassFatal {
 				s.publishFatalNotification(u.ID, backoffKey, providerName, err)
 			}
@@ -374,8 +374,8 @@ func (s *Syncer) syncPlaylists(ctx context.Context, u *ent.User, activeProviders
 				"error", err,
 				"error_class", errClass.String(),
 			)
-			// Publish fatal error notification
-			// Governing: SPEC error-handling REQ-NOTIFY-001, REQ-NOTIFY-002
+			// Publish fatal error notification (retriable errors do not trigger notifications)
+			// Governing: SPEC error-handling REQ-NOTIFY-001, REQ-NOTIFY-002, REQ-NOTIFY-003
 			if errClass == ErrorClassFatal {
 				s.publishFatalNotification(u.ID, backoffKey, providerName, err)
 			}
@@ -426,8 +426,8 @@ func (s *Syncer) syncPlaylists(ctx context.Context, u *ent.User, activeProviders
 }
 
 // publishFatalNotification publishes a user-visible notification for fatal provider errors.
-// It only publishes once per fatal error occurrence.
-// Governing: SPEC error-handling REQ-NOTIFY-001, REQ-NOTIFY-002
+// It only publishes once per fatal error occurrence. Only called for fatal errors (not retriable).
+// Governing: SPEC error-handling REQ-NOTIFY-001, REQ-NOTIFY-002, REQ-NOTIFY-003
 func (s *Syncer) publishFatalNotification(userID int, key BackoffKey, providerName string, err error) {
 	state, ok := s.Backoff.GetState(key)
 	if !ok || state.NotifiedFatal {
