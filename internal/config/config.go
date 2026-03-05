@@ -118,9 +118,12 @@ type Config struct {
 	Navidrome struct {
 		BaseURL string `mapstructure:"base_url"`
 	} `mapstructure:"navidrome"`
+	// Governing: SPEC-0017 REQ "Configuration", ADR-0029
 	Lidarr struct {
-		BaseURL string `mapstructure:"base_url"`
-		APIKey  string `mapstructure:"api_key"`
+		BaseURL        string `mapstructure:"base_url"`
+		APIKey         string `mapstructure:"api_key"`
+		QueueMax       int    `mapstructure:"queue_max"`       // Maximum number of items in the submission queue (default: 20)
+		SubmitInterval string `mapstructure:"submit_interval"` // Interval between queue submission attempts (default: "30s")
 	} `mapstructure:"lidarr"`
 	Sync struct {
 		Interval string `mapstructure:"interval"`
@@ -280,6 +283,9 @@ func Load() (*Config, error) {
 	v.SetDefault("navidrome.base_url", "")
 	v.SetDefault("lidarr.base_url", "")
 	v.SetDefault("lidarr.api_key", "")
+	// Governing: SPEC-0017 REQ "Configuration", ADR-0029
+	v.SetDefault("lidarr.queue_max", 20)
+	v.SetDefault("lidarr.submit_interval", "30s")
 	v.SetDefault("spotify.client_id", "")
 	v.SetDefault("spotify.client_secret", "")
 	v.SetDefault("spotify.redirect_url", "http://127.0.0.1:8080/auth/spotify/callback")
