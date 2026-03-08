@@ -40,7 +40,6 @@ const (
 	// maxJitter is the maximum random jitter added to backoff.
 	// Governing: SPEC-0017 REQ "Backoff Strategy"
 	maxJitter = 1 * time.Minute
-
 )
 
 // LidarrSubmitter drains the LidarrQueue table at a controlled rate,
@@ -557,7 +556,6 @@ func (s *LidarrSubmitter) logSubmissionEvent(ctx context.Context, item *ent.Lida
 		s.logger.Error("failed to create sync event", "error", err)
 	}
 }
-
 
 // ComputeBackoff calculates the retry time using exponential backoff with jitter.
 // delay = min(1m * 2^(attempts-1) + jitter, 1h) where jitter is random in [0, 1m)
