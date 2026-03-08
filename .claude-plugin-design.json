@@ -12,7 +12,8 @@
       "dry-handler-consolidation": "PVT_kwHNkyPOAUJMjA",
       "test-coverage-critical": "PVT_kwHNkyPOAUJM1Q",
       "architecture-documentation": "PVT_kwHNkyPOAUJM7Q",
-      "dead-code-cleanup": "PVT_kwHNkyPOAUJNBQ"
+      "dead-code-cleanup": "PVT_kwHNkyPOAUJNBQ",
+      "lidarr-submission-queue": "PVT_kwHNkyPOAUNGwg"
     },
     "views": [
       "All Work",

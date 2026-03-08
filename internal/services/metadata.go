@@ -665,6 +665,10 @@ func (s *MetadataService) enrichArtist(ctx context.Context, u *ent.User, art *en
 		if data.LidarrID != "" && art.LidarrID == "" {
 			update = update.SetLidarrID(data.LidarrID)
 		}
+		// Governing: SPEC-0017 REQ "Queue Entity Schema", ADR-0029
+		if data.LidarrStatus != "" {
+			update = update.SetLidarrStatus(data.LidarrStatus)
+		}
 		if data.LastFMURL != "" && art.LastfmURL == "" {
 			update = update.SetLastfmURL(data.LastFMURL)
 		}
@@ -1058,6 +1062,10 @@ func (s *MetadataService) enrichAlbum(ctx context.Context, u *ent.User, alb *ent
 		}
 		if data.LidarrID != "" && alb.LidarrID == "" {
 			update = update.SetLidarrID(data.LidarrID)
+		}
+		// Governing: SPEC-0017 REQ "Queue Entity Schema", ADR-0029
+		if data.LidarrStatus != "" {
+			update = update.SetLidarrStatus(data.LidarrStatus)
 		}
 		if data.ReleaseDate != "" && alb.ReleaseDate == "" {
 			update = update.SetReleaseDate(data.ReleaseDate)

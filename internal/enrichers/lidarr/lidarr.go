@@ -332,19 +332,12 @@ func (e *Enricher) enqueueEntity(ctx context.Context, entityType lidarrqueue.Ent
 		return nil
 	}
 
-	// Check if a queue row already exists for this entity+user (unique index)
-	exists, err := e.db.LidarrQueue.Query().
-		Where(
-			lidarrqueue.EntityTypeEQ(entityType),
-			lidarrqueue.EntityIDEQ(entityID),
-			lidarrqueue.HasUserWith(user.ID(e.user.ID)),
-		).
-		Exist(ctx)
-	if err == nil && exists {
-		return nil
-	}
-
-	_, err = e.db.LidarrQueue.Create().
+	// Attempt insert directly; rely on the unique constraint for idempotency.
+	// NOTE: SPEC-0017 recommends OnConflictColumns().DoNothing() upsert, but
+	// Ent's OnConflict feature is not enabled in this project's code generation.
+	// The unique constraint catch below provides equivalent idempotent behavior.
+	// Governing: SPEC-0017 REQ "Enricher Decoupling", ADR-0029
+	_, err := e.db.LidarrQueue.Create().
 		SetEntityType(entityType).
 		SetEntityID(entityID).
 		SetMusicbrainzID(mbid).
