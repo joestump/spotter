@@ -44,7 +44,7 @@ deps: ## Install all dependencies (Go, Node, tools, docs)
 	@echo "Installing Node dependencies..."
 	npm install
 	@echo "Installing documentation dependencies..."
-	cd website && npm install
+	cd docs-site && npm install
 	@echo "✓ All dependencies installed"
 
 ci-deps: ## Install CI dependencies (minimal, no dev tools)
@@ -160,7 +160,7 @@ lint-md: ## Run markdownlint on Markdown files
 
 lint-docs: ## Build Docusaurus docs (checks for broken links)
 	@echo "Building documentation to check for broken links..."
-	@cd website && npm run build
+	@cd docs-site && npm run build
 	@echo "✓ Documentation build passed"
 
 lint-go: generate ## Run golangci-lint on Go code
