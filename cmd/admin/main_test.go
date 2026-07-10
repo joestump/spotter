@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"os"
+	"strings"
 	"testing"
 
 	"spotter/internal/crypto"
@@ -120,7 +121,7 @@ func TestParseHexKey(t *testing.T) {
 func TestRunIdenticalKeys(t *testing.T) {
 	key := randomHexKey(t)
 	_, dsn := testDB(t)
-	err := run(key, key, "sqlite3", dsn)
+	err := run(key, key, "sqlite3", dsn, false)
 	if err == nil {
 		t.Fatal("expected error for identical keys")
 	}
@@ -135,7 +136,7 @@ func TestRunNoEncryptedFields(t *testing.T) {
 	_, dsn := testDB(t)
 
 	// No rows in any table => should warn and exit cleanly.
-	err := run(oldKey, newKey, "sqlite3", dsn)
+	err := run(oldKey, newKey, "sqlite3", dsn, false)
 	if err != nil {
 		t.Fatalf("expected no error for empty database, got: %v", err)
 	}
@@ -177,7 +178,7 @@ func TestRunFullRotation(t *testing.T) {
 	}
 
 	// Run rotation.
-	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn); err != nil {
+	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn, false); err != nil {
 		t.Fatalf("run() error: %v", err)
 	}
 
@@ -244,7 +245,7 @@ func TestRunWrongOldKey(t *testing.T) {
 	}
 
 	// Try to rotate with the wrong old key.
-	err := run(wrongKeyHex, newKeyHex, "sqlite3", dsn)
+	err := run(wrongKeyHex, newKeyHex, "sqlite3", dsn, false)
 	if err == nil {
 		t.Fatal("expected error when old key is wrong")
 	}
@@ -265,7 +266,7 @@ func TestRunMultipleRows(t *testing.T) {
 		}
 	}
 
-	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn); err != nil {
+	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn, false); err != nil {
 		t.Fatalf("run() error: %v", err)
 	}
 
@@ -315,7 +316,7 @@ func TestRunSkipsEmptyFields(t *testing.T) {
 		t.Fatalf("insert: %v", err)
 	}
 
-	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn); err != nil {
+	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn, false); err != nil {
 		t.Fatalf("run() error: %v", err)
 	}
 
@@ -328,27 +329,241 @@ func TestRunSkipsEmptyFields(t *testing.T) {
 }
 
 func TestRunInvalidOldKeyFormat(t *testing.T) {
-	err := run("notahexkey", randomHexKey(t), "sqlite3", "file::memory:")
+	err := run("notahexkey", randomHexKey(t), "sqlite3", "file::memory:", false)
 	if err == nil {
 		t.Fatal("expected error for invalid old key format")
 	}
 }
 
 func TestRunInvalidNewKeyFormat(t *testing.T) {
-	err := run(randomHexKey(t), "tooshort", "sqlite3", "file::memory:")
+	err := run(randomHexKey(t), "tooshort", "sqlite3", "file::memory:", false)
 	if err == nil {
 		t.Fatal("expected error for invalid new key format")
 	}
 }
 
 func TestRunMissingKeys(t *testing.T) {
-	err := run("", randomHexKey(t), "sqlite3", "file::memory:")
+	err := run("", randomHexKey(t), "sqlite3", "file::memory:", false)
 	if err == nil {
 		t.Fatal("expected error for missing old key")
 	}
 
-	err = run(randomHexKey(t), "", "sqlite3", "file::memory:")
+	err = run(randomHexKey(t), "", "sqlite3", "file::memory:", false)
 	if err == nil {
 		t.Fatal("expected error for missing new key")
+	}
+}
+
+// TestRunMixedMarkedLegacyAndPlaintextRows verifies rotation handles all
+// three stored formats in one database (issue #335): marked ciphertext,
+// legacy unmarked ciphertext, and plaintext (including plaintext that merely
+// looks like base64 ciphertext). After rotation every value must be in the
+// marked format under the new key.
+func TestRunMixedMarkedLegacyAndPlaintextRows(t *testing.T) {
+	oldKeyHex := randomHexKey(t)
+	newKeyHex := randomHexKey(t)
+	db, dsn := testDB(t)
+
+	oldEnc := mustEncryptor(t, oldKeyHex)
+
+	// Row 1: marked (current-format) ciphertext.
+	marked, err := oldEnc.Encrypt("marked-password")
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	if !crypto.IsEncrypted(marked) {
+		t.Fatalf("expected marked ciphertext, got %q", marked)
+	}
+
+	// Row 2: legacy (pre-marker) ciphertext.
+	legacy := strings.TrimPrefix(marked2(t, oldEnc, "legacy-password"), crypto.EncryptedMarker)
+
+	// Row 3: plaintext that looks like base64 ciphertext (old-heuristic
+	// false positive; stored raw by the buggy write hook).
+	lookalike := "abcdefghijklmnopqrstuvwxyzABCDEF01234567"
+
+	// Row 4: ordinary plaintext from before encryption was enabled.
+	plain := "just a plain password"
+
+	for _, pw := range []string{marked, legacy, lookalike, plain} {
+		if _, err := db.Exec("INSERT INTO navidrome_auths (password) VALUES (?)", pw); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+
+	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn, false); err != nil {
+		t.Fatalf("run() error: %v", err)
+	}
+
+	newEnc := mustEncryptor(t, newKeyHex)
+	want := map[int]string{
+		1: "marked-password",
+		2: "legacy-password",
+		3: lookalike,
+		4: plain,
+	}
+	for id, expected := range want {
+		var stored string
+		if err := db.QueryRow("SELECT password FROM navidrome_auths WHERE id = ?", id).Scan(&stored); err != nil {
+			t.Fatalf("select row %d: %v", id, err)
+		}
+		if !crypto.IsEncrypted(stored) {
+			t.Errorf("row %d: stored value %q is not in the marked format", id, stored)
+		}
+		dec, err := newEnc.Decrypt(stored)
+		if err != nil {
+			t.Fatalf("row %d: decrypt with new key: %v", id, err)
+		}
+		if dec != expected {
+			t.Errorf("row %d: decrypted = %q, want %q", id, dec, expected)
+		}
+	}
+}
+
+// marked2 encrypts a plaintext and fails the test on error.
+func marked2(t *testing.T, enc *crypto.Encryptor, plaintext string) string {
+	t.Helper()
+	out, err := enc.Encrypt(plaintext)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	return out
+}
+
+// TestRunLegacyCiphertextRotation verifies rotation of a database whose
+// values were all written before the marker existed (bare base64).
+func TestRunLegacyCiphertextRotation(t *testing.T) {
+	oldKeyHex := randomHexKey(t)
+	newKeyHex := randomHexKey(t)
+	db, dsn := testDB(t)
+
+	oldEnc := mustEncryptor(t, oldKeyHex)
+
+	legacyPass := strings.TrimPrefix(marked2(t, oldEnc, "navidrome-password"), crypto.EncryptedMarker)
+	legacyAccess := strings.TrimPrefix(marked2(t, oldEnc, "spotify-access"), crypto.EncryptedMarker)
+	legacyRefresh := strings.TrimPrefix(marked2(t, oldEnc, "spotify-refresh"), crypto.EncryptedMarker)
+	legacySession := strings.TrimPrefix(marked2(t, oldEnc, "lastfm-session"), crypto.EncryptedMarker)
+
+	if _, err := db.Exec("INSERT INTO navidrome_auths (password) VALUES (?)", legacyPass); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	if _, err := db.Exec("INSERT INTO spotify_auths (access_token, refresh_token) VALUES (?, ?)", legacyAccess, legacyRefresh); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	if _, err := db.Exec("INSERT INTO last_fm_auths (session_key, username) VALUES (?, ?)", legacySession, "testuser"); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn, false); err != nil {
+		t.Fatalf("run() error: %v", err)
+	}
+
+	newEnc := mustEncryptor(t, newKeyHex)
+	checks := []struct {
+		query    string
+		expected string
+	}{
+		{"SELECT password FROM navidrome_auths WHERE id = 1", "navidrome-password"},
+		{"SELECT access_token FROM spotify_auths WHERE id = 1", "spotify-access"},
+		{"SELECT refresh_token FROM spotify_auths WHERE id = 1", "spotify-refresh"},
+		{"SELECT session_key FROM last_fm_auths WHERE id = 1", "lastfm-session"},
+	}
+	for _, c := range checks {
+		var stored string
+		if err := db.QueryRow(c.query).Scan(&stored); err != nil {
+			t.Fatalf("%s: %v", c.query, err)
+		}
+		if !crypto.IsEncrypted(stored) {
+			t.Errorf("%s: value %q is not in the marked format", c.query, stored)
+		}
+		dec, err := newEnc.Decrypt(stored)
+		if err != nil {
+			t.Fatalf("%s: decrypt with new key: %v", c.query, err)
+		}
+		if dec != c.expected {
+			t.Errorf("%s: decrypted = %q, want %q", c.query, dec, c.expected)
+		}
+	}
+}
+
+// TestRunAbortsOnUnverifiedOldKey covers the wrong-key-on-all-legacy-database
+// hazard: every value is legacy (pre-marker) ciphertext and the operator
+// passes a wrong old key. No value positively verifies the key, so rotation
+// must hard-abort instead of wrapping garbage under the new key and printing
+// a success message.
+func TestRunAbortsOnUnverifiedOldKey(t *testing.T) {
+	correctKeyHex := randomHexKey(t)
+	wrongKeyHex := randomHexKey(t)
+	newKeyHex := randomHexKey(t)
+	db, dsn := testDB(t)
+
+	correctEnc := mustEncryptor(t, correctKeyHex)
+
+	// All-legacy database: bare base64 ciphertext, no markers.
+	legacy := strings.TrimPrefix(marked2(t, correctEnc, "secret"), crypto.EncryptedMarker)
+	if _, err := db.Exec("INSERT INTO navidrome_auths (password) VALUES (?)", legacy); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	err := run(wrongKeyHex, newKeyHex, "sqlite3", dsn, false)
+	if err == nil {
+		t.Fatal("expected hard abort when no value verifies the old key")
+	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error should mention --force escape hatch, got: %v", err)
+	}
+
+	// The stored value must be untouched.
+	var stored string
+	if err := db.QueryRow("SELECT password FROM navidrome_auths WHERE id = 1").Scan(&stored); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if stored != legacy {
+		t.Errorf("stored value was modified despite abort: %q", stored)
+	}
+	// And still decryptable with the correct key.
+	if dec, err := correctEnc.Decrypt(stored); err != nil || dec != "secret" {
+		t.Errorf("stored value no longer decrypts with the correct key: %q, %v", dec, err)
+	}
+}
+
+// TestRunForceTreatsUnverifiedAsPlaintext verifies the --force escape hatch:
+// a pre-encryption database whose values are genuinely plaintext refuses to
+// rotate by default but proceeds with --force, encrypting every value with
+// the new key.
+func TestRunForceTreatsUnverifiedAsPlaintext(t *testing.T) {
+	oldKeyHex := randomHexKey(t)
+	newKeyHex := randomHexKey(t)
+	db, dsn := testDB(t)
+
+	plain := "just a plain password"
+	if _, err := db.Exec("INSERT INTO navidrome_auths (password) VALUES (?)", plain); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	// Without --force: hard abort.
+	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn, false); err == nil {
+		t.Fatal("expected abort for unverifiable plaintext-only database without --force")
+	}
+
+	// With --force: proceed and encrypt with the new key.
+	if err := run(oldKeyHex, newKeyHex, "sqlite3", dsn, true); err != nil {
+		t.Fatalf("run() with force error: %v", err)
+	}
+
+	newEnc := mustEncryptor(t, newKeyHex)
+	var stored string
+	if err := db.QueryRow("SELECT password FROM navidrome_auths WHERE id = 1").Scan(&stored); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if !crypto.IsEncrypted(stored) {
+		t.Errorf("stored value %q is not in the marked format", stored)
+	}
+	dec, err := newEnc.Decrypt(stored)
+	if err != nil {
+		t.Fatalf("decrypt with new key: %v", err)
+	}
+	if dec != plain {
+		t.Errorf("decrypted = %q, want %q", dec, plain)
 	}
 }

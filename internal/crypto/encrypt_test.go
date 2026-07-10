@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"crypto/rand"
+	"strings"
 	"testing"
 )
 
@@ -169,6 +170,9 @@ func TestIsEncrypted(t *testing.T) {
 		t.Fatalf("Encrypt() error = %v", err)
 	}
 
+	// Legacy ciphertext (pre-marker format) is the marked value without its prefix
+	legacy := strings.TrimPrefix(encrypted, EncryptedMarker)
+
 	tests := []struct {
 		name string
 		data string
@@ -179,12 +183,108 @@ func TestIsEncrypted(t *testing.T) {
 		{"empty string", "", false},
 		{"short base64", "YWJj", false},
 		{"not base64", "plain text password!", false},
+		// The old heuristic false-positived on these (issue #335):
+		{"40-char base64-alphabet password", "abcdefghijklmnopqrstuvwxyzABCDEF01234567", false},
+		{"legacy unmarked ciphertext", legacy, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := IsEncrypted(tt.data); got != tt.want {
 				t.Errorf("IsEncrypted() = %v, want %v for %q", got, tt.want, tt.data)
+			}
+		})
+	}
+}
+
+func TestEncryptProducesMarker(t *testing.T) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatalf("failed to generate key: %v", err)
+	}
+
+	encryptor, err := NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("failed to create encryptor: %v", err)
+	}
+
+	encrypted, err := encryptor.Encrypt("mypassword")
+	if err != nil {
+		t.Fatalf("Encrypt() error = %v", err)
+	}
+
+	if !strings.HasPrefix(encrypted, EncryptedMarker) {
+		t.Errorf("Encrypt() output %q does not start with marker %q", encrypted, EncryptedMarker)
+	}
+	if !IsEncrypted(encrypted) {
+		t.Errorf("IsEncrypted() = false for freshly encrypted value %q", encrypted)
+	}
+}
+
+func TestDecryptLegacyUnmarkedCiphertext(t *testing.T) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatalf("failed to generate key: %v", err)
+	}
+
+	encryptor, err := NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("failed to create encryptor: %v", err)
+	}
+
+	plaintext := "legacy-secret"
+	encrypted, err := encryptor.Encrypt(plaintext)
+	if err != nil {
+		t.Fatalf("Encrypt() error = %v", err)
+	}
+
+	// Simulate a row written before the marker was introduced
+	legacy := strings.TrimPrefix(encrypted, EncryptedMarker)
+
+	decrypted, err := encryptor.Decrypt(legacy)
+	if err != nil {
+		t.Fatalf("Decrypt() error on legacy ciphertext: %v", err)
+	}
+	if decrypted != plaintext {
+		t.Errorf("Decrypt(legacy) = %q, want %q", decrypted, plaintext)
+	}
+}
+
+func TestLooksLikeLegacyCiphertext(t *testing.T) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatalf("failed to generate key: %v", err)
+	}
+
+	encryptor, err := NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("failed to create encryptor: %v", err)
+	}
+
+	encrypted, err := encryptor.Encrypt("mypassword")
+	if err != nil {
+		t.Fatalf("Encrypt() error = %v", err)
+	}
+	legacy := strings.TrimPrefix(encrypted, EncryptedMarker)
+
+	tests := []struct {
+		name string
+		data string
+		want bool
+	}{
+		{"legacy unmarked ciphertext", legacy, true},
+		// Ambiguous by design: the heuristic matches, callers must fall back on GCM failure
+		{"40-char base64-alphabet password", "abcdefghijklmnopqrstuvwxyzABCDEF01234567", true},
+		{"marked ciphertext", encrypted, false},
+		{"plaintext password", "mypassword", false},
+		{"empty string", "", false},
+		{"short base64", "YWJj", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := LooksLikeLegacyCiphertext(tt.data); got != tt.want {
+				t.Errorf("LooksLikeLegacyCiphertext() = %v, want %v for %q", got, tt.want, tt.data)
 			}
 		})
 	}
