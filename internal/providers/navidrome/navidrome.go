@@ -18,6 +18,7 @@ import (
 	"spotter/ent"
 	"spotter/internal/config"
 	"spotter/internal/providers"
+	"spotter/internal/resilience"
 )
 
 const (
@@ -128,7 +129,8 @@ func (p *Provider) authenticateInternalAPI(ctx context.Context) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("navidrome login failed with status: %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-003 (401/403 are fatal)
+		return resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("navidrome login failed with status: %d", resp.StatusCode))
 	}
 
 	var loginResp struct {
@@ -187,7 +189,8 @@ func (p *Provider) getRecentlyPlayedFromInternalAPI(ctx context.Context, since t
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("navidrome internal API returned status: %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return nil, resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("navidrome internal API returned status: %d", resp.StatusCode))
 	}
 
 	var songs []struct {
@@ -292,7 +295,8 @@ func (p *Provider) getNowPlayingFromSubsonic(ctx context.Context, since time.Tim
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("navidrome API returned status: %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return nil, resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("navidrome API returned status: %d", resp.StatusCode))
 	}
 
 	var result struct {
@@ -402,7 +406,8 @@ func (p *Provider) GetPlaylists(ctx context.Context) ([]providers.Playlist, erro
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("navidrome API returned status: %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return nil, resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("navidrome API returned status: %d", resp.StatusCode))
 	}
 
 	var result struct {
@@ -651,7 +656,8 @@ func (p *Provider) SyncPlaylist(ctx context.Context, playlist providers.SyncPlay
 		p.logger.Error("navidrome API returned non-OK status",
 			"status_code", resp.StatusCode,
 			"status", resp.Status)
-		return "", fmt.Errorf("navidrome API returned status: %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return "", resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("navidrome API returned status: %d", resp.StatusCode))
 	}
 
 	var result struct {
@@ -729,7 +735,8 @@ func (p *Provider) updatePlaylistMetadata(ctx context.Context, playlistID, name,
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("navidrome API returned status: %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("navidrome API returned status: %d", resp.StatusCode))
 	}
 
 	var result struct {
@@ -804,7 +811,8 @@ func (p *Provider) DeletePlaylist(ctx context.Context, remotePlaylistID string) 
 	if resp.StatusCode != http.StatusOK {
 		p.logger.Error("navidrome API returned non-OK status",
 			"status_code", resp.StatusCode)
-		return fmt.Errorf("navidrome API returned status: %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("navidrome API returned status: %d", resp.StatusCode))
 	}
 
 	var result struct {
@@ -917,7 +925,8 @@ func (p *Provider) UpdatePlaylistTracks(ctx context.Context, remotePlaylistID st
 	if resp.StatusCode != http.StatusOK {
 		p.logger.Error("navidrome API returned non-OK status",
 			"status_code", resp.StatusCode)
-		return fmt.Errorf("navidrome API returned status: %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("navidrome API returned status: %d", resp.StatusCode))
 	}
 
 	var result struct {

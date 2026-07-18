@@ -4,7 +4,9 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	entsql "entgo.io/ent/dialect/sql"
 
 	"spotter/ent"
 	"spotter/ent/album"
@@ -61,9 +65,36 @@ func NewMetadataService(client *ent.Client, db *sql.DB, cfg *config.Config, logg
 	}
 }
 
+// byLastEnrichedAtNullsFirst orders enrichment batches so never-enriched rows
+// (NULL last_enriched_at) come first, then the least-recently-enriched, with ID
+// as a deterministic tie-breaker. Because each processed row gets its
+// last_enriched_at bumped, successive Limit(N) batches rotate through the whole
+// library instead of re-selecting the same first N rows — even for rows whose
+// Or-predicates (e.g. LidarrIDIsNil) still match after enrichment.
+//
+// The NULL grouping is expressed as a portable boolean sort key ("IS NOT NULL"
+// ascending puts NULLs first) because NULL ordering defaults differ across
+// dialects (Postgres sorts NULLs last on ASC) and MySQL does not support the
+// NULLS FIRST clause.
+//
+// Governing: SPEC metadata-enrichment-pipeline REQ-ENRICH-040 (enrich ALL
+// un-enriched or stale entities), issue #343 (batch starvation)
+func byLastEnrichedAtNullsFirst(lastEnrichedAtField, idField string) func(*entsql.Selector) {
+	return func(s *entsql.Selector) {
+		col := s.C(lastEnrichedAtField)
+		s.OrderExpr(
+			entsql.Expr(col+" IS NOT NULL"),
+			entsql.Expr(col),
+			entsql.Expr(s.C(idField)),
+		)
+	}
+}
+
 // Register adds a new enricher factory to the service.
-func (s *MetadataService) Register(t enrichers.Type, factory enrichers.Factory) {
-	s.registry.Register(t, factory)
+// Governing: ADR-0015, SPEC metadata-enrichment-pipeline REQ-ENRICH-050
+// (duplicate type registrations MUST return an error)
+func (s *MetadataService) Register(t enrichers.Type, factory enrichers.Factory) error {
+	return s.registry.Register(t, factory)
 }
 
 // GetEnricherFactory returns the factory for the given enricher type, if registered.
@@ -572,6 +603,9 @@ func (s *MetadataService) EnrichArtists(ctx context.Context, u *ent.User) (int, 
 			q.WithAlbum()
 		}).
 		WithImages().
+		// Rotate batches through the library so rows beyond the limit are not starved.
+		// Governing: issue #343 (batch starvation)
+		Order(byLastEnrichedAtNullsFirst(artist.FieldLastEnrichedAt, artist.FieldID)).
 		Limit(100). // Process in batches
 		All(ctx)
 	if err != nil {
@@ -859,6 +893,9 @@ func (s *MetadataService) EnrichAlbums(ctx context.Context, u *ent.User) (int, e
 		WithArtist().
 		WithTracks().
 		WithImages().
+		// Rotate batches through the library so rows beyond the limit are not starved.
+		// Governing: issue #343 (batch starvation)
+		Order(byLastEnrichedAtNullsFirst(album.FieldLastEnrichedAt, album.FieldID)).
 		Limit(100).
 		All(ctx)
 	if err != nil {
@@ -1282,6 +1319,9 @@ func (s *MetadataService) EnrichTracks(ctx context.Context, u *ent.User) (int, e
 			q.Where(artist.HasUserWith(user.ID(u.ID)))
 		}).
 		WithAlbum().
+		// Rotate batches through the library so rows beyond the limit are not starved.
+		// Governing: issue #343 (batch starvation)
+		Order(byLastEnrichedAtNullsFirst(track.FieldLastEnrichedAt, track.FieldID)).
 		Limit(200).
 		All(ctx)
 	if err != nil {
@@ -1589,9 +1629,12 @@ func (s *MetadataService) downloadArtistImage(ctx context.Context, u *ent.User, 
 		return err
 	}
 
-	// Determine filename using artist ID and image type (e.g., 123-hero.png)
+	// Determine filename using artist ID, image type, and a per-image URL hash
+	// (e.g., 123-fanart-a1b2c3d4.png). Rows are deduped by URL, so N same-type
+	// images must not collapse onto one file via the os.Stat exists-branch below.
+	// Governing: ADR-0027 (filesystem image storage), issue #343 (filename collisions)
 	ext := getImageExtension(img.URL)
-	filename := fmt.Sprintf("%d-%s%s", img.Edges.Artist.ID, img.ImageType.String(), ext)
+	filename := fmt.Sprintf("%d-%s-%s%s", img.Edges.Artist.ID, img.ImageType.String(), imageURLHash(img.URL), ext)
 	localPath := filepath.Join(artistDir, filename)
 
 	// Check if file already exists on disk
@@ -1640,9 +1683,12 @@ func (s *MetadataService) downloadAlbumImage(ctx context.Context, u *ent.User, i
 		return err
 	}
 
-	// Determine filename using album ID and image type (e.g., 456-cover.png)
+	// Determine filename using album ID, image type, and a per-image URL hash
+	// (e.g., 456-cover_front-a1b2c3d4.png). Rows are deduped by URL, so N same-type
+	// images must not collapse onto one file via the os.Stat exists-branch below.
+	// Governing: ADR-0027 (filesystem image storage), issue #343 (filename collisions)
 	ext := getImageExtension(img.URL)
-	filename := fmt.Sprintf("%d-%s%s", img.Edges.Album.ID, img.ImageType.String(), ext)
+	filename := fmt.Sprintf("%d-%s-%s%s", img.Edges.Album.ID, img.ImageType.String(), imageURLHash(img.URL), ext)
 	localPath := filepath.Join(albumDir, filename)
 
 	// Check if file already exists on disk
@@ -1899,6 +1945,15 @@ func uniqueStrings(s []string) []string {
 		}
 	}
 	return result
+}
+
+// imageURLHash returns a short, stable hash of an image URL. It is used as a
+// per-image filename discriminator so multiple same-type images for one entity
+// are written to distinct files instead of colliding on {id}-{type}{ext}.
+// Governing: ADR-0027 (filesystem image storage), issue #343 (filename collisions)
+func imageURLHash(url string) string {
+	sum := sha256.Sum256([]byte(url))
+	return hex.EncodeToString(sum[:4])
 }
 
 // getImageExtension extracts the file extension from a URL.

@@ -1,6 +1,8 @@
 package services_test
 
 import (
+	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"net"
@@ -19,7 +21,9 @@ import (
 
 func TestClassifyError_HTTPRetriableStatuses(t *testing.T) {
 	retriableCodes := []int{
+		http.StatusRequestTimeout,      // 408 — a timeout, retriable per REQ-ERR-002
 		http.StatusTooManyRequests,     // 429
+		http.StatusNotFound,            // 404 — transient behind reverse proxies during redeploys
 		http.StatusBadGateway,          // 502
 		http.StatusServiceUnavailable,  // 503
 		http.StatusInternalServerError, // 500
@@ -106,16 +110,132 @@ func TestClassifyError_MessageBasedFatal(t *testing.T) {
 		{"unauthorized_message", "unauthorized: token expired"},
 		{"forbidden_message", "forbidden: insufficient permissions"},
 		{"invalid_api_key", "invalid api key provided"},
-		// Providers that return plain "returned status NNN" messages without HTTPStatusError
+		// Providers that return plain "returned status NNN" messages without HTTPStatusError.
+		// 404 is deliberately absent: it classifies retriable (transient behind proxies).
 		{"plain_status_401", "spotify API returned status 401"},
 		{"plain_status_403", "spotify API returned status 403"},
-		{"plain_status_404", "spotify API returned status 404"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := errors.New(tt.msg)
 			assert.Equal(t, services.ErrorClassFatal, services.ClassifyError(err))
+		})
+	}
+}
+
+// TestClassifyError_RealWorldClientFormats exercises the string-matching
+// fallback against the exact formats the provider/enricher clients emit,
+// including the colon variant Navidrome uses ("returned status: 401") that
+// the old "status 401" patterns failed to match, causing revoked credentials
+// to retry forever (issue #325).
+func TestClassifyError_RealWorldClientFormats(t *testing.T) {
+	fatal := []struct {
+		name string
+		msg  string
+	}{
+		{"navidrome_colon_401", "navidrome API returned status: 401"},
+		{"navidrome_colon_403", "navidrome API returned status: 403"},
+		{"navidrome_login_401", "navidrome login failed with status: 401"},
+		{"navidrome_internal_401", "navidrome internal API returned status: 401"},
+		{"lastfm_provider_401", "last.fm api returned status 401: invalid session key"},
+		{"lidarr_error_401", "lidarr api error: 401 - unauthorized"},
+		{"fanart_403", "Fanart.tv API returned status 403"},
+	}
+	for _, tt := range fatal {
+		t.Run("fatal_"+tt.name, func(t *testing.T) {
+			assert.Equal(t, services.ErrorClassFatal, services.ClassifyError(errors.New(tt.msg)))
+		})
+	}
+
+	// 5xx/429/404 messages must stay retriable — no behavior change for
+	// transient errors, and 404s can be transient route-drops behind a
+	// reverse proxy during redeploys.
+	retriable := []struct {
+		name string
+		msg  string
+	}{
+		{"navidrome_colon_503", "navidrome API returned status: 503"},
+		{"navidrome_colon_404", "navidrome API returned status: 404"},
+		{"spotify_500", "spotify API returned status 500"},
+		{"spotify_404", "spotify API returned status 404"},
+		{"lastfm_502", "last.fm api returned status 502: bad gateway"},
+	}
+	for _, tt := range retriable {
+		t.Run("retriable_"+tt.name, func(t *testing.T) {
+			assert.Equal(t, services.ErrorClassRetriable, services.ClassifyError(errors.New(tt.msg)))
+		})
+	}
+}
+
+// TestClassifyError_FatalPatternWinsOverRetriableSubstring pins the fallback
+// ordering: a fatal status embedded in a message must win even when the
+// appended response body contains a retriable-looking word like "timeout".
+func TestClassifyError_FatalPatternWinsOverRetriableSubstring(t *testing.T) {
+	err := errors.New("last.fm api returned status 401: upstream request timeout while validating session")
+	assert.Equal(t, services.ErrorClassFatal, services.ClassifyError(err))
+}
+
+// TestClassifyError_Transient404_Typed pins the deliberate decision that a
+// typed 404 is retriable: reverse proxies (e.g. Traefik) return transient
+// 404s while a backend's route is dropped during a container redeploy, and a
+// fatal classification would permanently stop sync with a misleading
+// "reconnect credentials" notification.
+func TestClassifyError_Transient404_Typed(t *testing.T) {
+	err := services.NewHTTPStatusError(http.StatusNotFound, fmt.Errorf("navidrome API returned status: %d", http.StatusNotFound))
+	assert.Equal(t, services.ErrorClassRetriable, services.ClassifyError(err))
+}
+
+// TestClassifyError_RequestTimeout408_Typed pins 408 as retriable — it is a
+// timeout and REQ-ERR-002 requires timeouts to be retriable.
+func TestClassifyError_RequestTimeout408_Typed(t *testing.T) {
+	err := services.NewHTTPStatusError(http.StatusRequestTimeout, fmt.Errorf("spotify API returned status %d", http.StatusRequestTimeout))
+	assert.Equal(t, services.ErrorClassRetriable, services.ClassifyError(err))
+}
+
+// TestClassifyError_NavidromeRevokedCredentials_Typed simulates the error the
+// Navidrome provider now returns for a revoked credential: a 401 wrapped in
+// HTTPStatusError with the provider's exact message format.
+func TestClassifyError_NavidromeRevokedCredentials_Typed(t *testing.T) {
+	err := services.NewHTTPStatusError(401, fmt.Errorf("navidrome API returned status: %d", 401))
+	assert.Equal(t, services.ErrorClassFatal, services.ClassifyError(err))
+
+	// Still fatal when wrapped further up the call chain
+	wrapped := fmt.Errorf("failed to fetch listens: %w", err)
+	assert.Equal(t, services.ErrorClassFatal, services.ClassifyError(wrapped))
+}
+
+// Governing: SPEC error-handling REQ-ERR-003 (unparseable response body is fatal)
+func TestClassifyError_DecodeErrorsFatal(t *testing.T) {
+	var jsonTarget struct {
+		Name string `json:"name"`
+	}
+	jsonSyntaxErr := json.Unmarshal([]byte("<html>502 Bad Gateway</html>"), &jsonTarget)
+	require.Error(t, jsonSyntaxErr)
+
+	jsonTypeErr := json.Unmarshal([]byte(`{"name": 42}`), &jsonTarget)
+	require.Error(t, jsonTypeErr)
+
+	var xmlTarget struct {
+		Name string `xml:"name"`
+	}
+	xmlSyntaxErr := xml.Unmarshal([]byte("<lfm><name>x</wrong></lfm>"), &xmlTarget)
+	require.Error(t, xmlSyntaxErr)
+	var asXMLSyntax *xml.SyntaxError
+	require.ErrorAs(t, xmlSyntaxErr, &asXMLSyntax)
+
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{"json_syntax", jsonSyntaxErr},
+		{"json_type", jsonTypeErr},
+		{"xml_syntax", xmlSyntaxErr},
+		{"wrapped_json_syntax", fmt.Errorf("failed to decode response: %w", jsonSyntaxErr)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, services.ErrorClassFatal, services.ClassifyError(tt.err))
 		})
 	}
 }
@@ -152,16 +272,35 @@ func TestCalculateBackoff_ExponentialGrowth(t *testing.T) {
 }
 
 func TestCalculateBackoff_FirstFailure(t *testing.T) {
-	// First failure: base = 30s * 2^1 = 60s, with jitter [45s, 75s]
+	// First failure: base = 30s * 2^(1-1) = 30s, with jitter [22.5s, 37.5s]
+	// Governing: SPEC error-handling Scenario 1 (first failure waits ~30s)
 	for i := 0; i < 10; i++ {
 		delay := services.CalculateBackoff(1)
-		assert.GreaterOrEqual(t, delay, 45*time.Second, "first failure delay should be >= 45s (60s * 0.75)")
-		assert.LessOrEqual(t, delay, 75*time.Second, "first failure delay should be <= 75s (60s * 1.25)")
+		assert.GreaterOrEqual(t, delay, 22500*time.Millisecond, "first failure delay should be >= 22.5s (30s * 0.75)")
+		assert.LessOrEqual(t, delay, 37500*time.Millisecond, "first failure delay should be <= 37.5s (30s * 1.25)")
+	}
+}
+
+// TestCalculateBackoff_SpecScenarioProgression verifies the 30/60/120s
+// progression promised by SPEC error-handling Scenario 2 and ADR-0020,
+// given that RecordFailure increments the counter before calculating.
+func TestCalculateBackoff_SpecScenarioProgression(t *testing.T) {
+	expected := map[int]time.Duration{
+		1: 30 * time.Second,  // after 1st failure
+		2: 60 * time.Second,  // after 2nd failure
+		3: 120 * time.Second, // after 3rd failure
+	}
+	for failures, base := range expected {
+		for i := 0; i < 10; i++ {
+			delay := services.CalculateBackoff(failures)
+			assert.GreaterOrEqual(t, delay, time.Duration(float64(base)*0.75), "failures=%d", failures)
+			assert.LessOrEqual(t, delay, time.Duration(float64(base)*1.25), "failures=%d", failures)
+		}
 	}
 }
 
 func TestCalculateBackoff_ZeroFailures(t *testing.T) {
-	// Zero consecutive failures: base = 30s * 2^0 = 30s, with jitter [22.5s, 37.5s]
+	// Zero consecutive failures clamps to the base delay: 30s, with jitter [22.5s, 37.5s]
 	for i := 0; i < 10; i++ {
 		delay := services.CalculateBackoff(0)
 		assert.GreaterOrEqual(t, delay, time.Duration(float64(22500)*float64(time.Millisecond)))
@@ -213,6 +352,25 @@ func TestBackoffManager_RecordRetriableFailure(t *testing.T) {
 	assert.False(t, state.IsFatal)
 	assert.False(t, state.NextRetryAt.IsZero(), "nextRetryAt should be set")
 	assert.NotNil(t, state.LastError)
+}
+
+// TestBackoffManager_FirstFailureDelayMatchesSpec verifies end to end that
+// the first recorded retriable failure schedules a retry ~30s out (RecordFailure
+// increments before CalculateBackoff, which now compensates with 2^(n-1)).
+// Governing: SPEC error-handling Scenarios 1-2, REQ-BACK-001
+func TestBackoffManager_FirstFailureDelayMatchesSpec(t *testing.T) {
+	mgr := services.NewBackoffManager()
+	key := services.BackoffKey{UserID: 1, ProviderType: providers.TypeNavidrome}
+
+	before := time.Now()
+	mgr.RecordFailure(key, fmt.Errorf("connection timeout"), services.ErrorClassRetriable)
+
+	state, ok := mgr.GetState(key)
+	require.True(t, ok)
+	delay := state.NextRetryAt.Sub(before)
+	// 30s with +/-25% jitter, small slack for elapsed wall time
+	assert.GreaterOrEqual(t, delay, 22*time.Second, "first retry should be ~30s out, not ~60s")
+	assert.LessOrEqual(t, delay, 38*time.Second, "first retry should be ~30s out, not ~60s")
 }
 
 func TestBackoffManager_RecordFatalFailure(t *testing.T) {

@@ -110,6 +110,53 @@ func TestDBNotifier_SendsOnFatalError(t *testing.T) {
 	}
 }
 
+// TestDBNotifier_SendsOnRevokedNavidromeCredentials verifies the fix for
+// issue #325: a revoked Navidrome credential — formatted exactly the way the
+// Navidrome client emits it ("navidrome API returned status: 401") — reaches
+// the email notification path, both via the typed HTTPStatusError the client
+// now constructs and via the string-matching fallback for unwrapped errors.
+// Governing: ADR-0020, ADR-0026, SPEC error-handling REQ-ERR-003
+func TestDBNotifier_SendsOnRevokedNavidromeCredentials(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{
+			"typed_http_status_error",
+			services.NewHTTPStatusError(401, fmt.Errorf("navidrome API returned status: %d", 401)),
+		},
+		{
+			"legacy_unwrapped_string",
+			fmt.Errorf("navidrome API returned status: %d", 401),
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := setupTestDB(t)
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			mailer := &mockMailer{}
+			n := NewDBNotifier(client, mailer, 7, "http://localhost:8080", logger)
+
+			u, err := client.User.Create().
+				SetUsername(fmt.Sprintf("testuser_navidrome_revoked_%d", i)).
+				SetEmail("test@example.com").
+				SetPaginationSize(25).
+				Save(context.Background())
+			if err != nil {
+				t.Fatalf("create user: %v", err)
+			}
+
+			if err := n.NotifyIfNeeded(context.Background(), u, "navidrome", tt.err); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !mailer.sendCalled {
+				t.Error("should send email for revoked Navidrome credentials (401)")
+			}
+		})
+	}
+}
+
 func TestDBNotifier_CooldownPreventsSecondNotification(t *testing.T) {
 	client := setupTestDB(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

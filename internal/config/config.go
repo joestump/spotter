@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -110,12 +112,26 @@ type Config struct {
 	Server struct {
 		Port              string `mapstructure:"port"`
 		Host              string `mapstructure:"host"`
+		BaseURL           string `mapstructure:"base_url"`            // Governing: ADR-0026, SPEC-0015 (public base URL used in sync-failure email links)
 		ReadHeaderTimeout string `mapstructure:"read_header_timeout"` // Duration string for read header timeout (default: "10s")
 		ReadTimeout       string `mapstructure:"read_timeout"`        // Duration string for read timeout (default: "30s")
 		WriteTimeout      string `mapstructure:"write_timeout"`       // Duration string for write timeout (default: "60s")
 		IdleTimeout       string `mapstructure:"idle_timeout"`        // Duration string for idle timeout (default: "120s")
 	} `mapstructure:"server"`
-	Navidrome struct {
+	// Governing: ADR-0009 (Viper configuration), SPEC graceful-shutdown REQ-TMO-005 (configurable shutdown timeout)
+	// ShutdownTimeout is the graceful shutdown budget (SPOTTER_SHUTDOWN_TIMEOUT, default "30s").
+	// CONSTRAINT: this key is deliberately top-level (not namespaced under server.*)
+	// because the env var name SPOTTER_SHUTDOWN_TIMEOUT predates config consolidation
+	// (SPEC graceful-shutdown REQ-TMO-005 names it) and must keep working; with the
+	// dot-to-underscore replacer, only a top-level "shutdown_timeout" key maps to it.
+	ShutdownTimeout string `mapstructure:"shutdown_timeout"`
+	// Governing: ADR-0009 (Viper configuration), SPEC graceful-shutdown REQ-SEM-002 (configurable semaphore capacity)
+	// MaxConcurrentJobs bounds concurrent per-user background jobs (SPOTTER_MAX_CONCURRENT_JOBS, default 10).
+	// CONSTRAINT: top-level for the same reason as ShutdownTimeout — the published
+	// env var name SPOTTER_MAX_CONCURRENT_JOBS (SPEC graceful-shutdown REQ-SEM-002)
+	// must remain stable.
+	MaxConcurrentJobs int `mapstructure:"max_concurrent_jobs"`
+	Navidrome         struct {
 		BaseURL string `mapstructure:"base_url"`
 	} `mapstructure:"navidrome"`
 	// Governing: SPEC-0017 REQ "Configuration", ADR-0029
@@ -127,6 +143,9 @@ type Config struct {
 	} `mapstructure:"lidarr"`
 	Sync struct {
 		Interval string `mapstructure:"interval"`
+		// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (configurable initial history lookback)
+		// HistoryLookback is the initial history window for users with no prior listens (default: "720h" = 30 days).
+		HistoryLookback string `mapstructure:"history_lookback"`
 	} `mapstructure:"sync"`
 	Theme struct {
 		Available string `mapstructure:"available"` // Comma-separated list of DaisyUI theme names
@@ -191,17 +210,31 @@ func (c *Config) AvailableThemes() []string {
 
 // MetadataEnricherOrder returns the list of enrichers in the configured order.
 // Falls back to default order if not configured.
+// Governing: ADR-0015 (pluggable enricher registry), ADR-0009 (Lidarr optional —
+// the lidarr enricher is filtered out when Lidarr is unconfigured).
 func (c *Config) MetadataEnricherOrder() []string {
+	var parts []string
 	if c.Metadata.Order == "" {
-		return []string{"musicbrainz", "lidarr", "navidrome", "spotify", "lastfm", "fanart", "openai"}
+		parts = []string{"musicbrainz", "lidarr", "navidrome", "spotify", "lastfm", "fanart", "openai"}
+	} else {
+		parts = strings.Split(c.Metadata.Order, ",")
 	}
-	parts := strings.Split(c.Metadata.Order, ",")
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(strings.ToLower(p))
-		if p != "" {
-			result = append(result, p)
+		if p == "" {
+			continue
 		}
+		if p == "lidarr" && !c.IsLidarrEnabled() {
+			continue
+		}
+		result = append(result, p)
+	}
+	if len(result) == 0 && len(parts) > 0 {
+		// Filtering unconfigured enrichers emptied the order entirely — metadata
+		// enrichment will be a silent no-op, which is almost certainly not intended.
+		slog.Warn("metadata enricher order is empty after filtering unconfigured enrichers; metadata enrichment will do nothing",
+			"configured_order", c.Metadata.Order)
 	}
 	return result
 }
@@ -209,6 +242,50 @@ func (c *Config) MetadataEnricherOrder() []string {
 // IsOpenAIEnabled returns true if OpenAI API key is configured.
 func (c *Config) IsOpenAIEnabled() bool {
 	return c.OpenAI.APIKey != ""
+}
+
+// Governing: ADR-0009 (Viper configuration), SPEC-0017 REQ "Background Submitter Goroutine" (submitter only starts if Lidarr is configured)
+// IsLidarrEnabled returns true if Lidarr is fully configured (base URL and API key).
+// Lidarr is optional: when unconfigured, the Lidarr enricher and submitter are skipped.
+func (c *Config) IsLidarrEnabled() bool {
+	return c.Lidarr.BaseURL != "" && c.Lidarr.APIKey != ""
+}
+
+// Governing: ADR-0009 (Viper configuration), SPEC graceful-shutdown REQ-TMO-001, REQ-TMO-005
+// GetShutdownTimeout returns the graceful shutdown budget, falling back to 30s
+// when unset, unparsable, or non-positive (a zero or negative budget would mean
+// zero-grace shutdown).
+func (c *Config) GetShutdownTimeout() time.Duration {
+	if c.ShutdownTimeout != "" {
+		if d, err := time.ParseDuration(c.ShutdownTimeout); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 30 * time.Second
+}
+
+// Governing: ADR-0009 (Viper configuration), SPEC graceful-shutdown REQ-SEM-002
+// GetMaxConcurrentJobs returns the background job semaphore capacity, falling
+// back to 10 when unset or non-positive.
+func (c *Config) GetMaxConcurrentJobs() int {
+	if c.MaxConcurrentJobs > 0 {
+		return c.MaxConcurrentJobs
+	}
+	return 10
+}
+
+// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (configurable initial history lookback)
+// GetSyncHistoryLookback returns the initial history window for users with no
+// prior listens, falling back to 720h (30 days) when unset, unparsable, or
+// non-positive (a negative lookback would put the since watermark in the
+// future and the first sync would fetch nothing).
+func (c *Config) GetSyncHistoryLookback() time.Duration {
+	if c.Sync.HistoryLookback != "" {
+		if d, err := time.ParseDuration(c.Sync.HistoryLookback); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 720 * time.Hour
 }
 
 // GetVibesModel returns the model to use for vibes generation.
@@ -254,7 +331,12 @@ func (c *Config) GetEncryptionKeyBytes() ([]byte, error) {
 	return key, nil
 }
 
-func Load() (*Config, error) {
+// newViper creates the Viper instance shared by Load and LoadDatabase:
+// SPOTTER_* prefix, dot-to-underscore key replacer, automatic env binding,
+// and every default registered (Viper only picks up env vars during Unmarshal
+// for keys that have a registered default).
+// Governing: ADR-0009 (Viper configuration)
+func newViper() *viper.Viper {
 	v := viper.New()
 
 	v.SetEnvPrefix("SPOTTER")
@@ -269,11 +351,18 @@ func Load() (*Config, error) {
 	v.SetDefault("security.auth_rate_limit", 10)  // Login attempts per minute per IP
 	v.SetDefault("server.port", "8080")
 	v.SetDefault("server.host", "0.0.0.0")
+	// Governing: ADR-0026, SPEC-0015 (public base URL used in sync-failure email links)
+	v.SetDefault("server.base_url", "")
 	v.SetDefault("server.read_header_timeout", "10s")
 	v.SetDefault("server.read_timeout", "30s")
 	v.SetDefault("server.write_timeout", "60s")
 	v.SetDefault("server.idle_timeout", "120s")
+	// Governing: SPEC graceful-shutdown REQ-TMO-005, REQ-SEM-002 (moved from raw os.Getenv per ADR-0009)
+	v.SetDefault("shutdown_timeout", "30s")
+	v.SetDefault("max_concurrent_jobs", 10)
 	v.SetDefault("sync.interval", "5m")
+	// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (configurable initial history lookback, 30 days)
+	v.SetDefault("sync.history_lookback", "720h")
 	v.SetDefault("theme.available", "spotter,night,synthwave,dracula,dark,light")
 	v.SetDefault("theme.default", "spotter")
 	v.SetDefault("database.driver", "sqlite3")
@@ -341,24 +430,85 @@ func Load() (*Config, error) {
 	v.SetDefault("metadata.images.max_height", 1000)
 	v.SetDefault("metadata.ai.prompts_directory", "./data/prompts")
 
-	var cfg Config
-	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, err
-	}
+	return v
+}
 
-	// Governing: SPEC-0014 REQ "Driver Validation", ADR-0023
+// validateAndDefaultDatabase validates the database driver and applies the
+// driver-specific default DSN when the source is unset (or still the sqlite
+// default from Viper). Shared by Load and LoadDatabase.
+// Governing: SPEC-0014 REQ "Driver Validation", REQ "Driver-Specific Default Source", ADR-0023
+func validateAndDefaultDatabase(cfg *Config) error {
 	validDrivers := map[string]bool{"sqlite3": true, "postgres": true, "mysql": true}
 	if !validDrivers[cfg.Database.Driver] {
-		return nil, fmt.Errorf("unsupported database driver %q: must be one of sqlite3, postgres, mysql", cfg.Database.Driver)
+		return fmt.Errorf("unsupported database driver %q: must be one of sqlite3, postgres, mysql", cfg.Database.Driver)
 	}
 
-	// Governing: SPEC-0014 REQ "Driver-Specific Default Source", ADR-0023
 	const sqliteDefault = "file:spotter.db?cache=shared&_fk=1"
 	if cfg.Database.Driver == "postgres" && (cfg.Database.Source == "" || cfg.Database.Source == sqliteDefault) {
 		cfg.Database.Source = "host=localhost port=5432 dbname=spotter sslmode=disable"
 	} else if cfg.Database.Driver == "mysql" && (cfg.Database.Source == "" || cfg.Database.Source == sqliteDefault) {
 		cfg.Database.Source = "spotter:spotter@tcp(localhost:3306)/spotter?parseTime=true&charset=utf8mb4"
 	}
+	return nil
+}
+
+// LoadDatabase loads only the database-scoped configuration (driver + source)
+// through the same Viper setup as Load — SPOTTER_DATABASE_DRIVER and
+// SPOTTER_DATABASE_SOURCE with driver validation and driver-specific default
+// DSNs — but skips full-server validation (Navidrome, OpenAI, security keys).
+// Standalone tooling like `spotter-admin rotate-key` uses this so it can run
+// with only database env vars set (SPEC key-rotation Scenario 1) while still
+// honoring ADR-0009's "no hand-rolled os.Getenv" rule.
+// Governing: ADR-0009 (Viper configuration), ADR-0023 (multi-database support), SPEC key-rotation
+func LoadDatabase() (*Config, error) {
+	v := newViper()
+
+	var cfg Config
+	cfg.Database.Driver = v.GetString("database.driver")
+	cfg.Database.Source = v.GetString("database.source")
+
+	// Viper treats empty-string env vars as "set", overriding defaults (see
+	// ADR-0009 consequences); fall back to the sqlite defaults explicitly,
+	// matching the pre-consolidation admin behavior.
+	if cfg.Database.Driver == "" {
+		cfg.Database.Driver = "sqlite3"
+	}
+	if cfg.Database.Source == "" && cfg.Database.Driver == "sqlite3" {
+		cfg.Database.Source = "file:spotter.db?cache=shared&_fk=1"
+	}
+
+	if err := validateAndDefaultDatabase(&cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func Load() (*Config, error) {
+	v := newViper()
+
+	// Governing: ADR-0009 (fail fast with clear error messages)
+	// Pre-validate max_concurrent_jobs so a non-numeric SPOTTER_MAX_CONCURRENT_JOBS
+	// produces a clear error instead of a raw mapstructure decode failure.
+	if s := strings.TrimSpace(v.GetString("max_concurrent_jobs")); s != "" {
+		if _, err := strconv.Atoi(s); err != nil {
+			return nil, fmt.Errorf("max_concurrent_jobs must be an integer (set SPOTTER_MAX_CONCURRENT_JOBS), got %q", s)
+		}
+	}
+
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, err
+	}
+
+	// Governing: SPEC-0014 REQ "Driver Validation", REQ "Driver-Specific Default Source", ADR-0023
+	if err := validateAndDefaultDatabase(&cfg); err != nil {
+		return nil, err
+	}
+
+	// Governing: ADR-0026, SPEC-0015 (base URL is joined with paths in email links)
+	// Normalize server.base_url: strip trailing slashes so consumers can safely
+	// append absolute paths like /preferences/providers.
+	cfg.Server.BaseURL = strings.TrimRight(cfg.Server.BaseURL, "/")
 
 	// Apply defaults for OpenAI config when env vars are empty strings
 	// (Viper treats empty string env vars as "set", overriding defaults)
@@ -373,11 +523,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("navidrome.base_url is required")
 	}
 
-	if cfg.Lidarr.BaseURL == "" {
-		return nil, fmt.Errorf("lidarr.base_url is required")
-	}
-	if cfg.Lidarr.APIKey == "" {
-		return nil, fmt.Errorf("lidarr.api_key is required")
+	// Governing: ADR-0009 (Viper configuration), SPEC-0014 (compose scenarios MUST start without Lidarr),
+	// SPEC-0017 REQ "Background Submitter Goroutine" (submitter only starts if Lidarr is configured)
+	// Lidarr is optional: validation only rejects partial configuration (one of the
+	// two settings without the other), never the fully-unset case.
+	if (cfg.Lidarr.BaseURL == "") != (cfg.Lidarr.APIKey == "") {
+		return nil, fmt.Errorf("lidarr.base_url and lidarr.api_key must both be set to enable Lidarr (or both left unset to disable it)")
 	}
 
 	if cfg.OpenAI.APIKey == "" {

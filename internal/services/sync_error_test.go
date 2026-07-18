@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"testing"
 	"time"
 
+	"spotter/ent"
 	"spotter/ent/enttest"
 	"spotter/internal/config"
 	"spotter/internal/events"
@@ -191,4 +193,130 @@ func TestSyncer_HistoryCallbackError_DoesNotPersistPartialData(t *testing.T) {
 	listens, err := client.Listen.Query().All(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, listens, "no listens should be created when provider fails")
+}
+
+// countingProvider is a mock provider that counts how many times it is called.
+type countingProvider struct {
+	providerType providers.Type
+	err          error
+	calls        int
+}
+
+func (m *countingProvider) Type() providers.Type {
+	return m.providerType
+}
+
+func (m *countingProvider) GetRecentListens(ctx context.Context, since time.Time, callback func([]providers.Track) error) error {
+	m.calls++
+	return m.err
+}
+
+func (m *countingProvider) GetPlaylists(ctx context.Context) ([]providers.Playlist, error) {
+	m.calls++
+	return nil, m.err
+}
+
+func (m *countingProvider) CreatePlaylist(ctx context.Context, name, description string, tracks []providers.Track) error {
+	return nil
+}
+
+// recordingNotifier records NotifyIfNeeded calls made by the syncer.
+type recordingNotifier struct {
+	notifyCalls int
+	lastErr     error
+}
+
+func (n *recordingNotifier) NotifyIfNeeded(_ context.Context, _ *ent.User, _ string, syncErr error) error {
+	n.notifyCalls++
+	n.lastErr = syncErr
+	return nil
+}
+
+func (n *recordingNotifier) ClearCooldown(_ context.Context, _ int, _ string) error {
+	return nil
+}
+
+func (n *recordingNotifier) SendTest(_ context.Context, _ *ent.User) error {
+	return nil
+}
+
+// TestSyncer_RevokedNavidromeCredentials_FatalStopsRetryAndNotifies simulates
+// revoked Navidrome credentials end to end (issue #325): the provider returns
+// a 401 wrapped in HTTPStatusError with the exact message format the Navidrome
+// client emits ("navidrome API returned status: 401"), the error classifies
+// fatal, backoff blocks further retries, and NotifyIfNeeded fires.
+// Governing: ADR-0020, ADR-0026, SPEC error-handling REQ-ERR-003, REQ-STATE-004, REQ-NOTIFY-001
+func TestSyncer_RevokedNavidromeCredentials_FatalStopsRetryAndNotifies(t *testing.T) {
+	client := enttest.Open(t, "sqlite3", "file:ent?mode=memory&cache=shared&_fk=1")
+	t.Cleanup(func() { client.Close() })
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	bus := events.NewBus()
+	notifier := &recordingNotifier{}
+	syncer := services.NewSyncer(client, &config.Config{}, logger, bus, notifier)
+
+	user, err := client.User.Create().SetUsername("testuser").Save(context.Background())
+	require.NoError(t, err)
+	_, err = client.NavidromeAuth.Create().
+		SetUser(user).
+		SetPassword("revokedpassword").
+		Save(context.Background())
+	require.NoError(t, err)
+
+	// Error formatted exactly the way internal/providers/navidrome does
+	revokedErr := services.NewHTTPStatusError(
+		http.StatusUnauthorized,
+		fmt.Errorf("navidrome API returned status: %d", http.StatusUnauthorized),
+	)
+	assert.Equal(t, services.ErrorClassFatal, services.ClassifyError(revokedErr),
+		"a 401 from Navidrome must classify fatal")
+
+	prov := &countingProvider{providerType: providers.TypeNavidrome, err: revokedErr}
+	syncer.Register(mockFactory(prov))
+
+	// First sync — hits the 401, records fatal state, notifies
+	require.NoError(t, syncer.Sync(context.Background(), user))
+	require.GreaterOrEqual(t, notifier.notifyCalls, 1, "NotifyIfNeeded must fire for a fatal error")
+	assert.Equal(t, services.ErrorClassFatal, services.ClassifyError(notifier.lastErr),
+		"the error reaching the notifier must classify fatal")
+	callsAfterFirst := prov.calls
+	require.GreaterOrEqual(t, callsAfterFirst, 1)
+	notifiesAfterFirst := notifier.notifyCalls
+
+	// Second sync — provider is blocked by the fatal flag: backoff stops,
+	// no more provider calls, no repeated notifications
+	require.NoError(t, syncer.Sync(context.Background(), user))
+	assert.Equal(t, callsAfterFirst, prov.calls,
+		"provider must not be retried after a fatal error (backoff stops)")
+	assert.Equal(t, notifiesAfterFirst, notifier.notifyCalls,
+		"no repeat notification while the fatal error persists")
+}
+
+// TestSyncer_LegacyNavidromeErrorString_FallbackClassifiesFatal covers the
+// string-matching fallback: an unwrapped error carrying Navidrome's colon
+// format still classifies fatal and stops retries.
+func TestSyncer_LegacyNavidromeErrorString_FallbackClassifiesFatal(t *testing.T) {
+	client := enttest.Open(t, "sqlite3", "file:ent?mode=memory&cache=shared&_fk=1")
+	t.Cleanup(func() { client.Close() })
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	bus := events.NewBus()
+	notifier := &recordingNotifier{}
+	syncer := services.NewSyncer(client, &config.Config{}, logger, bus, notifier)
+
+	user, err := client.User.Create().SetUsername("testuser2").Save(context.Background())
+	require.NoError(t, err)
+
+	legacyErr := fmt.Errorf("navidrome API returned status: %d", http.StatusUnauthorized)
+	assert.Equal(t, services.ErrorClassFatal, services.ClassifyError(legacyErr))
+
+	prov := &countingProvider{providerType: providers.TypeNavidrome, err: legacyErr}
+	syncer.Register(mockFactory(prov))
+
+	require.NoError(t, syncer.Sync(context.Background(), user))
+	require.GreaterOrEqual(t, notifier.notifyCalls, 1, "NotifyIfNeeded must fire via the string fallback")
+	callsAfterFirst := prov.calls
+
+	require.NoError(t, syncer.Sync(context.Background(), user))
+	assert.Equal(t, callsAfterFirst, prov.calls, "backoff must stop after fatal classification")
 }

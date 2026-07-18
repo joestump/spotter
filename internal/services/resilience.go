@@ -2,16 +2,20 @@
 package services
 
 import (
+	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"math"
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"spotter/internal/providers"
+	"spotter/internal/resilience"
 )
 
 // ErrorClass represents the classification of an error as retriable or fatal.
@@ -37,27 +41,23 @@ func (c ErrorClass) String() string {
 }
 
 // HTTPStatusError wraps an error with an HTTP status code for classification.
-type HTTPStatusError struct {
-	StatusCode int
-	Err        error
-}
-
-func (e *HTTPStatusError) Error() string {
-	return e.Err.Error()
-}
-
-func (e *HTTPStatusError) Unwrap() error {
-	return e.Err
-}
+// It is defined in internal/resilience so that provider and enricher HTTP
+// clients can construct it without importing internal/services (which would
+// create an import cycle via internal/providers). This alias keeps the
+// services-side API unchanged.
+// Governing: SPEC error-handling REQ-ERR-004
+type HTTPStatusError = resilience.HTTPStatusError
 
 // NewHTTPStatusError creates a new HTTPStatusError.
 func NewHTTPStatusError(statusCode int, err error) *HTTPStatusError {
-	return &HTTPStatusError{StatusCode: statusCode, Err: err}
+	return resilience.NewHTTPStatusError(statusCode, err)
 }
 
 // ClassifyError classifies an error as retriable or fatal.
-// It inspects the error chain for HTTPStatusError (HTTP status-based classification)
-// and net.Error (network-level classification).
+// It prefers typed classification: HTTPStatusError (HTTP status-based),
+// net.Error (network-level), and JSON/XML decode errors (unparseable
+// response bodies). Message-based string matching is kept only as a
+// fallback for errors that reach the classifier unwrapped.
 // Governing: SPEC error-handling REQ-ERR-001 through REQ-ERR-004
 func ClassifyError(err error) ErrorClass {
 	if err == nil {
@@ -87,13 +87,28 @@ func ClassifyError(err error) ErrorClass {
 		return ErrorClassRetriable
 	}
 
-	// Heuristic: check error message for common patterns
-	msg := strings.ToLower(err.Error())
-	if isRetriableErrorMessage(msg) {
-		return ErrorClassRetriable
+	// Unparseable response bodies (malformed JSON/XML) indicate an API
+	// contract change and are fatal. Truncated-body I/O errors (io.EOF,
+	// io.ErrUnexpectedEOF) intentionally remain retriable — they usually
+	// indicate transient network truncation, not a contract change.
+	// Governing: SPEC error-handling REQ-ERR-003 (unparseable response body)
+	var jsonSyntaxErr *json.SyntaxError
+	var jsonTypeErr *json.UnmarshalTypeError
+	var xmlSyntaxErr *xml.SyntaxError
+	if errors.As(err, &jsonSyntaxErr) || errors.As(err, &jsonTypeErr) || errors.As(err, &xmlSyntaxErr) {
+		return ErrorClassFatal
 	}
+
+	// Heuristic: check error message for common patterns. Fatal patterns are
+	// checked first so a fatal status embedded in a message wins even when
+	// the appended response body happens to contain a retriable-looking word
+	// (e.g. `last.fm api returned status 401: ...timeout...`).
+	msg := strings.ToLower(err.Error())
 	if isFatalErrorMessage(msg) {
 		return ErrorClassFatal
+	}
+	if isRetriableErrorMessage(msg) {
+		return ErrorClassRetriable
 	}
 
 	// Default to retriable for unknown errors — prefer retry over giving up
@@ -104,10 +119,20 @@ func ClassifyError(err error) ErrorClass {
 // Governing: SPEC error-handling REQ-ERR-002 (retriable statuses), REQ-ERR-003 (fatal statuses)
 func classifyHTTPStatus(statusCode int) ErrorClass {
 	switch statusCode {
-	case http.StatusTooManyRequests, // 429
+	case http.StatusRequestTimeout, // 408 — a timeout, retriable per REQ-ERR-002
+		http.StatusTooManyRequests,     // 429
 		http.StatusBadGateway,          // 502
 		http.StatusServiceUnavailable,  // 503
 		http.StatusInternalServerError: // 500
+		return ErrorClassRetriable
+	case http.StatusNotFound: // 404
+		// Deliberate: 404 is retriable. Reverse proxies (e.g. Traefik) return
+		// transient 404s while a backend's route is dropped during a container
+		// redeploy; classifying that fatal would permanently stop sync with a
+		// misleading "reconnect credentials" notification. A genuinely wrong
+		// base URL keeps retrying at the 30-minute backoff cap instead —
+		// invalid configuration is REQ-ERR-003's concern at config-validation
+		// time, not per-request.
 		return ErrorClassRetriable
 	case http.StatusUnauthorized, // 401
 		http.StatusForbidden: // 403
@@ -116,6 +141,8 @@ func classifyHTTPStatus(statusCode int) ErrorClass {
 		if statusCode >= 500 {
 			return ErrorClassRetriable
 		}
+		// Remaining 4xx (400, 405, 422, ...) are client errors that will not
+		// succeed on retry — the request itself is wrong.
 		return ErrorClassFatal
 	}
 }
@@ -143,6 +170,22 @@ func isRetriableErrorMessage(msg string) bool {
 	return false
 }
 
+// fatalStatusPattern matches error messages that embed a fatal HTTP status
+// code, covering the formats the clients actually emit (fallback only — all
+// clients now wrap non-2xx responses in resilience.NewHTTPStatusError):
+//
+//	"navidrome API returned status: 401"     (colon before the code)
+//	"navidrome login failed with status: 403"
+//	"spotify API returned status 401"        (no colon)
+//	"last.fm api returned status 401: ..."   (code followed by body)
+//	"lidarr api error: 403 - ..."
+//
+// 404 is deliberately excluded to stay consistent with the typed path in
+// classifyHTTPStatus: transient 404s from reverse proxies during redeploys
+// must remain retriable.
+// Governing: ADR-0020, SPEC error-handling REQ-ERR-003
+var fatalStatusPattern = regexp.MustCompile(`(?:status|error):? *(?:401|403)\b`)
+
 func isFatalErrorMessage(msg string) bool {
 	fatalPatterns := []string{
 		"unauthorized",
@@ -151,19 +194,16 @@ func isFatalErrorMessage(msg string) bool {
 		"invalid credentials",
 		"revoked",
 		"deactivated",
-		// Catch plain "returned status 4xx" messages from providers that
-		// don't wrap errors in HTTPStatusError (e.g. "spotify API returned status 403").
-		// 4xx responses are client errors and won't succeed on retry.
-		"status 401",
-		"status 403",
-		"status 404",
 	}
 	for _, pattern := range fatalPatterns {
 		if strings.Contains(msg, pattern) {
 			return true
 		}
 	}
-	return false
+	// Catch "returned status 4xx" style messages from errors that were not
+	// wrapped in HTTPStatusError. 401/403 are credential errors that won't
+	// succeed on retry.
+	return fatalStatusPattern.MatchString(msg)
 }
 
 // BackoffState tracks per-provider error state.
@@ -207,11 +247,20 @@ const (
 	backoffMaxDelay  = 30 * time.Minute
 )
 
-// CalculateBackoff computes the next retry delay using exponential backoff with jitter.
-// delay = min(30s * 2^consecutiveFailures, 30m) * jitter[0.75, 1.25]
+// CalculateBackoff computes the retry delay after the Nth consecutive failure.
+// delay = min(30s * 2^(consecutiveFailures-1), 30m) * jitter[0.75, 1.25]
+//
+// RecordFailure increments ConsecutiveFailures before calling this, so the
+// first failure passes consecutiveFailures=1 and must wait ~30s (base delay),
+// the second ~60s, the third ~120s — matching SPEC error-handling
+// Scenarios 1-2 and ADR-0020 ("30s, 60s, 120s, ... up to 30 minutes").
 // Governing: SPEC error-handling REQ-BACK-001, REQ-BACK-002, REQ-BACK-003
 func CalculateBackoff(consecutiveFailures int) time.Duration {
-	delay := float64(backoffBaseDelay) * math.Pow(2, float64(consecutiveFailures))
+	exponent := consecutiveFailures - 1
+	if exponent < 0 {
+		exponent = 0
+	}
+	delay := float64(backoffBaseDelay) * math.Pow(2, float64(exponent))
 	if delay > float64(backoffMaxDelay) {
 		delay = float64(backoffMaxDelay)
 	}

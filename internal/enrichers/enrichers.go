@@ -6,6 +6,7 @@ package enrichers
 
 import (
 	"context"
+	"fmt"
 
 	"spotter/ent"
 	"spotter/internal/tags"
@@ -217,8 +218,16 @@ func NewRegistry() *Registry {
 }
 
 // Register adds a factory for the given enricher type.
-func (r *Registry) Register(t Type, factory Factory) {
+// Registering the same type twice returns an error instead of silently
+// overwriting the earlier factory.
+// Governing: ADR-0015, SPEC metadata-enrichment-pipeline REQ-ENRICH-050
+// (duplicate type registrations MUST return an error)
+func (r *Registry) Register(t Type, factory Factory) error {
+	if _, exists := r.factories[t]; exists {
+		return fmt.Errorf("enricher type %q is already registered", t)
+	}
 	r.factories[t] = factory
+	return nil
 }
 
 // Get returns the factory for the given enricher type.

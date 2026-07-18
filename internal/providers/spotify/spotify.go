@@ -12,6 +12,7 @@ import (
 	"spotter/ent"
 	"spotter/internal/config"
 	"spotter/internal/providers"
+	"spotter/internal/resilience"
 
 	"golang.org/x/oauth2"
 	spotifyOAuth "golang.org/x/oauth2/spotify"
@@ -209,7 +210,8 @@ func (p *Provider) fetchUserProfile(ctx context.Context, accessToken string) (*s
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("spotify API returned status %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return nil, resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("spotify API returned status %d", resp.StatusCode))
 	}
 
 	var user spotifyUser
@@ -284,7 +286,8 @@ func (p *Provider) GetRecentListens(ctx context.Context, since time.Time, callba
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("spotify API returned status %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("spotify API returned status %d", resp.StatusCode))
 	}
 
 	var result recentlyPlayedResponse
@@ -390,7 +393,8 @@ func (p *Provider) GetPlaylists(ctx context.Context) ([]providers.Playlist, erro
 			if err := resp.Body.Close(); err != nil {
 				p.logger.Warn("failed to close response body", "error", err)
 			}
-			return nil, fmt.Errorf("spotify API returned status %d", resp.StatusCode)
+			// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+			return nil, resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("spotify API returned status %d", resp.StatusCode))
 		}
 
 		var result playlistsResponse

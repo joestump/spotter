@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"spotter/ent"
 	"spotter/ent/album"
 	"spotter/ent/artist"
 	"spotter/ent/playlist"
@@ -55,33 +56,97 @@ func (h *Handler) ArtistImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Governing: issue #127 — skip records with empty local_path to avoid serving 404 when primary image wasn't downloaded
-	// Prefer primary thumbnail, then any primary, then first image with a valid path
-	var localPath string
-	for _, img := range a.Edges.Images {
-		if img.IsPrimary && string(img.ImageType) == "thumbnail" && img.LocalPath != "" {
-			localPath = img.LocalPath
-			break
-		}
-	}
-	if localPath == "" {
-		for _, img := range a.Edges.Images {
-			if img.IsPrimary && img.LocalPath != "" {
-				localPath = img.LocalPath
-				break
-			}
-		}
-	}
-	if localPath == "" {
-		for _, img := range a.Edges.Images {
-			if img.LocalPath != "" {
-				localPath = img.LocalPath
-				break
-			}
-		}
-	}
+	h.serveImage(w, r, bestArtistImagePath(a.Edges.Images))
+}
 
-	h.serveImage(w, r, localPath)
+// imageCandidate normalizes artist and album image records for best-image ranking.
+type imageCandidate struct {
+	localPath string
+	isPrimary bool
+	likes     int
+	area      int64
+	id        int
+}
+
+// betterImage reports whether a should be served over b.
+// Governing: SPEC metadata-enrichment-pipeline REQ-ENRICH-022 — rank by
+// IsPrimary, then highest Likes, then largest dimensions (Width × Height).
+// ID is a deterministic final tie-breaker.
+func betterImage(a, b imageCandidate) bool {
+	if a.isPrimary != b.isPrimary {
+		return a.isPrimary
+	}
+	if a.likes != b.likes {
+		return a.likes > b.likes
+	}
+	if a.area != b.area {
+		return a.area > b.area
+	}
+	return a.id < b.id
+}
+
+// bestCandidatePath returns the local path of the best-ranked candidate, or ""
+// if there are no candidates.
+func bestCandidatePath(candidates []imageCandidate) string {
+	var best *imageCandidate
+	for i := range candidates {
+		if best == nil || betterImage(candidates[i], *best) {
+			best = &candidates[i]
+		}
+	}
+	if best == nil {
+		return ""
+	}
+	return best.localPath
+}
+
+// bestArtistImagePath selects the best downloaded artist image per
+// REQ-ENRICH-022 (IsPrimary → Likes → dimensions).
+// Governing: SPEC metadata-enrichment-pipeline REQ-ENRICH-022;
+// issue #127 — skip records with empty local_path to avoid serving 404 when the image wasn't downloaded
+func bestArtistImagePath(images []*ent.ArtistImage) string {
+	candidates := make([]imageCandidate, 0, len(images))
+	for _, img := range images {
+		if img.LocalPath == "" {
+			continue
+		}
+		c := imageCandidate{
+			localPath: img.LocalPath,
+			isPrimary: img.IsPrimary,
+			id:        img.ID,
+		}
+		if img.Likes != nil {
+			c.likes = *img.Likes
+		}
+		if img.Width != nil && img.Height != nil {
+			c.area = int64(*img.Width) * int64(*img.Height)
+		}
+		candidates = append(candidates, c)
+	}
+	return bestCandidatePath(candidates)
+}
+
+// bestAlbumImagePath selects the best downloaded album image per
+// REQ-ENRICH-022 (IsPrimary → dimensions; album images carry no Likes field).
+// Governing: SPEC metadata-enrichment-pipeline REQ-ENRICH-022;
+// issue #127 — skip records with empty local_path to avoid serving 404 when the image wasn't downloaded
+func bestAlbumImagePath(images []*ent.AlbumImage) string {
+	candidates := make([]imageCandidate, 0, len(images))
+	for _, img := range images {
+		if img.LocalPath == "" {
+			continue
+		}
+		c := imageCandidate{
+			localPath: img.LocalPath,
+			isPrimary: img.IsPrimary,
+			id:        img.ID,
+		}
+		if img.Width != nil && img.Height != nil {
+			c.area = int64(*img.Width) * int64(*img.Height)
+		}
+		candidates = append(candidates, c)
+	}
+	return bestCandidatePath(candidates)
 }
 
 // AlbumImage serves the primary image for an album
@@ -123,25 +188,7 @@ func (h *Handler) AlbumImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Governing: issue #127 — skip records with empty local_path to avoid serving 404 when primary image wasn't downloaded
-	// Prefer primary image, then first image with a valid path
-	var localPath string
-	for _, img := range a.Edges.Images {
-		if img.IsPrimary && img.LocalPath != "" {
-			localPath = img.LocalPath
-			break
-		}
-	}
-	if localPath == "" {
-		for _, img := range a.Edges.Images {
-			if img.LocalPath != "" {
-				localPath = img.LocalPath
-				break
-			}
-		}
-	}
-
-	h.serveImage(w, r, localPath)
+	h.serveImage(w, r, bestAlbumImagePath(a.Edges.Images))
 }
 
 // PlaylistImage serves the image for a playlist

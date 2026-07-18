@@ -15,6 +15,7 @@ import (
 	"spotter/ent/user"
 	"spotter/internal/config"
 	"spotter/internal/enrichers"
+	"spotter/internal/resilience"
 	"spotter/internal/tags"
 	"strings"
 	"sync"
@@ -478,14 +479,16 @@ func (e *Enricher) doRequest(ctx context.Context, method, endpoint string, body 
 		if resp.StatusCode == http.StatusInternalServerError {
 			b, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			lastErr = fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b))
+			// Governing: ADR-0020, SPEC error-handling REQ-ERR-002 (5xx retriable)
+			lastErr = resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b)))
 			continue
 		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			b, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			return fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b))
+			// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+			return resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b)))
 		}
 
 		if result != nil {

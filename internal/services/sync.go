@@ -266,9 +266,11 @@ func (s *Syncer) syncHistory(ctx context.Context, u *ent.User, activeProviders [
 			since = lastListen.PlayedAt
 			s.logger.Debug("found last listen", "provider", provider.Type(), "played_at", since)
 		} else {
-			// Default to beginning of time if no history exists to fetch everything
-			since = time.Unix(0, 0)
-			s.logger.Debug("no previous history found, defaulting lookback to beginning of time", "provider", provider.Type(), "since", since)
+			// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (configurable initial history lookback), ADR-0009
+			// No history exists: use the configured lookback window (sync.history_lookback, default 720h/30d)
+			lookback := s.config.GetSyncHistoryLookback()
+			since = time.Now().Add(-lookback)
+			s.logger.Debug("no previous history found, using configured lookback", "provider", provider.Type(), "lookback", lookback, "since", since)
 		}
 
 		s.logger.Debug("fetching history", "provider", provider.Type(), "since", since)

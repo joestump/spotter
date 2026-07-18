@@ -26,6 +26,9 @@ Spotter is configured using environment variables. You can set these in your she
 | :--- | :--- | :--- |
 | `SPOTTER_SERVER_PORT` | The HTTP port the server listens on | `8080` |
 | `SPOTTER_SERVER_HOST` | The host address to bind to | `0.0.0.0` |
+| `SPOTTER_SERVER_BASE_URL` | Public base URL of this Spotter instance (used in sync-failure notification email links, e.g. `https://spotter.example.com`) | *None* |
+| `SPOTTER_SHUTDOWN_TIMEOUT` | Graceful shutdown budget (Go duration format) | `30s` |
+| `SPOTTER_MAX_CONCURRENT_JOBS` | Maximum concurrent per-user background jobs | `10` |
 
 ## Security Configuration
 
@@ -59,6 +62,7 @@ SPOTTER_DATABASE_SOURCE=host=localhost port=5432 dbname=spotter user=spotter pas
 | Variable | Description | Default |
 | :--- | :--- | :--- |
 | `SPOTTER_SYNC_INTERVAL` | How often to sync data from providers (Go duration format) | `5m` |
+| `SPOTTER_SYNC_HISTORY_LOOKBACK` | Initial listen-history window for users with no prior listens (Go duration format) | `720h` (30 days) |
 
 ## Theme Configuration
 
@@ -86,6 +90,8 @@ SPOTTER_DATABASE_SOURCE=host=localhost port=5432 dbname=spotter user=spotter pas
 | `SPOTTER_LASTFM_REDIRECT_URL` | Callback URL for Last.fm auth | *None* |
 
 ### Lidarr (Optional)
+
+Lidarr is entirely optional. When neither `SPOTTER_LIDARR_BASE_URL` nor `SPOTTER_LIDARR_API_KEY` is set, Spotter starts normally and skips the Lidarr metadata enricher and the Lidarr submission queue. Setting only one of the two is a configuration error — set both to enable Lidarr, or neither to disable it.
 
 | Variable | Description | Default |
 | :--- | :--- | :--- |
@@ -173,6 +179,11 @@ SPOTTER_OPENAI_API_KEY=sk-your-openai-api-key
 # ===================
 SPOTTER_SERVER_PORT=8080
 SPOTTER_SERVER_HOST=0.0.0.0
+# Public base URL (used in notification email links)
+# SPOTTER_SERVER_BASE_URL=https://spotter.example.com
+# Graceful shutdown budget and background job concurrency
+# SPOTTER_SHUTDOWN_TIMEOUT=30s
+# SPOTTER_MAX_CONCURRENT_JOBS=10
 
 # ===================
 # Security Configuration
@@ -198,6 +209,8 @@ SPOTTER_DATABASE_SOURCE=host=localhost port=5432 dbname=spotter user=spotter pas
 # Sync Configuration
 # ===================
 SPOTTER_SYNC_INTERVAL=5m
+# Initial history window for users with no prior listens (default 720h = 30 days)
+# SPOTTER_SYNC_HISTORY_LOOKBACK=720h
 
 # ===================
 # Theme Configuration

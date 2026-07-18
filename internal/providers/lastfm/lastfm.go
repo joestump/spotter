@@ -19,6 +19,7 @@ import (
 	"spotter/ent"
 	"spotter/internal/config"
 	"spotter/internal/providers"
+	"spotter/internal/resilience"
 )
 
 const (
@@ -352,7 +353,8 @@ func (p *Provider) doRequest(ctx context.Context, method string, params map[stri
 
 		// Try to read body for error details
 		body, _ := io.ReadAll(resp.Body)
-		lastErr = fmt.Errorf("last.fm api returned status %d: %s", resp.StatusCode, string(body))
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		lastErr = resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("last.fm api returned status %d: %s", resp.StatusCode, string(body)))
 
 		// If not a 500 error, don't retry
 		if resp.StatusCode < 500 {

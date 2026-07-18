@@ -28,7 +28,7 @@ func TestMetadataService_GetEnricherFactory_Registered(t *testing.T) {
 		called = true
 		return nil, nil
 	}
-	svc.Register(enrichers.TypeSpotify, factory)
+	require.NoError(t, svc.Register(enrichers.TypeSpotify, factory))
 
 	// Get the factory back
 	got, ok := svc.GetEnricherFactory(enrichers.TypeSpotify)

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -147,14 +146,26 @@ func main() {
 	playlistSyncSvc.Register(navidrome.New(logger, cfg))
 
 	// Initialize Metadata Service (for catalog enrichment)
+	// Governing: ADR-0015, SPEC metadata-enrichment-pipeline REQ-ENRICH-050 (duplicate registrations error)
 	metadataSvc := services.NewMetadataService(client, rawDB, cfg, logger, bus)
-	metadataSvc.Register(enrichers.TypeLidarr, enricherLidarr.New(logger, cfg, client))
-	metadataSvc.Register(enrichers.TypeMusicBrainz, enricherMusicbrainz.New(logger, cfg))
-	metadataSvc.Register(enrichers.TypeNavidrome, enricherNavidrome.New(logger, cfg))
-	metadataSvc.Register(enrichers.TypeSpotify, enricherSpotify.New(logger, cfg))
-	metadataSvc.Register(enrichers.TypeLastFM, enricherLastfm.New(logger, cfg))
-	metadataSvc.Register(enrichers.TypeFanart, enricherFanart.New(logger, cfg))
-	metadataSvc.Register(enrichers.TypeOpenAI, enricherOpenai.New(logger, cfg))
+	mustRegisterEnricher := func(t enrichers.Type, factory enrichers.Factory) {
+		if err := metadataSvc.Register(t, factory); err != nil {
+			logger.Error("failed to register enricher", "type", string(t), "error", err)
+			os.Exit(1)
+		}
+	}
+	// Governing: ADR-0015 (pluggable enricher registry), ADR-0009 (Lidarr optional — enricher skipped when unconfigured)
+	if cfg.IsLidarrEnabled() {
+		mustRegisterEnricher(enrichers.TypeLidarr, enricherLidarr.New(logger, cfg, client))
+	} else {
+		logger.Info("lidarr enricher disabled (lidarr not configured)")
+	}
+	mustRegisterEnricher(enrichers.TypeMusicBrainz, enricherMusicbrainz.New(logger, cfg))
+	mustRegisterEnricher(enrichers.TypeNavidrome, enricherNavidrome.New(logger, cfg))
+	mustRegisterEnricher(enrichers.TypeSpotify, enricherSpotify.New(logger, cfg))
+	mustRegisterEnricher(enrichers.TypeLastFM, enricherLastfm.New(logger, cfg))
+	mustRegisterEnricher(enrichers.TypeFanart, enricherFanart.New(logger, cfg))
+	mustRegisterEnricher(enrichers.TypeOpenAI, enricherOpenai.New(logger, cfg))
 
 	// Initialize Mixtape Generator Service (for AI-powered mixtape generation)
 	mixtapeGenerator := vibes.NewMixtapeGenerator(client, cfg, logger, bus)
@@ -183,21 +194,13 @@ func main() {
 
 	// Governing: SPEC graceful-shutdown REQ-TMO-001 (30s default shutdown budget)
 	// Governing: SPEC graceful-shutdown REQ-TMO-005 (configurable shutdown timeout)
-	shutdownTimeout := 30 * time.Second
-	if s := os.Getenv("SPOTTER_SHUTDOWN_TIMEOUT"); s != "" {
-		if d, err := time.ParseDuration(s); err == nil {
-			shutdownTimeout = d
-		}
-	}
+	// Governing: ADR-0009 (Viper configuration — SPOTTER_SHUTDOWN_TIMEOUT read via config, not os.Getenv)
+	shutdownTimeout := cfg.GetShutdownTimeout()
 
 	// Governing: SPEC graceful-shutdown REQ-SEM-001 through REQ-SEM-004 (bounded concurrency semaphore)
 	// Governing: SPEC graceful-shutdown REQ-SEM-002 (configurable semaphore capacity, default 10)
-	maxJobs := 10
-	if s := os.Getenv("SPOTTER_MAX_CONCURRENT_JOBS"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			maxJobs = n
-		}
-	}
+	// Governing: ADR-0009 (Viper configuration — SPOTTER_MAX_CONCURRENT_JOBS read via config, not os.Getenv)
+	maxJobs := cfg.GetMaxConcurrentJobs()
 	sem := make(chan struct{}, maxJobs)
 
 	// Governing: SPEC graceful-shutdown REQ-WG-001 (single shared WaitGroup for all per-user goroutines)
@@ -407,8 +410,9 @@ func main() {
 	}()
 
 	// Governing: SPEC-0017 REQ "Background Submitter Goroutine", ADR-0029, ADR-0013
+	// Governing: ADR-0009 (Lidarr optional — submitter skipped when unconfigured)
 	// Background Lidarr Queue Submitter (only if Lidarr is configured)
-	if cfg.Lidarr.BaseURL != "" && cfg.Lidarr.APIKey != "" {
+	if cfg.IsLidarrEnabled() {
 		lidarrSubmitter := services.NewLidarrSubmitter(client, cfg, logger)
 		wg.Add(1)
 		go func() {

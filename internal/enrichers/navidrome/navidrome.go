@@ -15,6 +15,7 @@ import (
 	"spotter/ent"
 	"spotter/internal/config"
 	"spotter/internal/enrichers"
+	"spotter/internal/resilience"
 	"spotter/internal/tags"
 )
 
@@ -122,7 +123,8 @@ func (e *Enricher) doRequest(ctx context.Context, method string, params url.Valu
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Navidrome API returned status %d", resp.StatusCode)
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
+		return nil, resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("Navidrome API returned status %d", resp.StatusCode))
 	}
 
 	var result []byte
