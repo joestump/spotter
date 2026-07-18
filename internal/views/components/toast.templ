@@ -39,7 +39,7 @@ templ Toast(title, message, iconType string) {
 	<div
 		id={ id }
 		class={
-			"alert shadow-lg toast-item pointer-events-auto cursor-pointer relative w-80 max-w-[calc(100vw-2rem)]",
+			"alert rounded-2xl shadow-xl toast-item pointer-events-auto cursor-pointer relative w-80 max-w-[calc(100vw-2rem)]",
 			templ.KV("alert-success", iconType == "play" || iconType == "success"),
 			templ.KV("alert-info", iconType == "playlist" || iconType == "info" || iconType == ""),
 			templ.KV("alert-warning", iconType == "warning"),
@@ -61,7 +61,7 @@ templ Toast(title, message, iconType string) {
 				<span class="icon-[heroicons--information-circle] w-6 h-6 flex-shrink-0"></span>
 			}
 			<div class="flex-1 min-w-0 pr-4 overflow-hidden">
-				<h3 class="font-bold truncate">{ title }</h3>
+				<h3 class="font-bold tracking-tight truncate">{ title }</h3>
 				<div class="text-sm break-words whitespace-normal overflow-wrap-anywhere">{ message }</div>
 			</div>
 		</div>

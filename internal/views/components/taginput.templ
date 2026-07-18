@@ -42,10 +42,10 @@ templ TagInput(cfg TagInputConfig) {
 		/>
 		<!-- Tag display and input area -->
 		<!-- Note: intentionally NOT using DaisyUI .input class — it conflicts with .mockup-browser-toolbar .input pseudo-elements -->
-		<div class="border border-base-content/20 rounded-lg bg-base-100 flex flex-wrap items-center gap-1 h-auto min-h-12 py-2 px-3 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary">
+		<div class="border border-base-300 rounded-xl bg-base-100 flex flex-wrap items-center gap-1.5 h-auto min-h-12 py-2 px-3 transition-colors focus-within:border-primary focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-primary/50">
 			<!-- Selected tags -->
 			<template x-for="(tag, index) in tags" :key="index">
-				<span class="badge badge-primary gap-1">
+				<span class="badge badge-primary gap-1 font-medium">
 					<span x-text="tag"></span>
 					<button type="button" class="hover:text-primary-content/70" @click="removeTag(index)">
 						<span class="icon-[heroicons--x-mark] w-3 h-3"></span>
@@ -74,7 +74,7 @@ templ TagInput(cfg TagInputConfig) {
 				<div
 					x-show="showSuggestions && suggestions.length > 0"
 					x-cloak
-					class="absolute left-0 top-full mt-1 w-64 max-h-48 overflow-y-auto bg-base-100 border border-base-300 rounded-lg shadow-lg z-50"
+					class="absolute left-0 top-full mt-2 w-64 max-h-48 overflow-y-auto bg-base-100 border border-base-300 rounded-xl shadow-xl z-50"
 				>
 					<ul class="menu menu-sm p-1">
 						<template x-for="(suggestion, index) in suggestions" :key="suggestion">

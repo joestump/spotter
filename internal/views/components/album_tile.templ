@@ -8,27 +8,27 @@ import (
 // AlbumTile is a reusable component for displaying an album card,
 // consistent with the design used in the artist library views.
 templ AlbumTile(album *ent.Album) {
-	<a href={ templ.URL(fmt.Sprintf("/library/album/%d", album.ID)) } class="card bg-base-100 shadow-xl hover:shadow-2xl transition-all hover:scale-105">
-		<figure class="aspect-square relative overflow-hidden">
+	<a href={ templ.URL(fmt.Sprintf("/library/album/%d", album.ID)) } class="card bg-base-100 border border-base-300 rounded-2xl p-3 card-hover group">
+		<figure class="aspect-square relative overflow-hidden art-rounded">
 			@AlbumImage(album, "w-full h-full")
 			if album.Year > 0 {
-				<div class="absolute bottom-2 right-2 badge badge-neutral badge-sm px-2 py-0.5">
+				<div class="absolute bottom-2 right-2 badge badge-neutral badge-sm border-0 bg-base-200/80 backdrop-blur-sm font-medium">
 					<span>{ fmt.Sprintf("%d", album.Year) }</span>
 				</div>
 			}
 		</figure>
-		<div class="card-body p-4">
-			<h3 class="card-title text-sm line-clamp-1">{ album.Name }</h3>
+		<div class="card-body p-0 pt-3 gap-1">
+			<h3 class="font-bold tracking-tight text-sm line-clamp-1 group-hover:text-primary transition-colors">{ album.Name }</h3>
 			<div class="flex items-center gap-2 text-xs text-base-content/60">
 				if album.TotalTracks > 0 {
 					<span>{ fmt.Sprintf("%d tracks", album.TotalTracks) }</span>
 				}
 				if album.AlbumType != "" && album.AlbumType != "album" {
-					<span class="badge badge-xs badge-ghost px-1.5 py-0.5">{ album.AlbumType }</span>
+					<span class="badge badge-xs badge-outline capitalize">{ album.AlbumType }</span>
 				}
 			</div>
 			if album.Edges.Artist != nil {
-				<p class="text-xs text-base-content/50 truncate mt-1">
+				<p class="text-xs text-base-content/50 truncate">
 					{ album.Edges.Artist.Name }
 				</p>
 			}

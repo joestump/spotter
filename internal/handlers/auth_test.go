@@ -58,7 +58,7 @@ func TestLogin_Get(t *testing.T) {
 	resp := w.Result()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
-	assert.Contains(t, string(body), "Spotter uses your Navidrome credentials")
+	assert.Contains(t, string(body), "Uses your Navidrome credentials")
 	assert.Contains(t, string(body), "Log in with Navidrome")
 }
 

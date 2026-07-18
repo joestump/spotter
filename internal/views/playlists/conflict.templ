@@ -10,14 +10,17 @@ import (
 // playlist with the same name already exists in Spotter's DB.
 // Governing: SPEC-0015 REQ playlist-pairing
 templ NavidromeConflict(pl *ent.Playlist, conflict *ent.Playlist) {
-	<div id="playlist-conflict" class="alert alert-warning shadow-lg mt-4">
-		<div class="flex flex-col gap-4 w-full">
+	<div id="playlist-conflict" class="card bg-base-100 border border-warning/40 rounded-2xl shadow-xl mt-4 overflow-hidden">
+		<div class="h-1 bg-warning"></div>
+		<div class="card-body gap-5">
 			<div class="flex items-start gap-3">
-				<span class="icon-[heroicons--exclamation-triangle] w-6 h-6 shrink-0 mt-0.5"></span>
+				<div class="w-10 h-10 rounded-xl bg-warning/15 text-warning flex items-center justify-center shrink-0">
+					<span class="icon-[heroicons--exclamation-triangle] w-6 h-6"></span>
+				</div>
 				<div>
-					<p class="font-semibold">Navidrome conflict detected</p>
-					<p class="text-sm">
-						A Navidrome playlist named <strong>"{ conflict.Name }"</strong> already exists.
+					<p class="font-bold tracking-tight">Navidrome conflict detected</p>
+					<p class="text-sm text-base-content/60 mt-0.5">
+						A Navidrome playlist named <strong class="text-base-content">"{ conflict.Name }"</strong> already exists.
 						Choose how to proceed:
 					</p>
 				</div>
@@ -27,7 +30,7 @@ templ NavidromeConflict(pl *ent.Playlist, conflict *ent.Playlist) {
 				hx-post={ fmt.Sprintf("/playlists/%d/resolve-navidrome-conflict", pl.ID) }
 				hx-target="#playlist-conflict"
 				hx-swap="outerHTML"
-				class="flex items-center gap-3"
+				class="flex flex-wrap items-center gap-3 rounded-xl bg-base-200/60 p-4"
 			>
 				<input type="hidden" name="action" value="pair"/>
 				<input type="hidden" name="existing_id" value={ conflict.RemoteID }/>
@@ -42,17 +45,17 @@ templ NavidromeConflict(pl *ent.Playlist, conflict *ent.Playlist) {
 				hx-post={ fmt.Sprintf("/playlists/%d/resolve-navidrome-conflict", pl.ID) }
 				hx-target="#playlist-conflict"
 				hx-swap="outerHTML"
-				class="flex flex-wrap items-center gap-3"
+				class="flex flex-wrap items-center gap-3 rounded-xl bg-base-200/60 p-4"
 			>
 				<input type="hidden" name="action" value="new-name"/>
 				<input
 					type="text"
 					name="name"
 					placeholder="Enter Navidrome playlist name..."
-					class="input input-sm input-bordered flex-1 min-w-48"
+					class="input input-sm input-bordered flex-1 min-w-48 rounded-full"
 					required
 				/>
-				<button type="submit" class="btn btn-sm btn-secondary">
+				<button type="submit" class="btn btn-sm btn-outline btn-primary">
 					<span class="icon-[heroicons--plus] w-4 h-4"></span>
 					Create with this name
 				</button>

@@ -208,8 +208,8 @@ func buildPlaylistSyncDropdownConfig(config PlaylistSyncDropdownConfig) ActionBu
 // PlaylistRebuildModal renders the confirmation modal for rebuilding playlist sync.
 templ PlaylistRebuildModal(playlistID int, playlistName string) {
 	<dialog id={ fmt.Sprintf("playlist-rebuild-modal-%d", playlistID) } class="modal">
-		<div class="modal-box">
-			<h3 class="font-bold text-lg flex items-center gap-2">
+		<div class="modal-box rounded-2xl border border-base-300">
+			<h3 class="font-bold text-lg tracking-tight flex items-center gap-2">
 				<span class="icon-[heroicons--exclamation-triangle] w-6 h-6 text-warning"></span>
 				Rebuild Playlist Sync
 			</h3>
@@ -245,8 +245,8 @@ templ PlaylistRebuildModal(playlistID int, playlistName string) {
 // PlaylistDisableSyncModal renders the confirmation modal for disabling playlist sync.
 templ PlaylistDisableSyncModal(playlistID int, playlistName string) {
 	<dialog id={ fmt.Sprintf("playlist-disable-sync-modal-%d", playlistID) } class="modal">
-		<div class="modal-box">
-			<h3 class="font-bold text-lg flex items-center gap-2">
+		<div class="modal-box rounded-2xl border border-base-300">
+			<h3 class="font-bold text-lg tracking-tight flex items-center gap-2">
 				<span class="icon-[heroicons--pause-circle] w-6 h-6 text-error"></span>
 				Disable Playlist Sync
 			</h3>
@@ -290,7 +290,7 @@ script closeModal(modalID string) {
 templ PlaylistSyncToggle(config PlaylistMenuConfig) {
 	<div
 		id="playlist-sync-toggle"
-		class="flex items-center gap-3 bg-base-100 rounded-lg px-4 py-2 shadow"
+		class="flex items-center gap-3 bg-base-100 border border-base-300 rounded-xl px-4 py-2"
 	>
 		<div class="flex items-center gap-2">
 			<span class="icon-[heroicons--arrow-path] w-4 h-4 text-primary"></span>
@@ -318,24 +318,24 @@ templ PlaylistSyncToggle(config PlaylistMenuConfig) {
 // PlaylistAIDropdown renders an AI actions dropdown for Navidrome playlists.
 templ PlaylistAIDropdown(config PlaylistMenuConfig) {
 	<div class="dropdown dropdown-end">
-		<div tabindex="0" role="button" class="btn btn-sm btn-accent gap-2">
+		<div tabindex="0" role="button" class="btn btn-sm btn-secondary gap-2">
 			<span class="icon-[heroicons--sparkles] w-4 h-4"></span>
 			AI Actions
 			<span class="icon-[heroicons--chevron-down] w-3 h-3"></span>
 		</div>
-		<ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-64">
+		<ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow-xl bg-base-100 border border-base-300 rounded-2xl w-64 mt-2">
 			<li class="menu-title">
-				<span class="text-xs uppercase tracking-wider">Content Generation</span>
+				<span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Content Generation</span>
 			</li>
 			<li>
 				<button
 					hx-post={ fmt.Sprintf("/playlists/%d/ai/generate-metadata", config.PlaylistID) }
 					hx-swap="none"
 					hx-indicator="#ai-indicator"
-					class="flex items-center gap-3"
+					class="flex items-center gap-3 rounded-lg"
 					onclick="this.closest('details')?.removeAttribute('open'); this.closest('.dropdown')?.blur();"
 				>
-					<span class="icon-[heroicons--document-text] w-5 h-5 text-accent"></span>
+					<span class="icon-[heroicons--document-text] w-5 h-5 text-secondary"></span>
 					<div class="flex flex-col items-start">
 						<span class="font-medium">Generate Title &amp; Description</span>
 						<span class="text-xs text-base-content/60">AI-powered metadata</span>
@@ -347,10 +347,10 @@ templ PlaylistAIDropdown(config PlaylistMenuConfig) {
 					hx-post={ fmt.Sprintf("/playlists/%d/ai/generate-artwork", config.PlaylistID) }
 					hx-swap="none"
 					hx-indicator="#ai-indicator"
-					class="flex items-center gap-3"
+					class="flex items-center gap-3 rounded-lg"
 					onclick="this.closest('details')?.removeAttribute('open'); this.closest('.dropdown')?.blur();"
 				>
-					<span class="icon-[heroicons--photo] w-5 h-5 text-accent"></span>
+					<span class="icon-[heroicons--photo] w-5 h-5 text-secondary"></span>
 					<div class="flex flex-col items-start">
 						<span class="font-medium">Generate Album Art</span>
 						<span class="text-xs text-base-content/60">AI-generated cover image</span>
@@ -359,7 +359,7 @@ templ PlaylistAIDropdown(config PlaylistMenuConfig) {
 			</li>
 			<div class="divider my-1"></div>
 			<li class="menu-title">
-				<span class="text-xs uppercase tracking-wider">Playlist Info</span>
+				<span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">Playlist Info</span>
 			</li>
 			<li class="disabled">
 				<div class="flex items-center gap-3 opacity-60">
@@ -373,7 +373,7 @@ templ PlaylistAIDropdown(config PlaylistMenuConfig) {
 		</ul>
 	</div>
 	<!-- AI Loading Indicator -->
-	<span id="ai-indicator" class="htmx-indicator loading loading-spinner loading-sm text-accent"></span>
+	<span id="ai-indicator" class="htmx-indicator loading loading-spinner loading-sm text-secondary"></span>
 }
 
 // PlaylistSyncBadgeConfig holds the configuration for the playlist sync badge.

@@ -49,47 +49,50 @@ templ Show(playlist *ent.Playlist, tracks []components.TrackTableRow, cfg *confi
 					<div class="absolute inset-0 bg-gradient-to-b from-transparent via-base-200/80 to-base-200"></div>
 				</div>
 			} else {
-				<div class="absolute inset-0 h-80 bg-gradient-to-b from-info/20 to-base-200"></div>
+				<div class="absolute inset-0 h-80 bg-gradient-to-b from-primary/20 via-secondary/10 to-base-200"></div>
 			}
 			<!-- Playlist Info -->
 			<div class="relative pt-8 px-6 lg:px-8 pb-8">
 				<div class="max-w-7xl mx-auto">
-					<div class="flex flex-col md:flex-row items-start gap-8">
+					<div class="flex flex-col md:flex-row items-start md:items-end gap-8">
 						<!-- Playlist Cover -->
 						<div class="flex-shrink-0">
-							<div class="w-56 h-56 md:w-64 md:h-64 rounded-xl shadow-2xl ring ring-base-100 ring-offset-base-200 ring-offset-2 overflow-hidden">
+							<div class="w-56 h-56 md:w-64 md:h-64 rounded-2xl art-rounded shadow-2xl overflow-hidden">
 								if playlist.ImageURL != "" {
 									<img src={ playlist.ImageURL } alt={ playlist.Name } class="w-full h-full object-cover"/>
 								} else {
-									<div class="bg-base-300 w-full h-full flex items-center justify-center">
-										<span class="icon-[heroicons--queue-list] w-24 h-24 text-base-content/30"></span>
+									<div class="bg-gradient-to-br from-primary/20 to-secondary/20 w-full h-full flex items-center justify-center">
+										<span class="icon-[heroicons--musical-note] w-24 h-24 text-primary/60"></span>
 									</div>
 								}
 							</div>
 						</div>
 						<!-- Playlist Details -->
 						<div class="flex-1 min-w-0">
-							<div class="flex items-center gap-3 mb-2">
+							<div class="flex items-center gap-3 mb-3">
+								<span class="text-xs font-semibold uppercase tracking-widest text-base-content/50">Playlist</span>
 								@providerBadge(playlist.Source)
 							</div>
-							<h1 class="text-4xl md:text-5xl font-bold mb-2 text-base-content">{ playlist.Name }</h1>
+							<h1 class="text-4xl md:text-6xl font-bold tracking-tight mb-3 text-base-content">{ playlist.Name }</h1>
 							if playlist.Description != "" {
 								<p class="text-base-content/60 mb-4 max-w-2xl">{ playlist.Description }</p>
 							}
 							<!-- Quick Stats -->
-							<div class="flex flex-wrap gap-4 mb-4">
-								<div class="flex items-center gap-2 text-base-content/70">
-									<span class="icon-[heroicons--musical-note] w-5 h-5"></span>
-									<span class="font-semibold">{ formatNumber(playlist.TrackCount) }</span> tracks
-								</div>
-								<div class="flex items-center gap-2 text-base-content/70">
-									<span class="icon-[heroicons--user-group] w-5 h-5"></span>
-									<span class="font-semibold">{ formatNumber(playlist.UniqueArtists) }</span> artists
-								</div>
-								<div class="flex items-center gap-2 text-base-content/70">
-									<span class="icon-[heroicons--square-3-stack-3d] w-5 h-5"></span>
-									<span class="font-semibold">{ formatNumber(playlist.UniqueAlbums) }</span> albums
-								</div>
+							<div class="flex flex-wrap items-center gap-x-2 gap-y-2 mb-5 text-sm">
+								<span class="inline-flex items-center gap-2 text-base-content/80">
+									<span class="icon-[heroicons--musical-note] w-4 h-4 text-primary"></span>
+									<span class="font-bold text-base-content">{ formatNumber(playlist.TrackCount) }</span> tracks
+								</span>
+								<span class="text-base-content/30">·</span>
+								<span class="inline-flex items-center gap-2 text-base-content/80">
+									<span class="icon-[heroicons--user-group] w-4 h-4 text-primary"></span>
+									<span class="font-bold text-base-content">{ formatNumber(playlist.UniqueArtists) }</span> artists
+								</span>
+								<span class="text-base-content/30">·</span>
+								<span class="inline-flex items-center gap-2 text-base-content/80">
+									<span class="icon-[heroicons--square-3-stack-3d] w-4 h-4 text-primary"></span>
+									<span class="font-bold text-base-content">{ formatNumber(playlist.UniqueAlbums) }</span> albums
+								</span>
 							</div>
 							<!-- Playlist Menu Bar -->
 							<div class="flex flex-wrap items-center gap-4">
@@ -113,13 +116,13 @@ templ Show(playlist *ent.Playlist, tracks []components.TrackTableRow, cfg *confi
 		</div>
 		<div class="max-w-7xl mx-auto">
 			<!-- Tracks -->
-			<div class="card bg-base-100 shadow-xl mb-8">
+			<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl mb-8">
 				<div class="card-body">
 					<div class="flex items-center justify-between">
-						<h3 class="card-title">
-							<span class="icon-[heroicons--queue-list] w-5 h-5"></span>
+						<h3 class="card-title text-xl font-bold tracking-tight">
+							<span class="icon-[heroicons--queue-list] w-5 h-5 text-primary"></span>
 							Tracks
-							<span class="badge badge-ghost badge-sm">{ fmt.Sprintf("%d", len(tracks)) }</span>
+							<span class="badge badge-primary badge-sm font-semibold">{ fmt.Sprintf("%d", len(tracks)) }</span>
 						</h3>
 						@components.TrackTableToolbar(components.TrackTableToolbarConfig{
 							TableID:           "playlist-tracks-table",
@@ -136,9 +139,11 @@ templ Show(playlist *ent.Playlist, tracks []components.TrackTableRow, cfg *confi
 						})
 					</div>
 					if len(tracks) == 0 {
-						<div class="text-center py-8">
-							<span class="icon-[heroicons--musical-note] w-12 h-12 text-base-content/30 mx-auto mb-4"></span>
-							<p class="text-base-content/60">No tracks in this playlist yet.</p>
+						<div class="text-center py-12">
+							<div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mx-auto mb-4">
+								<span class="icon-[heroicons--musical-note] w-8 h-8 text-primary"></span>
+							</div>
+							<p class="text-base-content/70 font-medium">No tracks in this playlist yet.</p>
 							<p class="text-base-content/40 text-sm mt-1">Sync your playlists to import tracks.</p>
 						</div>
 					} else {
@@ -147,10 +152,10 @@ templ Show(playlist *ent.Playlist, tracks []components.TrackTableRow, cfg *confi
 				</div>
 			</div>
 			<!-- Metadata Table -->
-			<div class="card bg-base-100 shadow-xl mb-8">
+			<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl mb-8">
 				<div class="card-body">
-					<h3 class="card-title">
-						<span class="icon-[heroicons--information-circle] w-5 h-5"></span>
+					<h3 class="card-title text-xl font-bold tracking-tight">
+						<span class="icon-[heroicons--information-circle] w-5 h-5 text-primary"></span>
 						Metadata
 					</h3>
 					@components.MetadataTable([]components.MetadataRow{

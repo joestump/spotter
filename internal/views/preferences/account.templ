@@ -10,31 +10,36 @@ import (
 templ Account(user *ent.User, cfg *config.Config, smtpConfigured bool) {
 	@layouts.Dashboard("Account | Spotter", cfg, "/preferences/account") {
 		<div class="max-w-5xl mx-auto">
-			<div class="mb-8">
-				<h2 class="text-3xl font-bold">Account</h2>
-				<p class="text-base-content/60 mt-2">Manage your email and notification settings</p>
-			</div>
+			<header class="mb-8">
+				<p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Preferences</p>
+				<h2 class="text-3xl font-bold tracking-tight mt-1">Account</h2>
+				<p class="text-base-content/60 mt-2">Manage where Spotter reaches you and how it lets you know.</p>
+			</header>
 			<div class="space-y-6">
 				<!-- Email Settings Card -->
 				// Governing: SPEC-0015 REQ "User Email Address"
-				<div class="card bg-base-100 shadow-xl">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl">
 					<div class="card-body">
-						<h3 class="card-title">
-							<span class="icon-[heroicons--envelope] w-6 h-6"></span>
-							Email Address
-						</h3>
-						<p class="text-base-content/60 text-sm mt-1">
-							Used for sync failure notifications. Leave blank to disable email notifications.
-						</p>
+						<div class="flex items-center gap-3">
+							<span class="grid place-items-center w-11 h-11 rounded-xl bg-primary/10 text-primary shrink-0">
+								<span class="icon-[heroicons--envelope] w-6 h-6"></span>
+							</span>
+							<div>
+								<h3 class="text-lg font-bold tracking-tight">Email Address</h3>
+								<p class="text-sm text-base-content/60">
+									Used for sync failure notifications. Leave blank to disable email notifications.
+								</p>
+							</div>
+						</div>
 						<form
 							hx-post="/preferences/account/email"
 							hx-target="#toasts"
 							hx-swap="beforeend"
-							class="space-y-4 mt-4"
+							class="space-y-4 mt-6"
 						>
 							<div class="form-control">
 								<label class="label">
-									<span class="label-text font-medium">Email</span>
+									<span class="label-text font-semibold">Email</span>
 								</label>
 								<input
 									type="email"
@@ -42,7 +47,7 @@ templ Account(user *ent.User, cfg *config.Config, smtpConfigured bool) {
 									value={ user.Email }
 									maxlength="320"
 									placeholder="you@example.com"
-									class="input input-bordered w-full max-w-md"
+									class="input input-bordered w-full max-w-md rounded-xl"
 								/>
 							</div>
 							<div class="card-actions">
@@ -56,30 +61,35 @@ templ Account(user *ent.User, cfg *config.Config, smtpConfigured bool) {
 				</div>
 				<!-- Notification Status Card -->
 				// Governing: SPEC-0015 REQ "Preferences UI — Email Address and Notification Status"
-				<div class="card bg-base-100 shadow-xl">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl">
 					<div class="card-body">
-						<h3 class="card-title">
-							<span class="icon-[heroicons--bell] w-6 h-6"></span>
-							Notifications
-						</h3>
-						<div class="mt-4 space-y-4">
+						<div class="flex items-center gap-3">
+							<span class="grid place-items-center w-11 h-11 rounded-xl bg-primary/10 text-primary shrink-0">
+								<span class="icon-[heroicons--bell] w-6 h-6"></span>
+							</span>
+							<div>
+								<h3 class="text-lg font-bold tracking-tight">Notifications</h3>
+								<p class="text-sm text-base-content/60">Delivery status for sync alerts on this instance.</p>
+							</div>
+						</div>
+						<div class="mt-6 space-y-4">
 							<!-- SMTP Status -->
-							<div class="flex items-center gap-3">
-								<span class="font-medium text-sm">SMTP Status:</span>
+							<div class="flex items-center gap-3 rounded-xl bg-base-200 px-4 py-3">
+								<span class="font-semibold text-sm">SMTP Status</span>
 								if smtpConfigured {
-									<span class="badge badge-success gap-1">
+									<span class="badge badge-success gap-1 ml-auto">
 										<span class="icon-[heroicons--check-circle] w-4 h-4"></span>
 										Configured
 									</span>
 								} else {
-									<span class="badge badge-warning gap-1">
+									<span class="badge badge-warning gap-1 ml-auto">
 										<span class="icon-[heroicons--exclamation-triangle] w-4 h-4"></span>
 										Not configured
 									</span>
 								}
 							</div>
 							if !smtpConfigured {
-								<div class="alert alert-warning">
+								<div class="alert alert-warning rounded-xl">
 									<span class="icon-[heroicons--exclamation-triangle] w-5 h-5"></span>
 									<span>Email notifications are disabled — SMTP is not configured on this instance.</span>
 								</div>
@@ -87,7 +97,7 @@ templ Account(user *ent.User, cfg *config.Config, smtpConfigured bool) {
 							<!-- Test Notification Button -->
 							if smtpConfigured && user.Email != "" {
 								<div class="divider"></div>
-								<div class="flex items-center gap-4">
+								<div class="flex flex-wrap items-center gap-4">
 									<button
 										class="btn btn-outline btn-sm gap-2"
 										hx-post="/preferences/notifications/test"

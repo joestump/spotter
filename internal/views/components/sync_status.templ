@@ -270,7 +270,7 @@ templ syncProgressBarContent(config SyncStatusConfig) {
 templ SyncStatusBadge(config SyncStatusConfig) {
 	if config.SyncEnabled {
 		<span
-			class={ "badge badge-sm gap-1", getBadgeClass(getSyncState(config)) }
+			class={ "badge badge-sm gap-1 font-semibold", getBadgeClass(getSyncState(config)) }
 			if config.SyncError != "" {
 				title={ config.SyncError }
 			}
@@ -285,7 +285,7 @@ templ SyncStatusBadge(config SyncStatusConfig) {
 // Suitable for entity detail pages.
 templ SyncStatusDetail(config SyncStatusConfig) {
 	<div
-		class="card bg-base-100 shadow-lg"
+		class="card bg-base-100 border border-base-300 rounded-2xl"
 		id={ fmt.Sprintf("sync-status-detail-%s-%d", config.EntityType, config.EntityID) }
 		if isPending(config) {
 			hx-get={ fmt.Sprintf("/%ss/%d/sync-status-detail", config.EntityType, config.EntityID) }
@@ -295,7 +295,7 @@ templ SyncStatusDetail(config SyncStatusConfig) {
 	>
 		<div class="card-body">
 			<div class="flex items-center justify-between">
-				<h3 class="card-title text-base">
+				<h3 class="card-title text-base font-bold tracking-tight">
 					<span class="icon-[heroicons--arrow-path] w-5 h-5 text-primary"></span>
 					Sync Status
 				</h3>

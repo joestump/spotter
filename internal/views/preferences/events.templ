@@ -188,25 +188,30 @@ func formatLastRunISO(t *time.Time) string {
 templ Tasks(user *ent.User, tasks []types.Task, events []*ent.SyncEvent, selectedProvider string, selectedEventType string, providers []string, eventTypes []syncevent.EventType, cfg *config.Config) {
 	@layouts.Dashboard("Tasks | Spotter", cfg, "/preferences/tasks") {
 		<div class="max-w-6xl mx-auto">
-			<div class="mb-8">
-				<h2 class="text-3xl font-bold">Tasks</h2>
-				<p class="text-base-content/60 mt-2">Run background tasks and view task history</p>
-			</div>
+			<header class="mb-8">
+				<p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Preferences</p>
+				<h2 class="text-3xl font-bold tracking-tight mt-1">Tasks</h2>
+				<p class="text-base-content/60 mt-2">Kick off background jobs and follow the sync activity feed.</p>
+			</header>
 			<div class="space-y-6">
 				<!-- Tasks Table Card -->
-				<div class="card bg-base-100 shadow-xl">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl">
 					<div class="card-body">
-						<h3 class="card-title">
-							<span class="icon-[heroicons--play-circle] w-6 h-6"></span>
-							Background Tasks
-						</h3>
-						<p class="text-base-content/60 text-sm mb-4">
-							Run tasks manually or view when they last ran automatically.
-						</p>
-						<div class="overflow-x-auto">
+						<div class="flex items-center gap-3">
+							<span class="grid place-items-center w-11 h-11 rounded-xl bg-primary/10 text-primary shrink-0">
+								<span class="icon-[heroicons--play-circle] w-6 h-6"></span>
+							</span>
+							<div>
+								<h3 class="text-lg font-bold tracking-tight">Background Tasks</h3>
+								<p class="text-sm text-base-content/60">
+									Run tasks manually or see when they last ran on their own.
+								</p>
+							</div>
+						</div>
+						<div class="overflow-x-auto mt-6">
 							<table class="table">
 								<thead>
-									<tr>
+									<tr class="text-xs uppercase tracking-wider text-base-content/50">
 										<th>Task</th>
 										<th>Last Run</th>
 										<th class="text-right">Action</th>
@@ -214,9 +219,9 @@ templ Tasks(user *ent.User, tasks []types.Task, events []*ent.SyncEvent, selecte
 								</thead>
 								<tbody>
 									for _, task := range tasks {
-										<tr>
+										<tr class="hover">
 											<td>
-												<div class="font-medium">{ task.Name }</div>
+												<div class="font-semibold">{ task.Name }</div>
 												<div class="text-sm text-base-content/60">{ task.Description }</div>
 											</td>
 											<td class="whitespace-nowrap">
@@ -239,23 +244,27 @@ templ Tasks(user *ent.User, tasks []types.Task, events []*ent.SyncEvent, selecte
 					</div>
 				</div>
 				<!-- Event History Card -->
-				<div class="card bg-base-100 shadow-xl">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl">
 					<div class="card-body">
 						<div class="flex flex-wrap items-center justify-between gap-4">
-							<h3 class="card-title">
-								<span class="icon-[heroicons--clock] w-6 h-6"></span>
-								History
-								<span class="badge badge-neutral">{ lenStr(events) } events</span>
-							</h3>
+							<div class="flex items-center gap-3">
+								<span class="grid place-items-center w-11 h-11 rounded-xl bg-primary/10 text-primary shrink-0">
+									<span class="icon-[heroicons--clock] w-6 h-6"></span>
+								</span>
+								<div class="flex items-center gap-2">
+									<h3 class="text-lg font-bold tracking-tight">History</h3>
+									<span class="badge badge-primary badge-outline">{ lenStr(events) } events</span>
+								</div>
+							</div>
 							<!-- Filters -->
 							<form method="GET" action="/preferences/tasks" class="flex flex-wrap items-center gap-2">
-								<select name="provider" class="select select-bordered select-sm" onchange="this.form.submit()">
+								<select name="provider" class="select select-bordered select-sm rounded-lg" onchange="this.form.submit()">
 									<option value="">All Sources</option>
 									for _, p := range providers {
 										<option value={ p } selected?={ selectedProvider == p }>{ formatProvider(p) }</option>
 									}
 								</select>
-								<select name="event_type" class="select select-bordered select-sm" onchange="this.form.submit()">
+								<select name="event_type" class="select select-bordered select-sm rounded-lg" onchange="this.form.submit()">
 									<option value="">All Events</option>
 									for _, et := range eventTypes {
 										<option value={ string(et) } selected?={ selectedEventType == string(et) }>{ formatEventType(et) }</option>
@@ -270,18 +279,20 @@ templ Tasks(user *ent.User, tasks []types.Task, events []*ent.SyncEvent, selecte
 							</form>
 						</div>
 						if len(events) == 0 {
-							<div class="text-center py-12">
-								<span class="icon-[heroicons--inbox] w-16 h-16 text-base-content/30 mx-auto"></span>
-								<p class="text-base-content/60 mt-4">No events found</p>
+							<div class="flex flex-col items-center text-center py-16">
+								<span class="grid place-items-center w-16 h-16 rounded-2xl bg-base-200 text-base-content/30">
+									<span class="icon-[heroicons--inbox] w-9 h-9"></span>
+								</span>
+								<p class="text-base-content/70 font-semibold mt-4">No events found</p>
 								if selectedProvider != "" || selectedEventType != "" {
-									<p class="text-sm text-base-content/40 mt-2">Try adjusting your filters</p>
+									<p class="text-sm text-base-content/40 mt-1">Try adjusting your filters</p>
 								}
 							</div>
 						} else {
-							<div class="overflow-x-auto mt-4">
+							<div class="overflow-x-auto mt-6">
 								<table class="table table-zebra">
 									<thead>
-										<tr>
+										<tr class="text-xs uppercase tracking-wider text-base-content/50">
 											<th>Time</th>
 											<th>Source</th>
 											<th>Type</th>
@@ -319,15 +330,15 @@ templ Tasks(user *ent.User, tasks []types.Task, events []*ent.SyncEvent, selecte
 		</div>
 		<!-- Reset Data Confirmation Modal -->
 		<dialog id="reset-confirm-modal" class="modal">
-			<div class="modal-box">
-				<h3 class="font-bold text-lg text-error">
-					<span class="icon-[heroicons--exclamation-triangle] w-6 h-6 inline-block mr-2"></span>
+			<div class="modal-box rounded-2xl border border-base-300">
+				<h3 class="font-bold text-lg text-error flex items-center gap-2">
+					<span class="icon-[heroicons--exclamation-triangle] w-6 h-6"></span>
 					Confirm Data Reset
 				</h3>
 				<p class="py-4">
 					This will <strong>permanently delete</strong> all your:
 				</p>
-				<ul class="list-disc list-inside mb-4 text-base-content/80">
+				<ul class="list-disc list-inside mb-4 space-y-1 text-base-content/80">
 					<li>Listening history</li>
 					<li>Playlists</li>
 					<li>Artist catalog and metadata</li>

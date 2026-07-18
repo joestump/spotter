@@ -153,9 +153,9 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 	@layouts.Dashboard(fmt.Sprintf("%s | Artists | Spotter", artist.Name), cfg, "/library/artist") {
 		<!-- AI Regenerate Modal -->
 		<dialog id="ai-regenerate-modal" class="modal">
-			<div class="modal-box">
+			<div class="modal-box bg-base-100 border border-base-300 rounded-2xl">
 				<h3 class="font-bold text-lg flex items-center gap-2">
-					<span class="icon-[heroicons--sparkles] w-5 h-5 text-accent"></span>
+					<span class="icon-[heroicons--sparkles] w-5 h-5 text-secondary"></span>
 					Regenerate AI Insights
 				</h3>
 				<p class="py-4">
@@ -169,7 +169,7 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 						<button class="btn btn-ghost">Cancel</button>
 					</form>
 					<button
-						class="btn btn-primary"
+						class="btn btn-secondary"
 						hx-post={ fmt.Sprintf("/library/artist/%d/regenerate-ai", artist.ID) }
 						hx-swap="none"
 						hx-indicator="#ai-regenerate-indicator"
@@ -195,12 +195,12 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 			<!-- AI Menu (Top Right) -->
 			<div class="absolute top-4 right-4 z-10">
 				<details class="dropdown dropdown-end">
-					<summary class="btn btn-sm btn-ghost bg-base-100/50 hover:bg-base-100/80 gap-1 list-none cursor-pointer">
-						<span class="icon-[heroicons--sparkles] w-4 h-4 text-accent"></span>
+					<summary class="btn btn-sm btn-secondary btn-outline bg-base-100/60 backdrop-blur gap-1 list-none cursor-pointer">
+						<span class="icon-[heroicons--sparkles] w-4 h-4"></span>
 						<span class="hidden sm:inline">AI</span>
 						<span class="icon-[heroicons--chevron-down] w-3 h-3"></span>
 					</summary>
-					<ul class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-56">
+					<ul class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 border border-base-300 rounded-2xl w-56">
 						<li>
 							<button onclick="document.getElementById('ai-regenerate-modal').showModal(); this.closest('details').removeAttribute('open');">
 								<span class="icon-[heroicons--arrow-path] w-4 h-4"></span>
@@ -250,14 +250,15 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 						<!-- Artist Image -->
 						<div class="flex-shrink-0">
 							<div class="avatar">
-								<div class="w-48 h-48 rounded-xl shadow-2xl ring ring-base-100 ring-offset-base-200 ring-offset-2">
+								<div class="w-48 h-48 rounded-2xl shadow-2xl ring-2 ring-base-100/80 ring-offset-base-200 ring-offset-4 bg-gradient-to-br from-primary/20 to-secondary/20">
 									@components.ArtistImage(artist, "w-full h-full object-cover")
 								</div>
 							</div>
 						</div>
 						<!-- Artist Details -->
 						<div class="flex-1 min-w-0">
-							<h1 class="text-4xl md:text-5xl font-bold mb-2 text-base-content">{ artist.Name }</h1>
+							<p class="text-xs font-semibold uppercase tracking-widest text-primary mb-2">Artist</p>
+							<h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-3 text-base-content">{ artist.Name }</h1>
 							// TODO(SPEC-0014): Replace with TypedTagBadge after Tag schema PR #255 merges
 							<!-- Genres and AI Tags -->
 							if len(artist.Genres) > 0 || len(artist.AiTags) > 0 {
@@ -312,10 +313,10 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 			if len(similarArtists) > 0 {
 				<div class="mb-8">
 					<div class="flex items-center justify-between mb-6">
-						<h3 class="text-2xl font-bold flex items-center gap-2">
-							<span class="icon-[heroicons--users] w-6 h-6"></span>
+						<h3 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+							<span class="icon-[heroicons--users] w-6 h-6 text-secondary"></span>
 							Similar Artists
-							<span class="badge badge-accent badge-sm gap-1">
+							<span class="badge badge-secondary badge-sm gap-1">
 								<span class="icon-[heroicons--sparkles] w-3 h-3"></span>
 								AI
 							</span>
@@ -420,11 +421,11 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 			}
 			<!-- Top Tracks -->
 			if len(stats.TopTracks) > 0 {
-				<div class="card bg-base-100 shadow-xl mb-8">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl mb-8">
 					<div class="card-body">
 						<div class="flex items-center justify-between">
-							<h3 class="card-title">
-								<span class="icon-[heroicons--fire] w-5 h-5 text-error"></span>
+							<h3 class="card-title tracking-tight">
+								<span class="icon-[heroicons--fire] w-5 h-5 text-primary"></span>
 								Top Tracks
 							</h3>
 							@components.TrackTableToolbar(components.TrackTableToolbarConfig{
@@ -449,10 +450,10 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 			// TODO(SPEC-0014): Replace with TypedTagGroup after Tag schema PR #255 merges
 			<!-- Track Tags & Genres Section -->
 			if trackTags := collectTrackTags(albums); len(trackTags) > 0 || len(collectTrackGenres(albums)) > 0 || len(collectTrackAITags(albums)) > 0 {
-				<div class="card bg-base-100 shadow-xl mb-8">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl mb-8">
 					<div class="card-body">
-						<h3 class="card-title">
-							<span class="icon-[heroicons--tag] w-5 h-5"></span>
+						<h3 class="card-title tracking-tight">
+							<span class="icon-[heroicons--tag] w-5 h-5 text-primary"></span>
 							Tags & Genres from Tracks
 						</h3>
 						<!-- Track Genres -->
@@ -481,12 +482,12 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 						if trackAITags := collectTrackAITags(albums); len(trackAITags) > 0 {
 							<div>
 								<h4 class="text-sm font-medium text-base-content/60 mb-2 flex items-center gap-1">
-									<span class="icon-[heroicons--sparkles] w-3 h-3 text-accent"></span>
+									<span class="icon-[heroicons--sparkles] w-3 h-3 text-secondary"></span>
 									AI-Generated Tags
 								</h4>
 								<div class="flex flex-wrap gap-1.5">
 									for _, tag := range trackAITags {
-										<span class="badge badge-sm badge-accent gap-1 px-2 py-0.5">
+										<span class="badge badge-sm badge-secondary gap-1 px-2 py-0.5">
 											<span class="icon-[heroicons--sparkles] w-2.5 h-2.5"></span>
 											{ tag }
 										</span>
@@ -500,11 +501,11 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 			<!-- Albums Grid -->
 			if len(albums) > 0 {
 				<div class="mb-8">
-					<h3 class="text-2xl font-bold mb-6 flex items-center gap-2">
-						<span class="icon-[heroicons--square-3-stack-3d] w-6 h-6"></span>
+					<h3 class="text-2xl font-bold tracking-tight mb-6 flex items-center gap-2">
+						<span class="icon-[heroicons--square-3-stack-3d] w-6 h-6 text-primary"></span>
 						Albums
 					</h3>
-					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
 						for _, album := range albums {
 							@components.AlbumTile(album)
 						}
@@ -514,11 +515,11 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 			<!-- Playlists with this Artist -->
 			if len(playlists) > 0 {
 				<div class="mb-8">
-					<h3 class="text-2xl font-bold mb-6 flex items-center gap-2">
-						<span class="icon-[heroicons--queue-list] w-6 h-6"></span>
+					<h3 class="text-2xl font-bold tracking-tight mb-6 flex items-center gap-2">
+						<span class="icon-[heroicons--queue-list] w-6 h-6 text-primary"></span>
 						In Playlists
 					</h3>
-					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
 						for _, pl := range playlists {
 							@components.PlaylistTile(pl.Playlist, fmt.Sprintf("%d tracks by this artist", pl.TrackCount))
 						}
@@ -526,10 +527,10 @@ templ Show(artist *ent.Artist, albums []*ent.Album, playlists []PlaylistWithArti
 				</div>
 			}
 			<!-- Metadata Table -->
-			<div class="card bg-base-100 shadow-xl mb-8">
+			<div class="card bg-base-100 border border-base-300 rounded-2xl mb-8">
 				<div class="card-body">
-					<h3 class="card-title">
-						<span class="icon-[heroicons--information-circle] w-5 h-5"></span>
+					<h3 class="card-title tracking-tight">
+						<span class="icon-[heroicons--information-circle] w-5 h-5 text-primary"></span>
 						Metadata
 					</h3>
 					@components.MetadataTable([]components.MetadataRow{
@@ -561,11 +562,11 @@ templ CreateMixtapeModalContent(artist *ent.Artist, djs []*ent.DJ) {
 }
 
 templ ProviderHistoryChart(artistID int, data components.StackedChartData, currentTimeframe string) {
-	<div class="card bg-base-100 shadow-xl">
+	<div class="card bg-base-100 border border-base-300 rounded-2xl">
 		<div class="card-body">
 			<div class="flex items-center justify-between mb-4">
-				<h3 class="card-title">
-					<span class="icon-[heroicons--chart-bar] w-5 h-5"></span>
+				<h3 class="card-title tracking-tight">
+					<span class="icon-[heroicons--chart-bar] w-5 h-5 text-primary"></span>
 					Listens Over Time
 				</h3>
 				<select

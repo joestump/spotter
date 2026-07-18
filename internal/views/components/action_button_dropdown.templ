@@ -251,7 +251,7 @@ templ actionButtonDisabled(config ActionButtonDropdownConfig) {
 		}
 	} else {
 		// No action configured - show disabled badge
-		<div class="badge badge-ghost badge-lg gap-2 w-full">
+		<div class="badge badge-ghost badge-lg gap-2 w-full text-base-content/60">
 			<span class="icon-[heroicons--x-circle] w-4 h-4"></span>
 			Not Connected
 		</div>
@@ -268,7 +268,7 @@ func getMenuWidth(width string) string {
 
 // dropdownMenu renders the dropdown menu with actions
 templ dropdownMenu(config ActionButtonDropdownConfig) {
-	<ul class={ "dropdown-content menu bg-base-100 rounded-box z-50 p-2 shadow-xl border border-base-300 mt-1", getMenuWidth(config.MenuWidth) }>
+	<ul class={ "dropdown-content menu bg-base-100 rounded-2xl z-50 p-2 shadow-xl border border-base-300 mt-2", getMenuWidth(config.MenuWidth) }>
 		// Render the menu header if provided
 		if config.MenuHeader != nil {
 			@config.MenuHeader

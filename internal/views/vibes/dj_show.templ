@@ -22,15 +22,19 @@ templ DJShow(dj *ent.DJ, cfg *config.Config) {
 			<div class="flex flex-col lg:flex-row gap-6 mb-8">
 				<!-- Avatar -->
 				<div class="flex-shrink-0">
-					<div class="w-48 h-48 rounded-lg shadow-lg overflow-hidden bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-						<span class="icon-[heroicons--user-circle] w-24 h-24 text-white/50"></span>
+					<div class="w-48 h-48 aspect-square art-rounded overflow-hidden vibe-gradient vibe-ring flex items-center justify-center">
+						<span class="icon-[heroicons--user-circle] w-24 h-24 text-secondary/70"></span>
 					</div>
 				</div>
 				<!-- Info -->
 				<div class="flex-1">
 					<div class="flex items-start justify-between gap-4">
 						<div>
-							<h1 class="text-3xl font-bold">{ dj.Name }</h1>
+							<span class="badge badge-secondary badge-sm gap-1 font-semibold mb-2">
+								<span class="icon-[heroicons--sparkles] w-3 h-3"></span>
+								AI DJ
+							</span>
+							<h1 class="text-3xl font-bold tracking-tight">{ dj.Name }</h1>
 							if dj.SystemPrompt != "" {
 								<p class="text-base-content/60 mt-2 max-w-2xl">{ dj.SystemPrompt }</p>
 							}
@@ -59,10 +63,10 @@ templ DJShow(dj *ent.DJ, cfg *config.Config) {
 				</div>
 			</div>
 			<!-- Configuration Card -->
-			<div class="card bg-base-100 shadow-xl mb-6">
+			<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl mb-6">
 				<div class="card-body">
-					<h2 class="card-title">
-						<span class="icon-[heroicons--adjustments-horizontal] w-6 h-6"></span>
+					<h2 class="card-title text-xl font-bold tracking-tight">
+						<span class="icon-[heroicons--adjustments-horizontal] w-6 h-6 text-primary"></span>
 						Configuration
 					</h2>
 					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
@@ -101,13 +105,13 @@ templ DJShow(dj *ent.DJ, cfg *config.Config) {
 						<!-- Vibes -->
 						<div>
 							<h3 class="text-sm font-medium text-base-content/60 mb-2">
-								<span class="icon-[heroicons--sparkles] w-4 h-4 inline-block text-primary"></span>
+								<span class="icon-[heroicons--sparkles] w-4 h-4 inline-block text-secondary"></span>
 								Vibes
 							</h3>
 							<div class="flex flex-wrap gap-1">
 								if len(dj.Vibes) > 0 {
 									for _, vibe := range dj.Vibes {
-										<span class="badge badge-primary">{ vibe }</span>
+										<span class="badge badge-secondary">{ vibe }</span>
 									}
 								} else {
 									<span class="text-base-content/40 text-sm italic">No vibes set</span>
@@ -150,11 +154,11 @@ templ DJShow(dj *ent.DJ, cfg *config.Config) {
 				</div>
 			</div>
 			<!-- Mixtapes Card -->
-			<div class="card bg-base-100 shadow-xl">
+			<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl">
 				<div class="card-body">
 					<div class="flex items-center justify-between">
-						<h2 class="card-title">
-							<span class="icon-[heroicons--musical-note] w-6 h-6"></span>
+						<h2 class="card-title text-xl font-bold tracking-tight">
+							<span class="icon-[heroicons--musical-note] w-6 h-6 text-primary"></span>
 							Mixtapes
 						</h2>
 						<a href="/vibes/mixtapes" class="btn btn-sm btn-ghost gap-1">
@@ -164,7 +168,9 @@ templ DJShow(dj *ent.DJ, cfg *config.Config) {
 					</div>
 					if len(dj.Edges.Mixtapes) == 0 {
 						<div class="text-center py-12">
-							<span class="icon-[heroicons--musical-note] w-12 h-12 text-base-content/20 mx-auto"></span>
+							<div class="w-16 h-16 rounded-2xl bg-base-200 border border-base-300 flex items-center justify-center mx-auto">
+								<span class="icon-[heroicons--musical-note] w-8 h-8 text-base-content/30"></span>
+							</div>
 							<p class="text-base-content/60 mt-4">No mixtapes yet. Create a mixtape and assign it to this DJ.</p>
 							<a href="/vibes/mixtapes" class="btn btn-primary mt-4 gap-2">
 								<span class="icon-[heroicons--plus] w-5 h-5"></span>
@@ -325,7 +331,7 @@ templ DJShowFormFields(dj *ent.DJ) {
 		Name:           "vibes",
 		Label:          "Vibes",
 		LabelIcon:      "icon-[heroicons--sparkles]",
-		LabelIconClass: "text-primary",
+		LabelIconClass: "text-secondary",
 		Placeholder:    "Type a vibe and press Enter...",
 		HelpText:       "Emotions or adjectives like chill, energetic, nostalgic, uplifting",
 		SuggestionsURL: "",

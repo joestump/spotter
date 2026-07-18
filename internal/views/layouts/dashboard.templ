@@ -41,7 +41,7 @@ templ Dashboard(title string, cfg *config.Config, currentPath string) {
 			<!-- Main Content -->
 			<div class="drawer-content flex flex-col">
 				<!-- Navbar for mobile -->
-				<div class="navbar bg-base-100 lg:hidden shadow-sm">
+				<div class="navbar bg-base-100 lg:hidden border-b border-base-300 sticky top-0 z-30">
 					<div class="flex-none">
 						<label for="drawer-toggle" class="btn btn-square btn-ghost">
 							<span class="icon-[heroicons--bars-3] w-6 h-6"></span>
@@ -62,17 +62,17 @@ templ Dashboard(title string, cfg *config.Config, currentPath string) {
 				<label for="drawer-toggle" aria-label="close sidebar" class="drawer-overlay"></label>
 				<aside class="bg-base-100 w-80 min-h-full flex flex-col border-r border-base-300">
 					<!-- Logo -->
-					<div class="p-4">
-						<a href="/" class="block px-4 py-2">
+					<div class="p-5 pb-3">
+						<a href="/" class="block px-3 py-2 rounded-xl hover:bg-base-200/60 transition-colors">
 							<div class="flex items-center gap-3">
-								<span class="icon-[heroicons--musical-note] w-10 h-10 text-primary drop-shadow-[0_0_14px_rgba(31,223,110,0.6)]"></span>
+								<span class="icon-[heroicons--musical-note] w-9 h-9 text-primary drop-shadow-[0_0_14px_rgba(31,223,110,0.6)]"></span>
 								<h1 class="text-3xl brand-wordmark text-primary">Spotter</h1>
 							</div>
 						</a>
 					</div>
 					<!-- Navigation -->
-					<nav class="flex-1 p-4">
-						<ul class="menu menu-lg gap-1">
+					<nav class="flex-1 px-3 pb-4 overflow-y-auto">
+						<ul class="menu menu-md gap-0.5 w-full">
 							<li>
 								<a href="/" class={ "flex items-center gap-3", templ.KV("active", isActive(currentPath, "/")) }>
 									<span class="icon-[heroicons--home] w-5 h-5"></span>
@@ -82,8 +82,9 @@ templ Dashboard(title string, cfg *config.Config, currentPath string) {
 							<li>
 								<details open?={ isVibesSection(currentPath) }>
 									<summary class={ "flex items-center gap-3", templ.KV("active", false) }>
-										<span class="icon-[heroicons--sparkles] w-5 h-5"></span>
+										<span class="icon-[heroicons--sparkles] w-5 h-5 text-secondary"></span>
 										<span>Vibes</span>
+										<span class="badge badge-secondary badge-sm ml-auto">AI</span>
 									</summary>
 									<ul>
 										<li>
@@ -178,12 +179,12 @@ templ Dashboard(title string, cfg *config.Config, currentPath string) {
 						</ul>
 					</nav>
 					<!-- Logout + Version -->
-					<div class="border-t border-base-300">
-						<a href="/logout" class="btn btn-ghost btn-block justify-start gap-3 rounded-none">
+					<div class="border-t border-base-300 p-3">
+						<a href="/logout" class="btn btn-ghost btn-block justify-start gap-3 rounded-xl text-base-content/70 hover:text-error">
 							<span class="icon-[heroicons--arrow-right-on-rectangle] w-5 h-5"></span>
 							<span>Logout</span>
 						</a>
-						<div class="px-4 pb-3 pt-1 text-xs text-base-content/40 text-center">
+						<div class="px-2 pb-1 pt-2 text-xs text-base-content/40 text-center">
 							<div class="flex items-center justify-center gap-1.5 flex-wrap">
 								<a href={ templ.URL(version.Link()) } target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 hover:text-base-content/60 transition-colors" title={ version.Version }>
 									<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
