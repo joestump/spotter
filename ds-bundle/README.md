@@ -59,8 +59,8 @@ layout glue. Do **not** invent new class names.
 | Field | `sp-field` | `sp-field__label`, control `sp-input` |
 | Sidebar | `sp-nav` | `sp-nav__item`, `sp-nav__item--active` |
 | Alert | `sp-alert` | `--success` `--info` `--danger` |
-| Type | `sp-display` `sp-h1` `sp-h2` `sp-h3` `sp-body` `sp-muted` `sp-small` `sp-wordmark` `sp-eyebrow` `sp-code` |
-| Layout | `sp-stack` · `sp-row` |
+| Type | `sp-display` `sp-h1` `sp-h2` `sp-h3` `sp-body` | `sp-muted` `sp-small` `sp-wordmark` `sp-eyebrow` `sp-code` |
+| Layout | `sp-stack` | `sp-row` (horizontal wrap) |
 
 ### Token vocabulary (see `tokens/spotter.tokens.css` for all)
 

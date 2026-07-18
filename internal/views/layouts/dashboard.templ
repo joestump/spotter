@@ -202,12 +202,15 @@ templ Dashboard(title string, cfg *config.Config, currentPath string) {
 			@components.ToastContainer()
 		</div>
 		<script>
-			// Theme initialization - runs immediately
+			// Theme initialization - runs immediately.
+			// The server already renders the correct default via data-theme on <html>
+			// (templ does NOT interpolate { } inside <script>, so we must not rely on
+			// it here); only apply a user's saved override on top of that default.
 			(function() {
-				const defaultTheme = '{ cfg.Theme.Default }';
 				const savedTheme = localStorage.getItem('spotter-theme');
-				const activeTheme = savedTheme || defaultTheme;
-				document.documentElement.setAttribute('data-theme', activeTheme);
+				if (savedTheme) {
+					document.documentElement.setAttribute('data-theme', savedTheme);
+				}
 			})();
 		</script>
 	}
