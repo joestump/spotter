@@ -39,8 +39,8 @@ templ ArtistTile(artist *ent.Artist) {
 // ArtistTileWithOptions is a reusable component for displaying an artist card
 // with additional options like AI badge.
 templ ArtistTileWithOptions(artist *ent.Artist, opts ArtistTileOptions) {
-	<a href={ templ.URL(fmt.Sprintf("/library/artist/%d", artist.ID)) } class="card bg-base-100 shadow-xl hover:shadow-2xl transition-all hover:scale-105 relative group">
-		<figure class="aspect-square relative">
+	<a href={ templ.URL(fmt.Sprintf("/library/artist/%d", artist.ID)) } class="card bg-base-100 border border-base-300 rounded-2xl p-3 card-hover relative group">
+		<figure class="aspect-square relative overflow-hidden rounded-full art-rounded">
 			@ArtistImage(artist, "w-full h-full object-cover")
 			if opts.ShowAIBadge {
 				<div class="absolute top-2 right-2">
@@ -48,8 +48,8 @@ templ ArtistTileWithOptions(artist *ent.Artist, opts ArtistTileOptions) {
 				</div>
 			}
 		</figure>
-		<div class="card-body p-4">
-			<h3 class="card-title text-sm line-clamp-1">{ artist.Name }</h3>
+		<div class="card-body p-0 pt-3 gap-1 text-center">
+			<h3 class="font-bold tracking-tight text-sm line-clamp-1 group-hover:text-primary transition-colors">{ artist.Name }</h3>
 			<p class="text-xs text-base-content/60 line-clamp-1">
 				if len(artist.Genres) > 0 {
 					{ artist.Genres[0] }
@@ -58,7 +58,7 @@ templ ArtistTileWithOptions(artist *ent.Artist, opts ArtistTileOptions) {
 					"Artist"
 				}
 			</p>
-			<div class="flex items-center justify-between mt-2">
+			<div class="flex items-center justify-center gap-2 mt-1">
 				if followers := formatFollowers(artist.FollowerCount); followers != "" {
 					<span class="text-xs text-base-content/50">{ followers } followers</span>
 				} else {
@@ -66,7 +66,10 @@ templ ArtistTileWithOptions(artist *ent.Artist, opts ArtistTileOptions) {
 					<span></span>
 				}
 				if artist.Popularity != nil && *artist.Popularity > 70 {
-					<span class="badge badge-warning badge-xs">Popular</span>
+					<span class="badge badge-accent badge-xs gap-1">
+						<span class="icon-[heroicons--fire] w-3 h-3"></span>
+						Popular
+					</span>
 				}
 			</div>
 			if opts.ShowAIBadge && opts.Reason != "" {
@@ -83,12 +86,12 @@ templ ArtistTileWithOptions(artist *ent.Artist, opts ArtistTileOptions) {
 templ SimilarArtistTile(artist *ent.Artist, provider string, reason string, confidence float64) {
 	<a
 		href={ templ.URL(fmt.Sprintf("/library/artist/%d", artist.ID)) }
-		class="card bg-base-100 shadow-lg hover:shadow-xl transition-all hover:scale-105 relative group"
+		class="card bg-base-100 border border-base-300 vibe-ring rounded-2xl p-3 card-hover relative group"
 		if reason != "" {
 			title={ reason }
 		}
 	>
-		<figure class="aspect-square relative">
+		<figure class="aspect-square relative overflow-hidden rounded-full art-rounded">
 			@ArtistImage(artist, "w-full h-full object-cover")
 			<div class="absolute top-2 right-2">
 				@AIBadge(provider)
@@ -99,15 +102,15 @@ templ SimilarArtistTile(artist *ent.Artist, provider string, reason string, conf
 				</div>
 			}
 		</figure>
-		<div class="card-body p-3">
-			<h3 class="card-title text-sm line-clamp-1">{ artist.Name }</h3>
+		<div class="card-body p-0 pt-3 gap-1 text-center">
+			<h3 class="font-bold tracking-tight text-sm line-clamp-1 group-hover:text-primary transition-colors">{ artist.Name }</h3>
 			if len(artist.Genres) > 0 {
 				<p class="text-xs text-base-content/60 line-clamp-1">{ artist.Genres[0] }</p>
 			}
 		</div>
 		if reason != "" {
-			<div class="absolute inset-0 bg-base-300/95 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4 rounded-2xl">
-				<p class="text-xs text-center text-base-content/80 leading-relaxed">{ reason }</p>
+			<div class="absolute inset-0 vibe-gradient backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4 rounded-2xl">
+				<p class="text-xs text-center text-base-content/90 leading-relaxed">{ reason }</p>
 			</div>
 		}
 	</a>
@@ -116,7 +119,7 @@ templ SimilarArtistTile(artist *ent.Artist, provider string, reason string, conf
 // AIBadge displays a small badge indicating AI-generated content.
 templ AIBadge(provider string) {
 	<div class="tooltip tooltip-left" data-tip={ aiProviderTooltip(provider) }>
-		<span class="badge badge-accent badge-sm gap-1 shadow-md">
+		<span class="badge badge-secondary badge-sm gap-1 shadow-glow-secondary font-semibold">
 			<span class="icon-[heroicons--sparkles] w-3 h-3"></span>
 			if provider != "" {
 				{ provider }

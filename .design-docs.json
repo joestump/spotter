@@ -70,7 +70,7 @@
       "managed": true
     },
     "docs-site/src/css/custom.css": {
-      "checksum": "sha256:ebb415ff9940f682477d29968981fad0b1bc00e5db943bd590e085313be1013b",
+      "checksum": "sha256:9fb9f4a3dbd06ce0003a36d76a036a72129eb1cf7d68db5040934953d19da72d",
       "managed": true
     },
     "docs-site/src/theme/MDXComponents.tsx": {

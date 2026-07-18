@@ -54,10 +54,10 @@ templ TrackMatchSummary(config TrackMatchDisplayConfig) {
 // TrackMatchDetails renders a detailed expandable list of match results.
 // Shows all unmatched tracks with their reasons.
 templ TrackMatchDetails(config TrackMatchDisplayConfig) {
-	<div class="card bg-base-100 shadow-lg">
+	<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl">
 		<div class="card-body">
-			<div class="flex items-center justify-between">
-				<h3 class="card-title text-base">
+			<div class="flex items-center justify-between gap-4 flex-wrap">
+				<h3 class="card-title text-base font-bold tracking-tight">
 					<span class="icon-[heroicons--musical-note] w-5 h-5 text-primary"></span>
 					Track Matching Results
 				</h3>
@@ -76,9 +76,9 @@ templ TrackMatchDetails(config TrackMatchDisplayConfig) {
 			<!-- Unmatched Tracks List -->
 			if len(config.UnmatchedTracks) > 0 {
 				<div class="divider my-3"></div>
-				<div class="collapse collapse-arrow bg-base-200 rounded-lg">
+				<div class="collapse collapse-arrow bg-base-200 border border-base-300 rounded-xl">
 					<input type="checkbox" aria-label="Toggle Unmatched Tracks section"/>
-					<div class="collapse-title font-medium flex items-center gap-2">
+					<div class="collapse-title font-semibold flex items-center gap-2">
 						<span class="icon-[heroicons--exclamation-triangle] w-5 h-5 text-warning"></span>
 						{ fmt.Sprintf("Unmatched Tracks (%d)", len(config.UnmatchedTracks)) }
 					</div>

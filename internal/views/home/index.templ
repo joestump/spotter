@@ -99,103 +99,108 @@ templ Index(cfg *config.Config, stats *HomeStats) {
 	@layouts.Dashboard("Home | Spotter", cfg, "/") {
 		<div class="max-w-7xl mx-auto">
 			<!-- Welcome Header -->
-			<div class="mb-8">
-				<h2 class="text-3xl font-bold">Welcome back, { stats.LoggedInUser }</h2>
-				<p class="text-base-content/60 mt-2">Here's an overview of your music library</p>
-			</div>
+			<header class="mb-10">
+				<p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary mb-2">Your library at a glance</p>
+				<h2 class="text-3xl md:text-4xl font-bold tracking-tight">Welcome back, <span class="text-primary">{ stats.LoggedInUser }</span></h2>
+				<p class="text-base-content/60 mt-2 text-base">Here's what your listening looks like right now.</p>
+			</header>
 			<!-- Main Stats HUD -->
-			<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
 				@components.StatCardLink("Total Listens", components.FormatNumber(stats.TotalListens), "across all providers", "icon-[heroicons--play-circle]", "text-primary", "/recent")
 				@components.StatCardLink("Unique Artists", components.FormatNumber(stats.UniqueArtists), "in listens & playlists", "icon-[heroicons--user-group]", "text-secondary", "/library/artists")
 				@components.StatCardLink("Unique Albums", components.FormatNumber(stats.UniqueAlbums), "in listens & playlists", "icon-[heroicons--square-3-stack-3d]", "text-accent", "/library/albums")
 				@components.StatCardLink("Unique Tracks", components.FormatNumber(stats.UniqueTracks), "in listens & playlists", "icon-[heroicons--musical-note]", "text-info", "/library/tracks")
 			</div>
 			<!-- Provider Stats Grid -->
-			<h3 class="text-xl font-bold mb-4 flex items-center gap-2">
-				<span class="icon-[heroicons--link] w-5 h-5"></span>
-				Connected Providers
-			</h3>
+			<div class="mb-5">
+				<h3 class="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+					<span class="icon-[heroicons--link] w-6 h-6 text-primary"></span>
+					Connected Providers
+				</h3>
+				<p class="text-sm text-base-content/50 mt-1">Where Spotter pulls your listening history from.</p>
+			</div>
 			<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
 				for _, provider := range stats.Providers {
 					if provider.Connected {
-						<div class="card bg-base-100 shadow-xl h-full">
-							<div class="card-body flex flex-col">
-								<div class="flex items-center justify-between">
-									<h4 class="card-title text-lg">
-										if provider.Name == "Navidrome" {
-											<span class="icon-[heroicons--musical-note] w-5 h-5" style="color: #4285F4;"></span>
-										} else if provider.Name == "Spotify" {
-											<span class="icon-[simple-icons--spotify] w-5 h-5 text-success"></span>
-										} else if provider.Name == "Last.fm" {
-											<span class="icon-[simple-icons--lastdotfm] w-5 h-5 text-error"></span>
-										}
+						<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl h-full card-hover overflow-hidden">
+							<div class="card-body flex flex-col p-6">
+								<div class="flex items-center justify-between gap-2">
+									<h4 class="card-title text-lg font-bold tracking-tight flex items-center gap-2.5">
+										<span class="w-10 h-10 rounded-xl bg-base-200 border border-base-300 flex items-center justify-center shrink-0">
+											if provider.Name == "Navidrome" {
+												<span class="icon-[heroicons--musical-note] w-5 h-5" style="color: #4285F4;"></span>
+											} else if provider.Name == "Spotify" {
+												<span class="icon-[simple-icons--spotify] w-5 h-5 text-success"></span>
+											} else if provider.Name == "Last.fm" {
+												<span class="icon-[simple-icons--lastdotfm] w-5 h-5 text-error"></span>
+											}
+										</span>
 										{ provider.Name }
 									</h4>
 									if provider.Name == "Navidrome" {
 										<!-- Navidrome shows Online/Offline status -->
 										if provider.ServerOnline {
-											<div class="badge badge-success badge-sm gap-1">
+											<div class="badge badge-primary gap-1 font-medium">
 												<span class="icon-[heroicons--signal] w-3 h-3"></span>
 												Online
 											</div>
 										} else {
-											<div class="badge badge-error badge-sm gap-1">
+											<div class="badge badge-error gap-1 font-medium">
 												<span class="icon-[heroicons--signal-slash] w-3 h-3"></span>
 												Offline
 											</div>
 										}
 									} else {
-										<div class="badge badge-success badge-sm gap-1">
+										<div class="badge badge-primary gap-1 font-medium">
 											<span class="icon-[heroicons--check-circle] w-3 h-3"></span>
 											Connected
 										</div>
 									}
 								</div>
 								<!-- User Info -->
-								<div class="mt-4 space-y-3">
+								<div class="mt-5 space-y-3">
 									<div class="flex items-center gap-2 text-sm">
-										<span class="icon-[heroicons--user] w-4 h-4 text-base-content/60"></span>
-										<span class="text-base-content/60">Logged in as:</span>
-										<span class="font-medium">{ provider.Username }</span>
+										<span class="icon-[heroicons--user] w-4 h-4 text-base-content/40"></span>
+										<span class="text-base-content/50">Logged in as</span>
+										<span class="font-semibold ml-auto">{ provider.Username }</span>
 									</div>
 									<!-- Last Synced -->
 									<div class="flex items-center gap-2 text-sm">
-										<span class="icon-[heroicons--clock] w-4 h-4 text-base-content/60"></span>
-										<span class="text-base-content/60">Last synced:</span>
+										<span class="icon-[heroicons--clock] w-4 h-4 text-base-content/40"></span>
+										<span class="text-base-content/50">Last synced</span>
 										if !provider.LastSyncedAt.IsZero() {
-											<span class="font-medium timeago" datetime={ formatISO(provider.LastSyncedAt) }>
+											<span class="font-semibold ml-auto timeago" datetime={ formatISO(provider.LastSyncedAt) }>
 												{ provider.LastSyncedAt.Local().Format("Jan 02, 2006 at 3:04 PM") }
 											</span>
 										} else {
-											<span class="text-warning">Never</span>
+											<span class="badge badge-warning badge-sm font-medium ml-auto">Never</span>
 										}
 									</div>
 									<!-- Server URL (Navidrome only) -->
 									if provider.Name == "Navidrome" && provider.ServerURL != "" {
 										<div class="text-sm">
 											<div class="flex items-center gap-2">
-												<span class="icon-[heroicons--globe-alt] w-4 h-4 text-base-content/60"></span>
-												<span class="text-base-content/60">Server:</span>
+												<span class="icon-[heroicons--globe-alt] w-4 h-4 text-base-content/40"></span>
+												<span class="text-base-content/50">Server</span>
 											</div>
-											<code class="bg-base-200 px-2 py-1 rounded text-xs font-mono mt-1 block ml-6">{ provider.ServerURL }</code>
+											<code class="bg-base-200 border border-base-300 px-2.5 py-1.5 rounded-lg text-xs font-mono mt-1.5 block ml-6 text-base-content/70">{ provider.ServerURL }</code>
 										</div>
 									}
 								</div>
 								<!-- Provider Stats -->
-								<div class="mt-auto">
-									<div class="divider my-3"></div>
-									<div class="grid grid-cols-3 gap-2 text-center">
+								<div class="mt-auto pt-5">
+									<div class="grid grid-cols-3 gap-2 text-center rounded-xl bg-base-200 border border-base-300 p-4">
 										<div>
-											<div class="text-2xl font-bold">{ components.FormatNumber(provider.TotalListens) }</div>
-											<div class="text-xs text-base-content/60">Listens</div>
+											<div class="text-2xl font-bold tracking-tight text-primary">{ components.FormatNumber(provider.TotalListens) }</div>
+											<div class="text-[0.7rem] uppercase tracking-wider text-base-content/50 mt-0.5">Listens</div>
 										</div>
 										<div>
-											<div class="text-2xl font-bold">{ components.FormatNumber(provider.UniqueArtists) }</div>
-											<div class="text-xs text-base-content/60">Artists</div>
+											<div class="text-2xl font-bold tracking-tight">{ components.FormatNumber(provider.UniqueArtists) }</div>
+											<div class="text-[0.7rem] uppercase tracking-wider text-base-content/50 mt-0.5">Artists</div>
 										</div>
 										<div>
-											<div class="text-2xl font-bold">{ components.FormatNumber(provider.UniqueAlbums) }</div>
-											<div class="text-xs text-base-content/60">Albums</div>
+											<div class="text-2xl font-bold tracking-tight">{ components.FormatNumber(provider.UniqueAlbums) }</div>
+											<div class="text-[0.7rem] uppercase tracking-wider text-base-content/50 mt-0.5">Albums</div>
 										</div>
 									</div>
 								</div>
@@ -208,10 +213,13 @@ templ Index(cfg *config.Config, stats *HomeStats) {
 			</div>
 			<!-- Top Artists -->
 			if len(stats.TopArtists) > 0 {
-				<h3 class="text-xl font-bold mb-4 flex items-center gap-2">
-					<span class="icon-[heroicons--trophy] w-5 h-5"></span>
-					Top Artists
-				</h3>
+				<div class="mb-5">
+					<h3 class="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+						<span class="icon-[heroicons--trophy] w-6 h-6 text-accent"></span>
+						Top Artists
+					</h3>
+					<p class="text-sm text-base-content/50 mt-1">The artists you keep coming back to.</p>
+				</div>
 				<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-8">
 					for _, topArtist := range stats.TopArtists {
 						@components.ArtistTile(topArtist.Artist)

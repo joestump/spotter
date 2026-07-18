@@ -363,8 +363,8 @@ func newViper() *viper.Viper {
 	v.SetDefault("sync.interval", "5m")
 	// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (configurable initial history lookback, 30 days)
 	v.SetDefault("sync.history_lookback", "720h")
-	v.SetDefault("theme.available", "light,dark,cupcake")
-	v.SetDefault("theme.default", "dark")
+	v.SetDefault("theme.available", "spotter,night,synthwave,dracula,dark,light")
+	v.SetDefault("theme.default", "spotter")
 	v.SetDefault("database.driver", "sqlite3")
 	v.SetDefault("database.source", "file:spotter.db?cache=shared&_fk=1")
 

@@ -17,12 +17,13 @@ templ ColumnToggleMenu(targetTableID string, options []ColumnOption) {
 				Columns
 				<span class="icon-[heroicons--chevron-down] w-3 h-3"></span>
 			</summary>
-			<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+			<ul class="dropdown-content z-[1] menu p-2 shadow-xl bg-base-100 border border-base-300 rounded-2xl w-56 mt-2">
+				<li class="menu-title px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-base-content/50">Visible Columns</li>
 				for _, opt := range options {
 					<li>
-						<label class="label cursor-pointer">
+						<label class="label cursor-pointer rounded-lg px-2">
 							<span class="label-text">{ opt.Label }</span>
-							<input type="checkbox" class="checkbox checkbox-sm column-toggle-checkbox" data-col-class={ opt.Value } checked?={ opt.DefaultVisible }/>
+							<input type="checkbox" class="checkbox checkbox-sm checkbox-primary column-toggle-checkbox" data-col-class={ opt.Value } checked?={ opt.DefaultVisible }/>
 						</label>
 					</li>
 				}

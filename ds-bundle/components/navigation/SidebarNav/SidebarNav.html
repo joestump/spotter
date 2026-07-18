@@ -1,0 +1,33 @@
+<!-- @dsCard group="Navigation" name="SidebarNav" subtitle="App sidebar — wordmark + green active item" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="spotter">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SidebarNav — Spotter</title>
+<link rel="stylesheet" href="../../../styles.css" />
+<style>
+  body { margin: 0; }
+  .stage { padding: 0; background: var(--sp-bg); }
+  aside { width: 280px; min-height: 460px; background: var(--sp-surface); border-right: 1px solid var(--sp-line); padding: 20px; }
+</style>
+</head>
+<body class="sp-root">
+  <div class="stage">
+    <aside>
+      <div class="sp-row" style="gap:10px; padding: 4px 8px 20px;">
+        <span style="font-size:1.4rem">🎵</span>
+        <span class="sp-wordmark" style="font-size:1.6rem">Spotter</span>
+      </div>
+      <nav class="sp-nav">
+        <a class="sp-nav__item sp-nav__item--active">🏠 Home</a>
+        <a class="sp-nav__item">✦ Vibes</a>
+        <a class="sp-nav__item">☰ Playlists</a>
+        <a class="sp-nav__item">👥 Artists</a>
+        <a class="sp-nav__item">◇ Albums</a>
+        <a class="sp-nav__item">⚙ Preferences</a>
+      </nav>
+    </aside>
+  </div>
+</body>
+</html>

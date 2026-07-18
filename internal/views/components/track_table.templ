@@ -287,47 +287,47 @@ func sortIndicator(column, currentCol, currentDir string) string {
 // Available columns: "#", "source", "played_at", "track", "artist", "album", "duration", "popularity", "plays"
 templ TrackTable(tableID string, rows []TrackTableRow, initialColumns []string, tbodyAttrs templ.Attributes, sort SortConfig) {
 	<div class="track-table-component" data-initial-columns={ strings.Join(initialColumns, ",") }>
-		<div class="overflow-x-auto">
-			<table class="table table-zebra w-full" id={ tableID }>
+		<div class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100">
+			<table class="table w-full" id={ tableID }>
 				<thead>
-					<tr>
+					<tr class="border-b border-base-300 bg-base-200/40 text-xs font-semibold uppercase tracking-wider text-base-content/50">
 						<th class={ "col-index w-12", getHiddenClass(initialColumns, "#") }>#</th>
-						<th class={ "col-source cursor-pointer hover:bg-base-200", getHiddenClass(initialColumns, "source") }>
+						<th class={ "col-source cursor-pointer transition-colors hover:text-primary", getHiddenClass(initialColumns, "source") }>
 							<a href={ templ.URL(buildSortURL(sort.BaseURL, "source", sort.Column, sort.Direction)) } class="flex items-center gap-1">
 								Source{ sortIndicator("source", sort.Column, sort.Direction) }
 							</a>
 						</th>
-						<th class={ "col-played_at cursor-pointer hover:bg-base-200", getHiddenClass(initialColumns, "played_at") }>
+						<th class={ "col-played_at cursor-pointer transition-colors hover:text-primary", getHiddenClass(initialColumns, "played_at") }>
 							<a href={ templ.URL(buildSortURL(sort.BaseURL, "played_at", sort.Column, sort.Direction)) } class="flex items-center gap-1">
 								Played At{ sortIndicator("played_at", sort.Column, sort.Direction) }
 							</a>
 						</th>
-						<th class={ "col-track cursor-pointer hover:bg-base-200", getHiddenClass(initialColumns, "track") }>
+						<th class={ "col-track cursor-pointer transition-colors hover:text-primary", getHiddenClass(initialColumns, "track") }>
 							<a href={ templ.URL(buildSortURL(sort.BaseURL, "track", sort.Column, sort.Direction)) } class="flex items-center gap-1">
 								Track{ sortIndicator("track", sort.Column, sort.Direction) }
 							</a>
 						</th>
-						<th class={ "col-artist cursor-pointer hover:bg-base-200", getHiddenClass(initialColumns, "artist") }>
+						<th class={ "col-artist cursor-pointer transition-colors hover:text-primary", getHiddenClass(initialColumns, "artist") }>
 							<a href={ templ.URL(buildSortURL(sort.BaseURL, "artist", sort.Column, sort.Direction)) } class="flex items-center gap-1">
 								Artist{ sortIndicator("artist", sort.Column, sort.Direction) }
 							</a>
 						</th>
-						<th class={ "col-album cursor-pointer hover:bg-base-200", getHiddenClass(initialColumns, "album") }>
+						<th class={ "col-album cursor-pointer transition-colors hover:text-primary", getHiddenClass(initialColumns, "album") }>
 							<a href={ templ.URL(buildSortURL(sort.BaseURL, "album", sort.Column, sort.Direction)) } class="flex items-center gap-1">
 								Album{ sortIndicator("album", sort.Column, sort.Direction) }
 							</a>
 						</th>
-						<th class={ "col-duration cursor-pointer hover:bg-base-200", getHiddenClass(initialColumns, "duration") }>
+						<th class={ "col-duration cursor-pointer transition-colors hover:text-primary", getHiddenClass(initialColumns, "duration") }>
 							<a href={ templ.URL(buildSortURL(sort.BaseURL, "duration", sort.Column, sort.Direction)) } class="flex items-center gap-1">
 								Duration{ sortIndicator("duration", sort.Column, sort.Direction) }
 							</a>
 						</th>
-						<th class={ "col-popularity cursor-pointer hover:bg-base-200", getHiddenClass(initialColumns, "popularity") }>
+						<th class={ "col-popularity cursor-pointer transition-colors hover:text-primary", getHiddenClass(initialColumns, "popularity") }>
 							<a href={ templ.URL(buildSortURL(sort.BaseURL, "popularity", sort.Column, sort.Direction)) } class="flex items-center gap-1">
 								Popularity{ sortIndicator("popularity", sort.Column, sort.Direction) }
 							</a>
 						</th>
-						<th class={ "col-plays text-right cursor-pointer hover:bg-base-200", getHiddenClass(initialColumns, "plays") }>
+						<th class={ "col-plays text-right cursor-pointer transition-colors hover:text-primary", getHiddenClass(initialColumns, "plays") }>
 							<a href={ templ.URL(buildSortURL(sort.BaseURL, "plays", sort.Column, sort.Direction)) } class="flex items-center gap-1 justify-end">
 								Plays{ sortIndicator("plays", sort.Column, sort.Direction) }
 							</a>
@@ -345,8 +345,8 @@ templ TrackTable(tableID string, rows []TrackTableRow, initialColumns []string, 
 }
 
 templ TrackTableRowRender(row TrackTableRow, initialColumns []string, index int) {
-	<tr class="hover">
-		<td class={ "col-index text-base-content/50", getHiddenClass(initialColumns, "#") } data-value={ fmt.Sprintf("%d", index) }>
+	<tr class="border-b border-base-300/60 transition-colors hover:bg-base-200/60">
+		<td class={ "col-index font-mono text-sm tabular-nums text-base-content/40", getHiddenClass(initialColumns, "#") } data-value={ fmt.Sprintf("%d", index) }>
 			if row.Index > 0 {
 				{ fmt.Sprintf("%d", row.Index) }
 			} else {
@@ -389,11 +389,11 @@ templ TrackTableRowRender(row TrackTableRow, initialColumns []string, index int)
 		<td class={ "col-track", getHiddenClass(initialColumns, "track") } data-value={ row.TrackName() }>
 			<div class="flex items-center gap-3">
 				<div class="avatar track-artwork">
-					<figure class="w-10 h-10 rounded">
+					<figure class="w-10 h-10 art-rounded overflow-hidden aspect-square">
 						if album := row.Album(); album != nil {
 							@AlbumImage(album, "w-full h-full")
 						} else {
-							<div class="bg-base-300 w-full h-full flex items-center justify-center">
+							<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
 								<span class="icon-[heroicons--musical-note] w-1/2 h-1/2 text-base-content/40"></span>
 							</div>
 						}
@@ -402,18 +402,18 @@ templ TrackTableRowRender(row TrackTableRow, initialColumns []string, index int)
 				<div class="flex items-center">
 					<div class="min-w-0 max-w-xs">
 						if url := row.TrackURL(); url != "" {
-							<p class="font-medium hover:text-primary hover:underline truncate" title={ row.TrackName() }>
+							<p class="font-semibold text-base-content transition-colors hover:text-primary truncate" title={ row.TrackName() }>
 								<a href={ templ.URL(url) }>{ row.TrackName() }</a>
 							</p>
 						} else {
-							<p class="font-medium text-base-content/60 truncate" title={ row.TrackName() }>{ row.TrackName() }</p>
+							<p class="font-semibold text-base-content/60 truncate" title={ row.TrackName() }>{ row.TrackName() }</p>
 						}
 					</div>
 					<div class="flex items-center flex-shrink-0 ml-1.5">
 						// AI Tags Hint
 						if (row.Track != nil && len(row.Track.AiTags) > 0) || (row.Listen != nil && row.Listen.Edges.Track != nil && len(row.Listen.Edges.Track.AiTags) > 0) {
 							<div class="tooltip" data-tip="Has AI Insights">
-								<span class="icon-[heroicons--sparkles] w-4 h-4 text-accent"></span>
+								<span class="icon-[heroicons--sparkles] w-4 h-4 text-secondary"></span>
 							</div>
 						}
 						// Matched Metadata Hint
@@ -434,7 +434,7 @@ templ TrackTableRowRender(row TrackTableRow, initialColumns []string, index int)
 			<div class="flex items-center gap-1.5 max-w-xs">
 				<div class="min-w-0 max-w-xs">
 					if url := row.ArtistURL(); url != "" {
-						<p class="text-base-content/70 hover:text-primary hover:underline truncate" title={ row.ArtistName() }>
+						<p class="text-base-content/70 transition-colors hover:text-primary truncate" title={ row.ArtistName() }>
 							<a href={ templ.URL(url) }>{ row.ArtistName() }</a>
 						</p>
 					} else {
@@ -445,7 +445,7 @@ templ TrackTableRowRender(row TrackTableRow, initialColumns []string, index int)
 					// AI Tags Hint
 					if row.Track != nil && row.Track.Edges.Artist != nil && len(row.Track.Edges.Artist.AiTags) > 0 {
 						<div class="tooltip" data-tip="Has AI Insights">
-							<span class="icon-[heroicons--sparkles] w-4 h-4 text-accent"></span>
+							<span class="icon-[heroicons--sparkles] w-4 h-4 text-secondary"></span>
 						</div>
 					}
 					// Matched Artist Hint
@@ -469,7 +469,7 @@ templ TrackTableRowRender(row TrackTableRow, initialColumns []string, index int)
 			<div class="flex items-center gap-1.5 max-w-xs">
 				<div class="min-w-0 max-w-xs">
 					if url := row.AlbumURL(); url != "" {
-						<p class="text-base-content/60 hover:text-secondary hover:underline truncate" title={ row.AlbumName() }>
+						<p class="text-base-content/60 transition-colors hover:text-primary truncate" title={ row.AlbumName() }>
 							<a href={ templ.URL(url) }>{ row.AlbumName() }</a>
 						</p>
 					} else {
@@ -480,7 +480,7 @@ templ TrackTableRowRender(row TrackTableRow, initialColumns []string, index int)
 					// AI Tags Hint
 					if row.Track != nil && row.Track.Edges.Album != nil && len(row.Track.Edges.Album.AiTags) > 0 {
 						<div class="tooltip" data-tip="Has AI Insights">
-							<span class="icon-[heroicons--sparkles] w-4 h-4 text-accent"></span>
+							<span class="icon-[heroicons--sparkles] w-4 h-4 text-secondary"></span>
 						</div>
 					}
 					// Matched Album Hint
@@ -496,7 +496,7 @@ templ TrackTableRowRender(row TrackTableRow, initialColumns []string, index int)
 				</div>
 			</div>
 		</td>
-		<td class={ "col-duration font-mono text-sm", getHiddenClass(initialColumns, "duration") } data-value={ row.DurationValue() }>
+		<td class={ "col-duration font-mono text-sm tabular-nums text-base-content/70", getHiddenClass(initialColumns, "duration") } data-value={ row.DurationValue() }>
 			{ formatDuration(row.DurationMs()) }
 		</td>
 		<td class={ "col-popularity", getHiddenClass(initialColumns, "popularity") } data-value={ row.PopularityValue() }>
@@ -509,11 +509,11 @@ templ TrackTableRowRender(row TrackTableRow, initialColumns []string, index int)
 				<span class="text-base-content/50">-</span>
 			}
 		</td>
-		<td class={ "col-plays text-right font-mono", getHiddenClass(initialColumns, "plays") } data-value={ fmt.Sprintf("%d", row.PlayCount) }>
+		<td class={ "col-plays text-right font-mono tabular-nums font-semibold text-primary", getHiddenClass(initialColumns, "plays") } data-value={ fmt.Sprintf("%d", row.PlayCount) }>
 			if row.PlayCount > 0 {
 				{ fmt.Sprintf("%d", row.PlayCount) }
 			} else {
-				<span class="text-base-content/30">-</span>
+				<span class="font-normal text-base-content/30">-</span>
 			}
 		</td>
 	</tr>

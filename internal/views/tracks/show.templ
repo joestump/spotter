@@ -171,10 +171,11 @@ templ Show(track *ent.Track, playlists []*ent.Playlist, stats *TrackStats, cfg *
 	@layouts.Dashboard(fmt.Sprintf("%s | Tracks | Spotter", track.Name), cfg, "/library/track") {
 		<!-- AI Regenerate Modal -->
 		<dialog id="ai-regenerate-modal" class="modal">
-			<div class="modal-box">
-				<h3 class="font-bold text-lg flex items-center gap-2">
-					<span class="icon-[heroicons--sparkles] w-5 h-5 text-accent"></span>
+			<div class="modal-box vibe-ring rounded-2xl">
+				<h3 class="font-bold text-lg flex items-center gap-2 tracking-tight">
+					<span class="icon-[heroicons--sparkles] w-5 h-5 text-secondary"></span>
 					Regenerate AI Insights
+					<span class="badge badge-secondary badge-sm">AI</span>
 				</h3>
 				<p class="py-4">
 					This will regenerate all AI-generated content for <strong>{ track.Name }</strong>, including the summary and tags.
@@ -187,7 +188,7 @@ templ Show(track *ent.Track, playlists []*ent.Playlist, stats *TrackStats, cfg *
 						<button class="btn btn-ghost">Cancel</button>
 					</form>
 					<button
-						class="btn btn-primary"
+						class="btn btn-secondary"
 						hx-post={ fmt.Sprintf("/library/track/%d/regenerate-ai", track.ID) }
 						hx-swap="none"
 						hx-indicator="#ai-regenerate-indicator"
@@ -212,17 +213,17 @@ templ Show(track *ent.Track, playlists []*ent.Playlist, stats *TrackStats, cfg *
 					<div class="absolute inset-0 bg-gradient-to-b from-transparent via-base-200/80 to-base-200"></div>
 				</div>
 			} else {
-				<div class="absolute inset-0 h-80 bg-gradient-to-b from-accent/20 to-base-200"></div>
+				<div class="absolute inset-0 h-80 bg-gradient-to-br from-primary/20 via-secondary/20 to-base-200"></div>
 			}
 			<!-- AI Menu (Top Right) -->
 			<div class="absolute top-4 right-4 z-10">
 				<details class="dropdown dropdown-end">
 					<summary class="btn btn-sm btn-ghost bg-base-100/50 hover:bg-base-100/80 gap-1 list-none cursor-pointer">
-						<span class="icon-[heroicons--sparkles] w-4 h-4 text-accent"></span>
+						<span class="icon-[heroicons--sparkles] w-4 h-4 text-secondary"></span>
 						<span class="hidden sm:inline">AI</span>
 						<span class="icon-[heroicons--chevron-down] w-3 h-3"></span>
 					</summary>
-					<ul class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-56">
+					<ul class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 border border-base-300 rounded-2xl w-56">
 						<li>
 							<button onclick="document.getElementById('ai-regenerate-modal').showModal(); this.closest('details').removeAttribute('open');">
 								<span class="icon-[heroicons--arrow-path] w-4 h-4"></span>
@@ -245,19 +246,19 @@ templ Show(track *ent.Track, playlists []*ent.Playlist, stats *TrackStats, cfg *
 					<div class="flex flex-col md:flex-row items-start gap-8">
 						<!-- Album Cover -->
 						<div class="flex-shrink-0">
-							<div class="w-48 h-48 md:w-56 md:h-56 rounded-xl shadow-2xl ring ring-base-100 ring-offset-base-200 ring-offset-2 overflow-hidden">
+							<div class="w-48 h-48 md:w-56 md:h-56 aspect-square art-rounded shadow-2xl ring-2 ring-primary/40 ring-offset-base-200 ring-offset-2 overflow-hidden">
 								if img := getAlbumImage(track); img != "" {
 									<img src={ img } alt={ track.Name } class="w-full h-full object-cover"/>
 								} else {
-									<div class="bg-base-300 w-full h-full flex items-center justify-center">
-										<span class="icon-[heroicons--musical-note] w-24 h-24 text-base-content/30"></span>
+									<div class="bg-gradient-to-br from-primary/20 to-secondary/20 w-full h-full flex items-center justify-center">
+										<span class="icon-[heroicons--musical-note] w-24 h-24 text-primary/60"></span>
 									</div>
 								}
 							</div>
 						</div>
 						<!-- Track Details -->
 						<div class="flex-1 min-w-0">
-							<h1 class="text-4xl md:text-5xl font-bold mb-2 text-base-content">{ track.Name }</h1>
+							<h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-2 text-base-content">{ track.Name }</h1>
 							<!-- Artist, Album, Genre, and other metadata -->
 							<div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
 								if track.Edges.Artist != nil {
@@ -299,14 +300,14 @@ templ Show(track *ent.Track, playlists []*ent.Playlist, stats *TrackStats, cfg *
 								<div class="flex flex-wrap gap-1.5 mb-4">
 									for _, tagInfo := range processTags(track) {
 										if tagInfo.IsAITag {
-											<span class="badge badge-sm badge-accent gap-1 px-2 py-0.5">
+											<span class="badge badge-sm badge-secondary gap-1 px-2 py-0.5">
 												<span class="icon-[heroicons--sparkles] w-2.5 h-2.5"></span>
 												{ tagInfo.Name }
 											</span>
 										} else if tagInfo.IsGenre {
 											<span class="badge badge-sm badge-primary px-2 py-0.5">{ tagInfo.Name }</span>
 										} else {
-											<span class="badge badge-sm badge-secondary badge-outline px-2 py-0.5">{ tagInfo.Name }</span>
+											<span class="badge badge-sm badge-ghost px-2 py-0.5">{ tagInfo.Name }</span>
 										}
 									}
 								</div>
@@ -341,10 +342,11 @@ templ Show(track *ent.Track, playlists []*ent.Playlist, stats *TrackStats, cfg *
 		<!-- Playlists containing this Track -->
 		if len(playlists) > 0 {
 			<div class="mb-8">
-				<h3 class="text-2xl font-bold mb-6 flex items-center gap-2">
-					<span class="icon-[heroicons--queue-list] w-6 h-6"></span>
+				<h3 class="text-2xl font-bold tracking-tight mb-1 flex items-center gap-2">
+					<span class="icon-[heroicons--queue-list] w-6 h-6 text-primary"></span>
 					In Playlists
 				</h3>
+				<p class="text-base-content/60 text-sm mb-6">Playlists that feature this track</p>
 				<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
 					for _, pl := range playlists {
 						@components.PlaylistTile(pl, "Includes this track")
@@ -356,11 +358,11 @@ templ Show(track *ent.Track, playlists []*ent.Playlist, stats *TrackStats, cfg *
 }
 
 templ ProviderHistoryChart(trackID int, data components.StackedChartData, currentTimeframe string) {
-	<div class="card bg-base-100 shadow-xl">
+	<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl">
 		<div class="card-body">
 			<div class="flex items-center justify-between mb-4">
-				<h3 class="card-title">
-					<span class="icon-[heroicons--chart-bar] w-5 h-5"></span>
+				<h3 class="text-lg font-bold tracking-tight flex items-center gap-2">
+					<span class="icon-[heroicons--chart-bar] w-5 h-5 text-primary"></span>
 					Listens Over Time
 				</h3>
 				<select

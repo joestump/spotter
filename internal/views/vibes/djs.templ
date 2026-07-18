@@ -25,10 +25,16 @@ func joinTags(tags []string) string {
 templ DJsIndex(djs []*ent.DJ, cfg *config.Config) {
 	@layouts.Dashboard("DJs | Vibes | Spotter", cfg, "/vibes/djs") {
 		<div class="max-w-7xl mx-auto">
-			<div class="flex items-center justify-between mb-8">
+			<div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
 				<div>
-					<h2 class="text-3xl font-bold">DJs</h2>
-					<p class="text-base-content/60 mt-2">Music agents that power your mixtape generation</p>
+					<div class="flex items-center gap-2 mb-2">
+						<span class="badge badge-secondary badge-sm gap-1 font-semibold">
+							<span class="icon-[heroicons--sparkles] w-3 h-3"></span>
+							AI Agents
+						</span>
+					</div>
+					<h2 class="text-3xl font-bold tracking-tight">DJs</h2>
+					<p class="text-base-content/60 mt-2">Music agents with a personality that curate your mixtapes</p>
 				</div>
 				if len(djs) > 0 {
 					<button
@@ -41,24 +47,27 @@ templ DJsIndex(djs []*ent.DJ, cfg *config.Config) {
 				}
 			</div>
 			if len(djs) == 0 {
-				<div class="card bg-base-200">
-					<div class="card-body items-center text-center">
-						<span class="icon-[heroicons--user-circle] w-16 h-16 text-base-content/30"></span>
-						<h3 class="card-title">No DJs yet</h3>
-						<p class="text-base-content/60">Create a DJ to define a personality for generating mixtapes.</p>
+				<div class="card bg-base-100 border border-base-300 rounded-2xl overflow-hidden">
+					<div class="card-body items-center text-center py-16">
+						<div class="w-20 h-20 rounded-2xl vibe-gradient vibe-ring flex items-center justify-center mb-2">
+							<span class="icon-[heroicons--user-circle] w-10 h-10 text-secondary"></span>
+						</div>
+						<h3 class="card-title text-2xl font-bold tracking-tight">No DJs yet</h3>
+						<p class="text-base-content/60 max-w-sm">Create a DJ to define a personality that generates mixtapes from your listening history.</p>
 						<button
-							class="btn btn-primary mt-4"
+							class="btn btn-primary mt-4 gap-2"
 							onclick="resetCreateForm(); document.getElementById('create-dj-modal').showModal()"
 						>
+							<span class="icon-[heroicons--sparkles] w-5 h-5"></span>
 							Create Your First DJ
 						</button>
 					</div>
 				</div>
 			} else {
-				<div class="card bg-base-100 shadow-xl">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl overflow-hidden">
 					<div class="card-body p-0">
 						<div class="overflow-x-auto">
-							<table class="table table-zebra">
+							<table class="table">
 								<thead>
 									<tr>
 										<th>Name</th>
@@ -81,7 +90,7 @@ templ DJsIndex(djs []*ent.DJ, cfg *config.Config) {
 												<div class="flex flex-wrap gap-1 max-w-xs">
 													if len(dj.GenresInclude) > 0 {
 														for _, genre := range dj.GenresInclude[:min(3, len(dj.GenresInclude))] {
-															<span class="badge badge-sm badge-success">{ genre }</span>
+															<span class="badge badge-sm badge-primary badge-outline">{ genre }</span>
 														}
 														if len(dj.GenresInclude) > 3 {
 															<span class="badge badge-sm badge-ghost">+{ fmt.Sprintf("%d", len(dj.GenresInclude)-3) }</span>
@@ -95,7 +104,7 @@ templ DJsIndex(djs []*ent.DJ, cfg *config.Config) {
 												<div class="flex flex-wrap gap-1 max-w-xs">
 													if len(dj.Vibes) > 0 {
 														for _, vibe := range dj.Vibes[:min(3, len(dj.Vibes))] {
-															<span class="badge badge-sm badge-primary">{ vibe }</span>
+															<span class="badge badge-sm badge-secondary">{ vibe }</span>
 														}
 														if len(dj.Vibes) > 3 {
 															<span class="badge badge-sm badge-ghost">+{ fmt.Sprintf("%d", len(dj.Vibes)-3) }</span>
@@ -106,7 +115,10 @@ templ DJsIndex(djs []*ent.DJ, cfg *config.Config) {
 												</div>
 											</td>
 											<td>
-												<span class="badge badge-ghost">{ fmt.Sprintf("%d", len(dj.Edges.Mixtapes)) }</span>
+												<span class="badge badge-ghost gap-1">
+													<span class="icon-[heroicons--musical-note] w-3 h-3"></span>
+													{ fmt.Sprintf("%d", len(dj.Edges.Mixtapes)) }
+												</span>
 											</td>
 											<td class="whitespace-nowrap">
 												<span class="timeago text-sm text-base-content/60" datetime={ formatDJTimeISO(dj.CreatedAt) } title={ formatDJTime(dj.CreatedAt) }>
@@ -360,7 +372,7 @@ templ DJFormFields(dj *ent.DJ) {
 		Name:           "vibes",
 		Label:          "Vibes",
 		LabelIcon:      "icon-[heroicons--sparkles]",
-		LabelIconClass: "text-primary",
+		LabelIconClass: "text-secondary",
 		Placeholder:    "Type a vibe and press Enter...",
 		HelpText:       "Emotions or adjectives like chill, energetic, nostalgic, uplifting",
 		SuggestionsURL: "",

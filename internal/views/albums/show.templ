@@ -215,9 +215,9 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 	@layouts.Dashboard(fmt.Sprintf("%s | Albums | Spotter", album.Name), cfg, "/library/album") {
 		<!-- AI Regenerate Modal -->
 		<dialog id="ai-regenerate-modal" class="modal">
-			<div class="modal-box">
+			<div class="modal-box bg-base-100 border border-base-300 rounded-2xl">
 				<h3 class="font-bold text-lg flex items-center gap-2">
-					<span class="icon-[heroicons--sparkles] w-5 h-5 text-accent"></span>
+					<span class="icon-[heroicons--sparkles] w-5 h-5 text-secondary"></span>
 					Regenerate AI Insights
 				</h3>
 				<p class="py-4">
@@ -231,7 +231,7 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 						<button class="btn btn-ghost">Cancel</button>
 					</form>
 					<button
-						class="btn btn-primary"
+						class="btn btn-secondary"
 						hx-post={ fmt.Sprintf("/library/album/%d/regenerate-ai", album.ID) }
 						hx-swap="none"
 						hx-indicator="#ai-regenerate-indicator"
@@ -257,12 +257,12 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 			<!-- AI Menu (Top Right) -->
 			<div class="absolute top-4 right-4 z-10">
 				<details class="dropdown dropdown-end">
-					<summary class="btn btn-sm btn-ghost bg-base-100/50 hover:bg-base-100/80 gap-1 list-none cursor-pointer">
-						<span class="icon-[heroicons--sparkles] w-4 h-4 text-accent"></span>
+					<summary class="btn btn-sm btn-secondary btn-outline bg-base-100/60 backdrop-blur gap-1 list-none cursor-pointer">
+						<span class="icon-[heroicons--sparkles] w-4 h-4"></span>
 						<span class="hidden sm:inline">AI</span>
 						<span class="icon-[heroicons--chevron-down] w-3 h-3"></span>
 					</summary>
-					<ul class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-56">
+					<ul class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 border border-base-300 rounded-2xl w-56">
 						<li>
 							if len(djs) > 0 {
 								<button
@@ -292,16 +292,23 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 					<div class="flex flex-col md:flex-row items-start gap-8">
 						<!-- Album Cover -->
 						<div class="flex-shrink-0">
-							<div class="w-56 h-56 md:w-64 md:h-64 rounded-xl shadow-2xl ring ring-base-100 ring-offset-base-200 ring-offset-2 overflow-hidden">
+							<div class="w-56 h-56 md:w-64 md:h-64 rounded-2xl shadow-2xl ring-2 ring-base-100/80 ring-offset-base-200 ring-offset-4 overflow-hidden bg-gradient-to-br from-primary/20 to-secondary/20">
 								@components.AlbumImage(album, "w-full h-full object-cover")
 							</div>
 						</div>
 						<!-- Album Details -->
 						<div class="flex-1 min-w-0">
-							<h1 class="text-4xl md:text-5xl font-bold mb-2 text-base-content">{ album.Name }</h1>
+							<p class="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
+								if album.AlbumType != "" {
+									{ album.AlbumType }
+								} else {
+									Album
+								}
+							</p>
+							<h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-3 text-base-content">{ album.Name }</h1>
 							<!-- Artist Link -->
 							if album.Edges.Artist != nil {
-								<a href={ templ.URL(fmt.Sprintf("/library/artist/%d", album.Edges.Artist.ID)) } class="text-xl text-base-content/70 hover:text-primary hover:underline flex items-center gap-2 mb-3">
+								<a href={ templ.URL(fmt.Sprintf("/library/artist/%d", album.Edges.Artist.ID)) } class="text-xl text-base-content/70 hover:text-primary transition-colors flex items-center gap-2 mb-3">
 									<span class="icon-[heroicons--user-circle] w-5 h-5"></span>
 									{ album.Edges.Artist.Name }
 								</a>
@@ -309,14 +316,14 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 							// TODO(SPEC-0014): Replace with TypedTagBadge after Tag schema PR #255 merges
 							<!-- All Tags -->
 							if allTags := collectAndSortAllTags(album, tracks); len(allTags) > 0 {
-								<div class="flex flex-wrap gap-1.5 mb-3">
+								<div class="flex flex-wrap gap-1.5 mb-4">
 									for _, tag := range allTags {
 										<span class="badge badge-sm badge-primary badge-outline px-2 py-0.5">{ tag }</span>
 									}
 								</div>
 							}
 							<!-- Metadata Table -->
-							<div class="bg-base-100/50 rounded-lg p-3 mb-4">
+							<div class="bg-base-100/60 border border-base-300 rounded-xl p-4 mb-4 inline-block">
 								<table class="text-sm">
 									<tbody>
 										<tr>
@@ -382,11 +389,11 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 			<!-- AI Summary Card -->
 			@components.AISummaryCard(album.AiSummary, "AI Insights")
 			<!-- Track Listing -->
-			<div class="card bg-base-100 shadow-xl mb-8">
+			<div class="card bg-base-100 border border-base-300 rounded-2xl mb-8">
 				<div class="card-body">
 					<div class="flex items-center justify-between">
-						<h3 class="card-title">
-							<span class="icon-[heroicons--queue-list] w-5 h-5"></span>
+						<h3 class="card-title tracking-tight">
+							<span class="icon-[heroicons--queue-list] w-5 h-5 text-primary"></span>
 							Tracks
 						</h3>
 						@components.TrackTableToolbar(components.TrackTableToolbarConfig{
@@ -408,10 +415,10 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 				</div>
 			</div>
 			<!-- Metadata Table -->
-			<div class="card bg-base-100 shadow-xl mb-8">
+			<div class="card bg-base-100 border border-base-300 rounded-2xl mb-8">
 				<div class="card-body">
-					<h3 class="card-title">
-						<span class="icon-[heroicons--information-circle] w-5 h-5"></span>
+					<h3 class="card-title tracking-tight">
+						<span class="icon-[heroicons--information-circle] w-5 h-5 text-primary"></span>
 						Metadata
 					</h3>
 					@components.MetadataTable([]components.MetadataRow{
@@ -434,19 +441,24 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 			</div>
 		</div>
 		if len(album.Recommendations) > 0 {
-			<div class="mt-8">
-				<h2 class="text-2xl font-bold mb-4 flex items-center gap-2">
-					<span class="icon-[heroicons--sparkles] text-accent"></span>
+			<div class="mt-8 rounded-2xl vibe-gradient vibe-ring p-6">
+				<h2 class="text-2xl font-bold tracking-tight mb-1 flex items-center gap-2">
+					<span class="icon-[heroicons--sparkles] text-secondary"></span>
 					Recommended Albums
+					<span class="badge badge-secondary badge-sm gap-1">
+						<span class="icon-[heroicons--sparkles] w-3 h-3"></span>
+						AI
+					</span>
 				</h2>
+				<p class="text-base-content/60 mb-6">Picked for you based on this album's vibe.</p>
 				<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
 					for _, rec := range album.Recommendations {
-						<a href={ templ.URL(fmt.Sprintf("/library/albums?q=%s %s", url.QueryEscape(rec.Name), url.QueryEscape(rec.Artist))) } class="card bg-base-100 shadow-xl hover:shadow-2xl transition-all hover:scale-105 group" title={ rec.Reason }>
+						<a href={ templ.URL(fmt.Sprintf("/library/albums?q=%s %s", url.QueryEscape(rec.Name), url.QueryEscape(rec.Artist))) } class="card bg-base-100 border border-base-300 rounded-2xl overflow-hidden card-hover group" title={ rec.Reason }>
 							<figure class="aspect-square relative overflow-hidden">
 								if rec.ImageURL != "" {
 									<img src={ templ.URL(rec.ImageURL) } alt={ rec.Name } class="w-full h-full object-cover"/>
 								} else {
-									<div class="w-full h-full bg-base-300 flex items-center justify-center">
+									<div class="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
 										<span class="icon-[heroicons--musical-note] text-5xl text-base-content/20"></span>
 									</div>
 								}
@@ -455,7 +467,7 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 										<span>{ fmt.Sprintf("%d", rec.Year) }</span>
 									</div>
 								}
-								<div class="absolute top-2 left-2 badge badge-accent badge-sm opacity-0 group-hover:opacity-100 transition-opacity">
+								<div class="absolute top-2 left-2 badge badge-secondary badge-sm opacity-0 group-hover:opacity-100 transition-opacity">
 									<span class="icon-[heroicons--sparkles] w-3 h-3 mr-1"></span>
 									AI
 								</div>
@@ -487,11 +499,11 @@ templ CreateMixtapeModalContent(album *ent.Album, djs []*ent.DJ) {
 }
 
 templ ProviderHistoryChart(albumID int, data components.StackedChartData, currentTimeframe string) {
-	<div class="card bg-base-100 shadow-xl">
+	<div class="card bg-base-100 border border-base-300 rounded-2xl">
 		<div class="card-body">
 			<div class="flex items-center justify-between mb-4">
-				<h3 class="card-title">
-					<span class="icon-[heroicons--chart-bar] w-5 h-5"></span>
+				<h3 class="card-title tracking-tight">
+					<span class="icon-[heroicons--chart-bar] w-5 h-5 text-primary"></span>
 					Listens Over Time
 				</h3>
 				<select

@@ -20,17 +20,22 @@ templ EnhanceVibesModal() {
 
 // EnhanceVibesModalContent renders the inner content of the enhance vibes modal.
 templ EnhanceVibesModalContent(params EnhanceVibesModalParams) {
-	<div class="modal-box max-w-2xl">
+	<div class="modal-box max-w-2xl rounded-2xl border border-base-300">
 		<form method="dialog">
 			<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
 		</form>
-		<h3 class="font-bold text-lg flex items-center gap-2">
-			<span class="icon-[heroicons--sparkles] w-5 h-5 text-accent"></span>
-			Enhance Vibes
-		</h3>
-		<p class="text-sm text-base-content/60 py-2">
-			Let a DJ persona enhance your playlist "{ params.PlaylistName }" with better flow and new track suggestions.
-		</p>
+		<div class="vibe-gradient vibe-ring -mx-6 -mt-6 mb-4 px-6 py-5 rounded-t-2xl">
+			<div class="flex items-center gap-2">
+				<h3 class="font-bold text-lg tracking-tight flex items-center gap-2">
+					<span class="icon-[heroicons--sparkles] w-5 h-5 text-secondary"></span>
+					Enhance Vibes
+				</h3>
+				<span class="badge badge-secondary badge-sm gap-1">AI</span>
+			</div>
+			<p class="text-sm text-base-content/70 pt-1">
+				Let a DJ persona enhance your playlist "{ params.PlaylistName }" with better flow and new track suggestions.
+			</p>
+		</div>
 		<!-- Guarantee Badge -->
 		<div class="alert alert-info mb-4">
 			<span class="icon-[heroicons--shield-check] w-5 h-5"></span>
@@ -95,7 +100,7 @@ templ EnhanceVibesModalContent(params EnhanceVibesModalParams) {
 					<!-- One-time Enhancement -->
 					<label class="cursor-pointer">
 						<input type="radio" name="mode" value="one_time" class="peer hidden" checked/>
-						<div class="card bg-base-200 border-2 border-transparent peer-checked:border-primary peer-checked:bg-primary/10 transition-all">
+						<div class="card bg-base-200 rounded-xl border-2 border-transparent peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:shadow-glow-primary transition-all">
 							<div class="card-body p-4">
 								<div class="flex items-center gap-2 mb-2">
 									<span class="icon-[heroicons--bolt] w-5 h-5 text-primary"></span>
@@ -114,7 +119,7 @@ templ EnhanceVibesModalContent(params EnhanceVibesModalParams) {
 					<!-- Convert to Mixtape -->
 					<label class="cursor-pointer">
 						<input type="radio" name="mode" value="convert_to_mixtape" class="peer hidden"/>
-						<div class="card bg-base-200 border-2 border-transparent peer-checked:border-secondary peer-checked:bg-secondary/10 transition-all">
+						<div class="card bg-base-200 rounded-xl border-2 border-transparent peer-checked:border-secondary peer-checked:bg-secondary/10 peer-checked:shadow-glow-secondary transition-all">
 							<div class="card-body p-4">
 								<div class="flex items-center gap-2 mb-2">
 									<span class="icon-[heroicons--arrow-path] w-5 h-5 text-secondary"></span>
@@ -133,7 +138,7 @@ templ EnhanceVibesModalContent(params EnhanceVibesModalParams) {
 				</div>
 			</div>
 			<!-- Mode Details Accordion -->
-			<div class="collapse collapse-arrow bg-base-200 mb-4">
+			<div class="collapse collapse-arrow bg-base-200 border border-base-300 rounded-xl mb-4">
 				<input type="checkbox" aria-label="Toggle What's the difference section"/>
 				<div class="collapse-title text-sm font-medium">
 					<span class="icon-[heroicons--question-mark-circle] w-4 h-4 inline-block mr-1"></span>
@@ -179,12 +184,12 @@ templ EnhanceVibesModalContent(params EnhanceVibesModalParams) {
 			<div class="modal-action">
 				<button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
 				if len(params.DJs) > 0 {
-					<button type="submit" class="btn btn-accent gap-2">
+					<button type="submit" class="btn btn-secondary gap-2">
 						<span class="icon-[heroicons--sparkles] w-4 h-4"></span>
 						Enhance Playlist
 					</button>
 				} else {
-					<button type="submit" class="btn btn-accent gap-2" disabled>
+					<button type="submit" class="btn btn-secondary gap-2" disabled>
 						<span class="icon-[heroicons--sparkles] w-4 h-4"></span>
 						Enhance Playlist
 					</button>
@@ -202,7 +207,7 @@ templ EnhanceVibesModalContent(params EnhanceVibesModalParams) {
 // Governing: SPEC vibes-ai-mixtape-engine REQ "modal opens only after HTMX content is loaded"
 templ EnhanceVibesButton(playlistID int, size string) {
 	<button
-		class={ "btn btn-accent gap-2", templ.KV("btn-sm", size == "sm") }
+		class={ "btn btn-secondary gap-2", templ.KV("btn-sm", size == "sm") }
 		hx-get={ fmt.Sprintf("/playlists/%d/enhance-vibes-modal", playlistID) }
 		hx-target="#enhance-vibes-modal"
 		hx-swap="innerHTML"

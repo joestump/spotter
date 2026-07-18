@@ -122,22 +122,28 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 					<div class="flex flex-col md:flex-row items-start gap-8">
 						<!-- Cover Art -->
 						<div class="flex-shrink-0">
-							<div class="w-48 h-48 md:w-56 md:h-56 rounded-xl shadow-2xl ring ring-base-100 ring-offset-base-200 ring-offset-2 overflow-hidden bg-gradient-to-br from-primary to-secondary">
+							<div class="w-48 h-48 md:w-56 md:h-56 aspect-square art-rounded shadow-2xl vibe-ring overflow-hidden bg-gradient-to-br from-primary/20 to-secondary/20">
 								if m.ImageURL != "" {
 									<img src={ m.ImageURL } alt={ m.Name } class="w-full h-full object-cover"/>
 								} else {
 									<div class="w-full h-full flex items-center justify-center">
-										<span class="icon-[heroicons--musical-note] w-20 h-20 text-white/50"></span>
+										<span class="icon-[heroicons--musical-note] w-20 h-20 text-secondary/50"></span>
 									</div>
 								}
 							</div>
 						</div>
 						<!-- Details -->
 						<div class="flex-1 min-w-0">
-							<h1 class="text-4xl md:text-5xl font-bold mb-2 text-base-content">{ m.Name }</h1>
+							<div class="flex items-center gap-2 mb-2">
+								<span class="badge badge-secondary badge-sm gap-1 font-semibold">
+									<span class="icon-[heroicons--sparkles] w-3 h-3"></span>
+									AI Mixtape
+								</span>
+							</div>
+							<h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-2 text-base-content">{ m.Name }</h1>
 							<!-- DJ Link -->
 							if m.Edges.Dj != nil {
-								<a href={ templ.URL(fmt.Sprintf("/vibes/djs/%d", m.Edges.Dj.ID)) } class="text-xl text-base-content/70 hover:text-primary hover:underline flex items-center gap-2 mb-3">
+								<a href={ templ.URL(fmt.Sprintf("/vibes/djs/%d", m.Edges.Dj.ID)) } class="text-xl text-secondary hover:text-secondary/80 hover:underline flex items-center gap-2 mb-3">
 									<span class="icon-[heroicons--user-circle] w-5 h-5"></span>
 									{ m.Edges.Dj.Name }
 								</a>
@@ -149,7 +155,7 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 							<!-- Meta Badges -->
 							<div class="flex flex-wrap gap-2 mb-4">
 								<!-- Track Count -->
-								<span class="badge badge-lg gap-1.5">
+								<span class="badge badge-lg badge-neutral gap-1.5">
 									<span class="icon-[heroicons--musical-note] w-4 h-4"></span>
 									{ fmt.Sprintf("%d / %d tracks", m.TrackCount, m.MaxTracks) }
 								</span>
@@ -157,7 +163,7 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 								@scheduleBadge(string(m.Schedule))
 								<!-- Sync Status -->
 								if m.SyncToNavidrome {
-									<span class="badge badge-lg badge-success gap-1.5">
+									<span class="badge badge-lg badge-primary gap-1.5 font-semibold">
 										<span class="icon-[heroicons--check-circle] w-4 h-4"></span>
 										Synced to Navidrome
 									</span>
@@ -211,10 +217,10 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 		<div class="max-w-7xl mx-auto">
 			<!-- DJ Configuration Card -->
 			if m.Edges.Dj != nil {
-				<div class="card bg-base-100 shadow-xl mb-8">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl mb-8">
 					<div class="card-body">
-						<h2 class="card-title">
-							<span class="icon-[heroicons--cog-6-tooth] w-6 h-6"></span>
+						<h2 class="card-title text-xl font-bold tracking-tight">
+							<span class="icon-[heroicons--cog-6-tooth] w-6 h-6 text-secondary"></span>
 							DJ Configuration
 						</h2>
 						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
@@ -253,13 +259,13 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 							<!-- Vibes -->
 							<div>
 								<h3 class="text-sm font-medium text-base-content/60 mb-2 flex items-center gap-1.5">
-									<span class="icon-[heroicons--sparkles] w-4 h-4 text-primary"></span>
+									<span class="icon-[heroicons--sparkles] w-4 h-4 text-secondary"></span>
 									Vibes
 								</h3>
 								<div class="flex flex-wrap gap-1.5">
 									if len(m.Edges.Dj.Vibes) > 0 {
 										for _, vibe := range m.Edges.Dj.Vibes {
-											<span class="badge badge-primary">{ vibe }</span>
+											<span class="badge badge-secondary">{ vibe }</span>
 										}
 									} else {
 										<span class="text-base-content/40 text-sm italic">No specific vibes</span>
@@ -316,10 +322,10 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 			// Governing: SPEC user-authentication REQ "Input Validation"
 			// GenerationPrompt rendered via Templ string interpolation {}, which auto-escapes HTML
 			if m.GenerationPrompt != "" {
-				<div class="collapse collapse-arrow bg-base-100 shadow-xl mb-8">
+				<div class="collapse collapse-arrow bg-base-100 border border-base-300 rounded-2xl shadow-xl mb-8">
 					<input type="checkbox" aria-label="Toggle Generation Prompt section"/>
-					<div class="collapse-title text-lg font-medium flex items-center gap-2">
-						<span class="icon-[heroicons--document-text] w-5 h-5"></span>
+					<div class="collapse-title text-lg font-bold tracking-tight flex items-center gap-2">
+						<span class="icon-[heroicons--document-text] w-5 h-5 text-secondary"></span>
 						Generation Prompt
 						<span class="badge badge-ghost badge-sm">Debug Info</span>
 					</div>
@@ -329,14 +335,14 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 				</div>
 			}
 			<!-- Tracks Section -->
-			<div class="card bg-base-100 shadow-xl mb-8">
+			<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl mb-8">
 				<div class="card-body">
 					<div class="flex items-center justify-between">
-						<h2 class="card-title">
-							<span class="icon-[heroicons--queue-list] w-6 h-6"></span>
+						<h2 class="card-title text-xl font-bold tracking-tight">
+							<span class="icon-[heroicons--queue-list] w-6 h-6 text-primary"></span>
 							Tracks
 							if len(tracks) > 0 {
-								<span class="badge badge-neutral">{ strconv.Itoa(len(tracks)) }</span>
+								<span class="badge badge-primary badge-outline font-semibold">{ strconv.Itoa(len(tracks)) }</span>
 							}
 						</h2>
 						if len(tracks) > 0 {
@@ -357,10 +363,10 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 					</div>
 					if len(tracks) == 0 {
 						<div class="text-center py-16">
-							<div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-base-200 mb-4">
-								<span class="icon-[heroicons--musical-note] w-10 h-10 text-base-content/30"></span>
+							<div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl vibe-gradient vibe-ring mb-4">
+								<span class="icon-[heroicons--musical-note] w-10 h-10 text-secondary"></span>
 							</div>
-							<h3 class="text-lg font-semibold mb-2">No tracks yet</h3>
+							<h3 class="text-xl font-bold tracking-tight mb-2">No tracks yet</h3>
 							<p class="text-base-content/60 mb-6 max-w-md mx-auto">
 								Click "Generate Tracks" to let { getDJDisplayName(m.Edges.Dj) } curate the perfect mixtape for you.
 							</p>
@@ -368,7 +374,7 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 								hx-post={ fmt.Sprintf("/vibes/mixtapes/%d/generate", m.ID) }
 								hx-swap="none"
 								hx-indicator="#generate-tracks-btn-indicator"
-								class="btn btn-primary gap-2"
+								class="btn btn-secondary gap-2"
 							>
 								<span id="generate-tracks-btn-indicator" class="htmx-indicator loading loading-spinner loading-sm"></span>
 								<span class="icon-[heroicons--sparkles] w-5 h-5"></span>
@@ -381,10 +387,10 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 				</div>
 			</div>
 			<!-- Metadata Card -->
-			<div class="card bg-base-100 shadow-xl mb-8">
+			<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl mb-8">
 				<div class="card-body">
-					<h2 class="card-title">
-						<span class="icon-[heroicons--information-circle] w-6 h-6"></span>
+					<h2 class="card-title text-xl font-bold tracking-tight">
+						<span class="icon-[heroicons--information-circle] w-6 h-6 text-primary"></span>
 						Metadata
 					</h2>
 					@components.MetadataTable([]components.MetadataRow{
@@ -413,7 +419,7 @@ templ MixtapeShow(m *ent.Mixtape, tracks []*ent.Track, djs []*ent.DJ, cfg *confi
 					<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
 				</form>
 				<h3 class="font-bold text-lg mb-4 flex items-center gap-2">
-					<span class="icon-[heroicons--pencil-square] w-6 h-6"></span>
+					<span class="icon-[heroicons--pencil-square] w-6 h-6 text-primary"></span>
 					Edit Mixtape
 				</h3>
 				<form id="edit-mixtape-form" hx-put={ fmt.Sprintf("/vibes/mixtapes/%d", m.ID) } hx-swap="none" class="space-y-4">

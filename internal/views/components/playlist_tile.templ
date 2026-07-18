@@ -11,13 +11,13 @@ func isNavidromePlaylist(source string) bool {
 }
 
 templ PlaylistTile(playlist *ent.Playlist, subtitle string) {
-	<a href={ templ.URL(fmt.Sprintf("/playlists/%d", playlist.ID)) } class="card bg-base-100 shadow-md hover:shadow-xl transition-all hover:-translate-y-1">
-		<figure class="relative pt-[100%]">
+	<a href={ templ.URL(fmt.Sprintf("/playlists/%d", playlist.ID)) } class="card bg-base-100 border border-base-300 rounded-2xl p-3 card-hover group">
+		<figure class="relative pt-[100%] overflow-hidden art-rounded">
 			if playlist.ImageURL != "" {
 				<img src={ playlist.ImageURL } alt={ playlist.Name } class="absolute inset-0 w-full h-full object-cover"/>
 			} else {
 				<div class="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-					<span class="icon-[heroicons--queue-list] w-16 h-16 text-base-content/20"></span>
+					<span class="icon-[heroicons--queue-list] w-16 h-16 text-base-content/25"></span>
 				</div>
 			}
 			// Sync status badge overlay
@@ -30,8 +30,8 @@ templ PlaylistTile(playlist *ent.Playlist, subtitle string) {
 				SyncError:        playlist.SyncError,
 			})
 		</figure>
-		<div class="card-body p-3">
-			<h4 class="font-semibold text-sm line-clamp-1">{ playlist.Name }</h4>
+		<div class="card-body p-0 pt-3 gap-1">
+			<h4 class="font-bold tracking-tight text-sm line-clamp-1 group-hover:text-primary transition-colors">{ playlist.Name }</h4>
 			<div class="text-xs text-base-content/60">
 				<span>{ subtitle }</span>
 			</div>

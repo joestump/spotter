@@ -12,27 +12,27 @@ type TagView struct {
 templ TypedTagBadge(tag TagView) {
 	switch tag.TagType {
 		case "ai":
-			<span class="badge badge-accent gap-1">
+			<span class="badge badge-secondary gap-1 font-medium">
 				<span class="icon-[heroicons--sparkles] w-3 h-3"></span>
 				{ tag.Name }
 			</span>
 		case "genre":
-			<span class="badge badge-primary gap-1">
+			<span class="badge badge-primary gap-1 font-medium">
 				<span class="icon-[heroicons--tag] w-3 h-3"></span>
 				{ tag.Name }
 			</span>
 		case "label":
-			<span class="badge badge-secondary gap-1">
+			<span class="badge badge-accent gap-1 font-medium">
 				<span class="icon-[heroicons--building-office] w-3 h-3"></span>
 				{ tag.Name }
 			</span>
 		case "source":
-			<span class="badge badge-info gap-1">
+			<span class="badge badge-info gap-1 font-medium">
 				<span class="icon-[heroicons--server] w-3 h-3"></span>
 				{ tag.Name }
 			</span>
 		default:
-			<span class="badge badge-neutral gap-1">
+			<span class="badge badge-neutral badge-outline gap-1 font-medium">
 				<span class="icon-[heroicons--musical-note] w-3 h-3"></span>
 				{ tag.Name }
 			</span>
@@ -44,7 +44,7 @@ templ TypedTagBadge(tag TagView) {
 templ TypedTagGroup(label string, tags []TagView) {
 	if len(tags) > 0 {
 		<div class="flex flex-wrap gap-1 items-center">
-			<span class="text-xs text-base-content/50 mr-1">{ label }</span>
+			<span class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mr-1">{ label }</span>
 			for _, tag := range tags {
 				@TypedTagBadge(tag)
 			}

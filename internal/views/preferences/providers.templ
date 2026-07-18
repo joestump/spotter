@@ -11,10 +11,11 @@ import (
 templ Providers(user *ent.User, spotifyAuth *ent.SpotifyAuth, lastfmAuth *ent.LastFMAuth, navidromeAuth *ent.NavidromeAuth, cfg *config.Config) {
 	@layouts.Dashboard("Providers | Spotter", cfg, "/preferences/providers") {
 		<div class="max-w-7xl mx-auto">
-			<div class="mb-8">
-				<h2 class="text-3xl font-bold">Providers</h2>
-				<p class="text-base-content/60 mt-2">Manage your connected music services</p>
-			</div>
+			<header class="mb-8">
+				<p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Preferences</p>
+				<h2 class="text-3xl font-bold tracking-tight mt-1">Providers</h2>
+				<p class="text-base-content/60 mt-2">Connect the services Spotter pulls from and syncs to.</p>
+			</header>
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 				<!-- Navidrome -->
 				@components.ProviderTile(components.ProviderProps{
@@ -132,7 +133,7 @@ templ Providers(user *ent.User, spotifyAuth *ent.SpotifyAuth, lastfmAuth *ent.La
 
 templ NavidromeLogoutModal() {
 	<dialog id="navidrome-logout-modal" class="modal">
-		<div class="modal-box">
+		<div class="modal-box rounded-2xl border border-base-300">
 			<h3 class="font-bold text-lg">Log Out from Navidrome</h3>
 			<p class="py-4">Are you sure you want to log out? You will need to log in again to access Spotter.</p>
 			<div class="modal-action">
@@ -153,7 +154,7 @@ templ NavidromeLogoutModal() {
 
 templ NavidromeRebuildModal() {
 	<dialog id="navidrome-rebuild-modal" class="modal">
-		<div class="modal-box">
+		<div class="modal-box rounded-2xl border border-base-300">
 			<h3 class="font-bold text-lg flex items-center gap-2">
 				<span class="icon-[heroicons--exclamation-triangle] w-6 h-6 text-warning"></span>
 				Rebuild Navidrome Data
@@ -183,7 +184,7 @@ templ NavidromeRebuildModal() {
 
 templ SpotifyDisconnectModal() {
 	<dialog id="spotify-disconnect-modal" class="modal">
-		<div class="modal-box">
+		<div class="modal-box rounded-2xl border border-base-300">
 			<h3 class="font-bold text-lg">Disconnect from Spotify</h3>
 			<p class="py-4">Are you sure you want to disconnect your Spotify account? Your synced data will remain, but no new data will be imported.</p>
 			<div class="modal-action">
@@ -209,7 +210,7 @@ templ SpotifyDisconnectModal() {
 
 templ SpotifyRebuildModal() {
 	<dialog id="spotify-rebuild-modal" class="modal">
-		<div class="modal-box">
+		<div class="modal-box rounded-2xl border border-base-300">
 			<h3 class="font-bold text-lg flex items-center gap-2">
 				<span class="icon-[heroicons--exclamation-triangle] w-6 h-6 text-warning"></span>
 				Rebuild Spotify Data
@@ -239,7 +240,7 @@ templ SpotifyRebuildModal() {
 
 templ LastFMDisconnectModal() {
 	<dialog id="lastfm-disconnect-modal" class="modal">
-		<div class="modal-box">
+		<div class="modal-box rounded-2xl border border-base-300">
 			<h3 class="font-bold text-lg">Disconnect from Last.fm</h3>
 			<p class="py-4">Are you sure you want to disconnect your Last.fm account? Your synced data will remain, but no new data will be imported.</p>
 			<div class="modal-action">
@@ -265,7 +266,7 @@ templ LastFMDisconnectModal() {
 
 templ LastFMRebuildModal() {
 	<dialog id="lastfm-rebuild-modal" class="modal">
-		<div class="modal-box">
+		<div class="modal-box rounded-2xl border border-base-300">
 			<h3 class="font-bold text-lg flex items-center gap-2">
 				<span class="icon-[heroicons--exclamation-triangle] w-6 h-6 text-warning"></span>
 				Rebuild Last.fm Data

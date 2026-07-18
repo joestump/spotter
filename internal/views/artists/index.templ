@@ -36,10 +36,15 @@ func formatFollowers(count *int) string {
 templ Index(artists []*ent.Artist, currentPage int, totalPages int, cfg *config.Config) {
 	@layouts.Dashboard("Artists | Spotter", cfg, "/library/artists") {
 		<div class="max-w-7xl mx-auto">
-			<div class="flex items-center justify-between mb-8">
-				<div>
-					<h2 class="text-3xl font-bold">Artists</h2>
-					<p class="text-base-content/60 mt-2">All artists from your enriched music catalog</p>
+			<header class="flex flex-wrap items-end justify-between gap-4 mb-8">
+				<div class="flex items-center gap-4">
+					<div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20">
+						<span class="icon-[heroicons--user-group] w-6 h-6"></span>
+					</div>
+					<div>
+						<h2 class="text-3xl font-bold tracking-tight">Artists</h2>
+						<p class="text-base-content/60 mt-1">All artists from your enriched music catalog</p>
+					</div>
 				</div>
 				<!-- View Toggle -->
 				<div class="join">
@@ -60,23 +65,25 @@ templ Index(artists []*ent.Artist, currentPage int, totalPages int, cfg *config.
 						<span class="icon-[heroicons--squares-2x2] w-4 h-4"></span>
 					</button>
 				</div>
-			</div>
+			</header>
 			if len(artists) == 0 {
-				<div class="card bg-base-200">
-					<div class="card-body items-center text-center">
-						<span class="icon-[heroicons--user-group] w-16 h-16 text-base-content/30"></span>
-						<h3 class="card-title">No artists found</h3>
+				<div class="card bg-base-100 border border-base-300 rounded-2xl">
+					<div class="card-body items-center text-center py-16">
+						<div class="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20">
+							<span class="icon-[heroicons--user-group] w-10 h-10 text-base-content/40"></span>
+						</div>
+						<h3 class="card-title mt-2">No artists found</h3>
 						<p class="text-base-content/60">Artists will appear here once your music catalog is enriched.</p>
 					</div>
 				</div>
 			} else {
 				<!-- Table View -->
-				<div id="table-view" class="hidden card bg-base-100 shadow-xl">
+				<div id="table-view" class="hidden card bg-base-100 border border-base-300 rounded-2xl overflow-hidden">
 					<div class="card-body p-0">
 						<div class="overflow-x-auto">
-							<table class="table table-zebra">
+							<table class="table">
 								<thead>
-									<tr>
+									<tr class="border-base-300 text-xs uppercase tracking-wide text-base-content/50">
 										<th class="w-12"></th>
 										<th>Artist</th>
 										<th>Genres</th>
@@ -86,43 +93,43 @@ templ Index(artists []*ent.Artist, currentPage int, totalPages int, cfg *config.
 								</thead>
 								<tbody>
 									for _, artist := range artists {
-										<tr class="hover">
+										<tr class="border-base-300 hover:bg-base-200/60 transition-colors">
 											<td>
 												<div class="avatar">
-													@components.ArtistImage(artist, "w-10 h-10 rounded-full")
+													@components.ArtistImage(artist, "w-11 h-11 rounded-full ring-1 ring-base-300")
 												</div>
 											</td>
 											<td>
-												<a href={ templ.URL(fmt.Sprintf("/library/artist/%d", artist.ID)) } class="font-medium hover:text-primary hover:underline">
+												<a href={ templ.URL(fmt.Sprintf("/library/artist/%d", artist.ID)) } class="font-semibold hover:text-primary transition-colors">
 													{ artist.Name }
 												</a>
 											</td>
 											<td>
-												<div class="flex flex-wrap gap-1">
+												<div class="flex flex-wrap gap-1.5">
 													for i, genre := range artist.Genres {
 														if i < 3 {
-															<span class="badge badge-outline badge-sm">{ genre }</span>
+															<span class="badge badge-sm badge-ghost bg-base-200 border-base-300">{ genre }</span>
 														}
 													}
 													if len(artist.Genres) > 3 {
-														<span class="badge badge-ghost badge-sm">+{ fmt.Sprintf("%d", len(artist.Genres)-3) }</span>
+														<span class="badge badge-sm badge-ghost">+{ fmt.Sprintf("%d", len(artist.Genres)-3) }</span>
 													}
 													if len(artist.Genres) == 0 {
-														<span class="text-base-content/50">-</span>
+														<span class="text-base-content/40">-</span>
 													}
 												</div>
 											</td>
 											<td>
 												if artist.Popularity != nil && *artist.Popularity > 0 {
 													<div class="flex items-center gap-2">
-														<progress class="progress progress-primary w-16" value={ fmt.Sprintf("%d", *artist.Popularity) } max="100"></progress>
-														<span class="text-xs text-base-content/60">{ fmt.Sprintf("%d", *artist.Popularity) }</span>
+														<progress class="progress progress-primary w-16 h-1.5" value={ fmt.Sprintf("%d", *artist.Popularity) } max="100"></progress>
+														<span class="text-xs font-medium text-base-content/60 tabular-nums">{ fmt.Sprintf("%d", *artist.Popularity) }</span>
 													</div>
 												} else {
-													<span class="text-base-content/50">-</span>
+													<span class="text-base-content/40">-</span>
 												}
 											</td>
-											<td>
+											<td class="font-medium tabular-nums text-base-content/70">
 												{ formatFollowers(artist.FollowerCount) }
 											</td>
 										</tr>
@@ -133,7 +140,7 @@ templ Index(artists []*ent.Artist, currentPage int, totalPages int, cfg *config.
 					</div>
 				</div>
 				<!-- Tile View -->
-				<div id="tile-view" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+				<div id="tile-view" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
 					for _, artist := range artists {
 						@components.ArtistTile(artist)
 					}

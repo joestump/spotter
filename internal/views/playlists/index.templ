@@ -61,16 +61,17 @@ templ providerBadge(source string) {
 templ Index(playlists []*ent.Playlist, currentPage int, totalPages int, cfg *config.Config) {
 	@layouts.Dashboard("Playlists | Spotter", cfg, "/playlists") {
 		<div class="max-w-7xl mx-auto">
-			<div class="flex items-center justify-between mb-8">
+			<header class="flex flex-wrap items-end justify-between gap-4 mb-8">
 				<div>
-					<h2 class="text-3xl font-bold">Playlists</h2>
+					<p class="text-sm font-semibold uppercase tracking-widest text-primary mb-1">Your Library</p>
+					<h2 class="text-3xl md:text-4xl font-bold tracking-tight">Playlists</h2>
 					<p class="text-base-content/60 mt-2">All playlists synced from your connected music services</p>
 				</div>
 				<!-- View Toggle -->
-				<div class="join">
+				<div class="join border border-base-300 rounded-full overflow-hidden">
 					<button
 						id="table-view-btn"
-						class="join-item btn btn-sm btn-square"
+						class="join-item btn btn-sm btn-square btn-ghost"
 						onclick="setView('table')"
 						title="Table view"
 					>
@@ -78,30 +79,32 @@ templ Index(playlists []*ent.Playlist, currentPage int, totalPages int, cfg *con
 					</button>
 					<button
 						id="tile-view-btn"
-						class="join-item btn btn-sm btn-square btn-active"
+						class="join-item btn btn-sm btn-square btn-ghost btn-active"
 						onclick="setView('tile')"
 						title="Tile view"
 					>
 						<span class="icon-[heroicons--squares-2x2] w-4 h-4"></span>
 					</button>
 				</div>
-			</div>
+			</header>
 			if len(playlists) == 0 {
-				<div class="card bg-base-200">
-					<div class="card-body items-center text-center">
-						<span class="icon-[heroicons--queue-list] w-16 h-16 text-base-content/30"></span>
-						<h3 class="card-title">No playlists found</h3>
-						<p class="text-base-content/60">Playlists will appear here once they are synced from your connected services.</p>
+				<div class="card bg-base-100 border border-base-300 rounded-2xl">
+					<div class="card-body items-center text-center py-16">
+						<div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mb-2">
+							<span class="icon-[heroicons--queue-list] w-10 h-10 text-primary"></span>
+						</div>
+						<h3 class="card-title text-xl font-bold tracking-tight">No playlists found</h3>
+						<p class="text-base-content/60 max-w-sm">Playlists will appear here once they are synced from your connected services.</p>
 					</div>
 				</div>
 			} else {
 				<!-- Table View -->
-				<div id="table-view" class="hidden card bg-base-100 shadow-xl">
+				<div id="table-view" class="hidden card bg-base-100 border border-base-300 rounded-2xl shadow-xl overflow-hidden">
 					<div class="card-body p-0">
 						<div class="overflow-x-auto">
-							<table class="table table-zebra">
+							<table class="table">
 								<thead>
-									<tr>
+									<tr class="border-base-300 text-xs uppercase tracking-wider text-base-content/50">
 										<th class="w-12"></th>
 										<th>Name</th>
 										<th>Description</th>
@@ -115,22 +118,22 @@ templ Index(playlists []*ent.Playlist, currentPage int, totalPages int, cfg *con
 								</thead>
 								<tbody>
 									for _, pl := range sortPlaylistsByName(playlists) {
-										<tr class="hover">
+										<tr class="border-base-300 hover:bg-base-200/60 transition-colors">
 											<td>
 												<div class="avatar">
-													<div class="w-10 h-10 rounded">
+													<div class="w-10 h-10 rounded-lg art-rounded overflow-hidden">
 														if pl.ImageURL != "" {
 															<img src={ pl.ImageURL } alt={ pl.Name }/>
 														} else {
-															<div class="bg-base-300 w-full h-full flex items-center justify-center">
-																<span class="icon-[heroicons--queue-list] w-5 h-5 text-base-content/40"></span>
+															<div class="bg-gradient-to-br from-primary/20 to-secondary/20 w-full h-full flex items-center justify-center">
+																<span class="icon-[heroicons--musical-note] w-5 h-5 text-primary/70"></span>
 															</div>
 														}
 													</div>
 												</div>
 											</td>
 											<td>
-												<a href={ templ.URL(fmt.Sprintf("/playlists/%d", pl.ID)) } class="font-medium hover:text-primary hover:underline">
+												<a href={ templ.URL(fmt.Sprintf("/playlists/%d", pl.ID)) } class="font-semibold hover:text-primary transition-colors">
 													{ pl.Name }
 												</a>
 												if pl.ExternalURL != "" {
@@ -149,13 +152,13 @@ templ Index(playlists []*ent.Playlist, currentPage int, totalPages int, cfg *con
 												</div>
 											</td>
 											<td>
-												<div class="text-sm font-medium">{ formatNumber(pl.TrackCount) }</div>
+												<div class="text-sm font-bold text-primary tabular-nums">{ formatNumber(pl.TrackCount) }</div>
 											</td>
 											<td>
-												<div class="text-sm">{ formatNumber(pl.UniqueArtists) }</div>
+												<div class="text-sm tabular-nums text-base-content/70">{ formatNumber(pl.UniqueArtists) }</div>
 											</td>
 											<td>
-												<div class="text-sm">{ formatNumber(pl.UniqueAlbums) }</div>
+												<div class="text-sm tabular-nums text-base-content/70">{ formatNumber(pl.UniqueAlbums) }</div>
 											</td>
 											<td>
 												@providerBadge(pl.Source)
@@ -178,16 +181,20 @@ templ Index(playlists []*ent.Playlist, currentPage int, totalPages int, cfg *con
 				<!-- Tile View -->
 				<div id="tile-view" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
 					for _, pl := range sortPlaylistsByName(playlists) {
-						<a href={ templ.URL(fmt.Sprintf("/playlists/%d", pl.ID)) } class="card bg-base-100 shadow-xl hover:shadow-2xl transition-all hover:scale-105">
+						<a href={ templ.URL(fmt.Sprintf("/playlists/%d", pl.ID)) } class="group card bg-base-100 border border-base-300 rounded-2xl overflow-hidden card-hover hover:-translate-y-1 hover:border-primary/40">
 							<!-- Cover Art -->
-							<figure class="aspect-square bg-base-300 relative">
+							<figure class="aspect-square relative art-rounded rounded-none overflow-hidden">
 								if pl.ImageURL != "" {
-									<img src={ pl.ImageURL } alt={ pl.Name } class="w-full h-full object-cover"/>
+									<img src={ pl.ImageURL } alt={ pl.Name } class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"/>
 								} else {
-									<div class="w-full h-full flex items-center justify-center">
-										<span class="icon-[heroicons--queue-list] w-16 h-16 text-base-content/20"></span>
+									<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
+										<span class="icon-[heroicons--musical-note] w-16 h-16 text-primary/60"></span>
 									</div>
 								}
+								<!-- Play affordance on hover -->
+								<div class="absolute bottom-3 right-3 w-12 h-12 rounded-full bg-primary text-primary-content shadow-glow-primary flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
+									<span class="icon-[heroicons--play-solid] w-6 h-6 ml-0.5"></span>
+								</div>
 								<!-- Sync indicator overlay -->
 								@components.PlaylistSyncBadge(components.PlaylistSyncBadgeConfig{
 									SyncToNavidrome:  pl.SyncToNavidrome,
@@ -198,16 +205,16 @@ templ Index(playlists []*ent.Playlist, currentPage int, totalPages int, cfg *con
 									SyncError:        pl.SyncError,
 								})
 							</figure>
-							<div class="card-body p-4">
+							<div class="card-body p-4 gap-0">
 								<!-- Title & Provider -->
 								<div class="flex items-start justify-between gap-2">
-									<h3 class="card-title text-base line-clamp-1">
+									<h3 class="card-title text-base font-bold tracking-tight line-clamp-1 group-hover:text-primary transition-colors">
 										{ pl.Name }
 									</h3>
 									@providerBadge(pl.Source)
 								</div>
 								<!-- Description -->
-								<p class="text-sm text-base-content/60 line-clamp-2 min-h-[2.5rem]">
+								<p class="text-sm text-base-content/60 line-clamp-2 min-h-[2.5rem] mt-1">
 									if pl.Description != "" {
 										{ pl.Description }
 									} else {
@@ -215,23 +222,22 @@ templ Index(playlists []*ent.Playlist, currentPage int, totalPages int, cfg *con
 									}
 								</p>
 								<!-- Stats -->
-								<div class="divider my-2"></div>
-								<div class="grid grid-cols-3 gap-2 text-center">
+								<div class="grid grid-cols-3 gap-2 text-center rounded-xl bg-base-200/60 p-3 mt-3">
 									<div>
-										<div class="text-lg font-bold">{ formatNumber(pl.TrackCount) }</div>
-										<div class="text-xs text-base-content/60">Tracks</div>
+										<div class="text-lg font-bold text-primary tabular-nums">{ formatNumber(pl.TrackCount) }</div>
+										<div class="text-[0.65rem] uppercase tracking-wider text-base-content/50">Tracks</div>
 									</div>
 									<div>
-										<div class="text-lg font-bold">{ formatNumber(pl.UniqueArtists) }</div>
-										<div class="text-xs text-base-content/60">Artists</div>
+										<div class="text-lg font-bold tabular-nums">{ formatNumber(pl.UniqueArtists) }</div>
+										<div class="text-[0.65rem] uppercase tracking-wider text-base-content/50">Artists</div>
 									</div>
 									<div>
-										<div class="text-lg font-bold">{ formatNumber(pl.UniqueAlbums) }</div>
-										<div class="text-xs text-base-content/60">Albums</div>
+										<div class="text-lg font-bold tabular-nums">{ formatNumber(pl.UniqueAlbums) }</div>
+										<div class="text-[0.65rem] uppercase tracking-wider text-base-content/50">Albums</div>
 									</div>
 								</div>
 								<!-- Last Updated -->
-								<div class="text-xs text-base-content/50 mt-2 text-center">
+								<div class="text-xs text-base-content/50 mt-3 text-center">
 									Updated <span class="timeago" datetime={ formatPlaylistTimeISO(pl.UpdatedAt) } title={ formatPlaylistTime(pl.UpdatedAt) }>{ formatPlaylistTime(pl.UpdatedAt) }</span>
 								</div>
 							</div>

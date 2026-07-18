@@ -76,15 +76,23 @@ func buildProviderDropdownConfig(props ProviderProps) ActionButtonDropdownConfig
 }
 
 templ ProviderTile(props ProviderProps) {
-	<div class="card bg-base-100 shadow-xl h-full flex flex-col">
+	<div class="card bg-base-100 border border-base-300 rounded-2xl h-full flex flex-col card-hover">
 		<div class="card-body flex-1 flex flex-col">
-			<h3 class="card-title">
-				if props.IconColorStyle != "" {
-					<span class={ props.IconClass + " w-6 h-6" } style={ "color: " + props.IconColorStyle + ";" }></span>
-				} else {
-					<span class={ props.IconClass + " w-6 h-6 " + props.IconColorClass }></span>
-				}
+			<h3 class="card-title font-bold tracking-tight gap-3">
+				<span class="grid place-items-center w-11 h-11 rounded-xl bg-base-200 border border-base-300 shrink-0">
+					if props.IconColorStyle != "" {
+						<span class={ props.IconClass + " w-6 h-6" } style={ "color: " + props.IconColorStyle + ";" }></span>
+					} else {
+						<span class={ props.IconClass + " w-6 h-6 " + props.IconColorClass }></span>
+					}
+				</span>
 				{ props.Name }
+				if props.IsConnected {
+					<span class="badge badge-primary badge-sm gap-1 ml-auto font-semibold">
+						<span class="icon-[heroicons--check-circle] w-3 h-3"></span>
+						Connected
+					</span>
+				}
 			</h3>
 			<p class="text-base-content/60 text-sm mt-2 flex-grow">
 				{ props.Description }
@@ -125,7 +133,7 @@ templ providerDisconnectedState(props ProviderProps) {
 			</a>
 		}
 	} else {
-		<div class="badge badge-ghost badge-lg gap-2 w-full">
+		<div class="badge badge-outline badge-lg gap-2 w-full text-base-content/60">
 			<span class="icon-[heroicons--x-circle] w-4 h-4"></span>
 			Not Connected
 		</div>

@@ -30,36 +30,56 @@ func buildSortBaseURL(currentPage int, artistFilter string) string {
 templ Index(rows []components.TrackTableRow, currentPage int, totalPages int, cfg *config.Config, artistFilter, sortCol, sortDir string) {
 	@layouts.Dashboard("Listens | Spotter", cfg, "/recent") {
 		<div class="max-w-7xl mx-auto">
+			<header class="mb-8">
+				<div class="flex items-center gap-2 text-primary mb-2">
+					<span class="icon-[heroicons--clock] w-5 h-5"></span>
+					<span class="text-xs font-semibold uppercase tracking-widest">Activity</span>
+				</div>
+				<h1 class="text-3xl md:text-4xl font-bold tracking-tight text-base-content">Listens</h1>
+				if artistFilter != "" {
+					<p class="text-base-content/60 mt-2 flex flex-wrap items-center gap-2">
+						Filtered by artist
+						<span class="badge badge-primary badge-outline font-medium">{ artistFilter }</span>
+						<a href="/recent" class="link link-primary text-sm">Clear filter</a>
+					</p>
+				} else {
+					<p class="text-base-content/60 mt-2">A live feed of everything you've played across your connected services.</p>
+				}
+			</header>
 			if len(rows) == 0 {
-				<div class="card bg-base-200">
-					<div class="card-body items-center text-center">
-						<span class="icon-[heroicons--musical-note] w-16 h-16 text-base-content/30"></span>
+				<div class="card bg-base-100 border border-base-300 rounded-2xl">
+					<div class="card-body items-center text-center py-16">
+						<div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mb-2">
+							<span class="icon-[heroicons--clock] w-10 h-10 text-primary"></span>
+						</div>
 						if artistFilter != "" {
-							<h3 class="card-title">No listens found for this artist</h3>
-							<p class="text-base-content/60">Try clearing the filter to see all listens.</p>
-							<a href="/recent" class="btn btn-primary btn-sm mt-4">Clear Filter</a>
+							<h3 class="text-xl font-bold tracking-tight">No listens found for this artist</h3>
+							<p class="text-base-content/60 max-w-sm">Try clearing the filter to see all of your listening history.</p>
+							<a href="/recent" class="btn btn-primary mt-4">Clear Filter</a>
 						} else {
-							<h3 class="card-title">No listens found</h3>
-							<p class="text-base-content/60">Your listening history will appear here once you start playing music.</p>
+							<h3 class="text-xl font-bold tracking-tight">No listens yet</h3>
+							<p class="text-base-content/60 max-w-sm">Your listening history will appear here once you start playing music.</p>
 						}
 					</div>
 				</div>
 			} else {
-				<div class="card bg-base-100 shadow-xl">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl">
 					<div class="card-body">
 						<div class="flex items-center justify-between mb-4">
 							<div>
-								<h3 class="card-title">
-									<span class="icon-[heroicons--clock] w-5 h-5"></span>
-									Listens
-								</h3>
+								<h2 class="text-lg font-bold tracking-tight flex items-center gap-2">
+									<span class="relative flex h-2.5 w-2.5">
+										<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60"></span>
+										<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+									</span>
+									Recent Activity
+								</h2>
 								if artistFilter != "" {
 									<p class="text-base-content/60 text-sm mt-1">
-										Filtered by artist: <span class="font-medium text-primary">{ artistFilter }</span>
-										<a href="/recent" class="ml-2 link link-primary text-xs">Clear</a>
+										Showing listens by <span class="font-medium text-primary">{ artistFilter }</span>
 									</p>
 								} else {
-									<p class="text-base-content/60 text-sm mt-1">Your listening history from all connected services</p>
+									<p class="text-base-content/60 text-sm mt-1">Streaming in from all connected services, newest first</p>
 								}
 							</div>
 							<div class="flex items-center gap-2">
@@ -88,25 +108,25 @@ templ Index(rows []components.TrackTableRow, currentPage int, totalPages int, cf
 				</div>
 				if totalPages > 1 {
 					<div class="flex justify-center mt-8">
-						<div class="join">
+						<div class="join bg-base-100 border border-base-300 rounded-full p-1">
 							if currentPage > 1 {
-								<a href={ templ.URL(buildPaginationURL(currentPage-1, artistFilter, sortCol, sortDir)) } class="join-item btn btn-sm">«</a>
+								<a href={ templ.URL(buildPaginationURL(currentPage-1, artistFilter, sortCol, sortDir)) } class="join-item btn btn-sm btn-ghost">«</a>
 							} else {
-								<button class="join-item btn btn-sm btn-disabled" disabled>«</button>
+								<button class="join-item btn btn-sm btn-ghost btn-disabled" disabled>«</button>
 							}
 							for i := 1; i <= totalPages; i++ {
 								if i == currentPage {
-									<button class="join-item btn btn-sm btn-active">{ fmt.Sprintf("%d", i) }</button>
+									<button class="join-item btn btn-sm btn-primary">{ fmt.Sprintf("%d", i) }</button>
 								} else if i == 1 || i == totalPages || (i >= currentPage-2 && i <= currentPage+2) {
-									<a href={ templ.URL(buildPaginationURL(i, artistFilter, sortCol, sortDir)) } class="join-item btn btn-sm">{ fmt.Sprintf("%d", i) }</a>
+									<a href={ templ.URL(buildPaginationURL(i, artistFilter, sortCol, sortDir)) } class="join-item btn btn-sm btn-ghost">{ fmt.Sprintf("%d", i) }</a>
 								} else if i == currentPage-3 || i == currentPage+3 {
-									<button class="join-item btn btn-sm btn-disabled" disabled>...</button>
+									<button class="join-item btn btn-sm btn-ghost btn-disabled" disabled>...</button>
 								}
 							}
 							if currentPage < totalPages {
-								<a href={ templ.URL(buildPaginationURL(currentPage+1, artistFilter, sortCol, sortDir)) } class="join-item btn btn-sm">»</a>
+								<a href={ templ.URL(buildPaginationURL(currentPage+1, artistFilter, sortCol, sortDir)) } class="join-item btn btn-sm btn-ghost">»</a>
 							} else {
-								<button class="join-item btn btn-sm btn-disabled" disabled>»</button>
+								<button class="join-item btn btn-sm btn-ghost btn-disabled" disabled>»</button>
 							}
 						</div>
 					</div>

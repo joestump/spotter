@@ -1,0 +1,35 @@
+<!-- @dsCard group="Music" name="NowPlaying & Stats" subtitle="Now-playing bar with green progress + stat card" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="spotter">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NowPlaying — Spotter</title>
+<link rel="stylesheet" href="../../../styles.css" />
+<style>
+  body { margin: 0; }
+  .stage { padding: 40px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 640px) { .stage { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="sp-root">
+  <div class="stage">
+    <div class="sp-card sp-card--pad">
+      <div style="display:flex; gap:16px; align-items:center;">
+        <div class="sp-art" style="width:64px; height:64px; font-size:1.4rem;">♪</div>
+        <div style="flex:1">
+          <div class="sp-card__title">360</div>
+          <div class="sp-card__sub">Charli XCX · BRAT</div>
+          <div class="sp-progress" style="margin-top:12px"><div class="sp-progress__fill" style="width:42%"></div></div>
+        </div>
+        <button class="sp-btn sp-btn--primary sp-btn--icon" aria-label="Play">▶</button>
+      </div>
+    </div>
+    <div class="sp-stat">
+      <div class="sp-stat__label">Total Listens</div>
+      <div class="sp-stat__value">12.4k</div>
+      <div class="sp-stat__delta">▲ 8% this week</div>
+    </div>
+  </div>
+</body>
+</html>

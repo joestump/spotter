@@ -11,8 +11,8 @@ templ ArtistImage(artist *ent.Artist, class string) {
 	if hasLocalArtistImage(artist) {
 		<img src={ templ.SafeURL("/library/artist/" + strconv.Itoa(artist.ID) + ".png") } alt={ artist.Name } class={ class }/>
 	} else {
-		<div class={ "bg-base-300 flex items-center justify-center", class }>
-			<span class="icon-[heroicons--user] w-1/2 h-1/2 text-base-content/40"></span>
+		<div class={ "bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center", class }>
+			<span class="icon-[heroicons--user] w-1/2 h-1/2 text-base-content/30"></span>
 		</div>
 	}
 }
@@ -23,8 +23,8 @@ templ AlbumImage(album *ent.Album, class string) {
 	if hasLocalAlbumImage(album) {
 		<img src={ templ.SafeURL("/library/album/" + strconv.Itoa(album.ID) + ".png") } alt={ album.Name } class={ "object-cover", class }/>
 	} else {
-		<div class={ "bg-base-300 flex items-center justify-center", class }>
-			<span class="icon-[heroicons--musical-note] w-1/2 h-1/2 text-base-content/40"></span>
+		<div class={ "bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center", class }>
+			<span class="icon-[heroicons--musical-note] w-1/2 h-1/2 text-base-content/30"></span>
 		</div>
 	}
 }

@@ -1,0 +1,175 @@
+/**
+ * Spotter Design System — styles.css
+ * ---------------------------------------------------------------------------
+ * The complete Spotter look in one @import closure. Class-based (`.sp-*`), so
+ * previews render standalone. In the PRODUCTION app these map onto DaisyUI's
+ * `spotter` theme (see README) — e.g. `.sp-btn.sp-btn--primary` == DaisyUI
+ * `btn btn-primary` under `data-theme="spotter"`.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,400..600&display=swap');
+@import './tokens/spotter.tokens.css';
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+.sp-root,
+body.sp-root {
+  font-family: var(--sp-font-sans);
+  color: var(--sp-text);
+  background: var(--sp-bg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'ss01';
+}
+
+.sp-display { font-size: clamp(2.6rem, 6vw, 4rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.02; color: var(--sp-text-strong); }
+.sp-h1 { font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 800; letter-spacing: -0.025em; color: var(--sp-text-strong); }
+.sp-h2 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.02em; color: var(--sp-text-strong); }
+.sp-h3 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; color: var(--sp-text-strong); }
+.sp-body { font-size: 1.05rem; color: var(--sp-text); }
+.sp-muted { color: var(--sp-text-muted); }
+.sp-small { font-size: 0.85rem; color: var(--sp-text-muted); }
+.sp-wordmark { font-weight: 800; letter-spacing: -0.03em; color: var(--sp-green); }
+.sp-eyebrow { display: inline-block; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sp-green); }
+.sp-code { font-family: var(--sp-font-mono); font-size: 0.9em; background: var(--sp-surface-2); color: var(--sp-green-hi); padding: 0.1em 0.4em; border-radius: var(--sp-radius-sm); }
+
+.sp-stack { display: flex; flex-direction: column; gap: var(--sp-space-4); }
+.sp-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-space-3); }
+
+/* ==========================================================================
+   Button — pills with a brand glow
+   ========================================================================== */
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-space-2);
+  font-family: var(--sp-font-sans);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.7rem 1.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--sp-radius-pill);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.16s ease, box-shadow 0.22s ease, background-color 0.18s ease;
+}
+.sp-btn--sm { padding: 0.45rem 1.05rem; font-size: 0.85rem; }
+.sp-btn--lg { padding: 0.9rem 2rem; font-size: 1.05rem; }
+.sp-btn--primary { background: var(--sp-green); color: #04140A; box-shadow: var(--sp-glow-green); }
+.sp-btn--primary:hover { background: var(--sp-green-hi); transform: translateY(-1px); }
+.sp-btn--secondary { background: var(--sp-violet); color: #fff; box-shadow: var(--sp-glow-violet); }
+.sp-btn--secondary:hover { background: var(--sp-violet-hi); transform: translateY(-1px); }
+.sp-btn--outline { background: transparent; color: var(--sp-text); border-color: var(--sp-line); }
+.sp-btn--outline:hover { border-color: var(--sp-green); color: var(--sp-green); }
+.sp-btn--ghost { background: transparent; color: var(--sp-text-muted); }
+.sp-btn--ghost:hover { background: var(--sp-line); color: var(--sp-text); }
+.sp-btn--danger { background: var(--sp-danger); color: #fff; }
+.sp-btn--icon { width: 2.75rem; height: 2.75rem; padding: 0; border-radius: var(--sp-radius-pill); }
+
+/* ==========================================================================
+   Badge / Chip
+   ========================================================================== */
+.sp-badge {
+  display: inline-flex; align-items: center; gap: var(--sp-space-1);
+  padding: 0.28rem 0.75rem;
+  font-size: 0.78rem; font-weight: 700; line-height: 1;
+  border-radius: var(--sp-radius-pill);
+}
+.sp-badge--green { background: var(--sp-green); color: #04140A; }
+.sp-badge--violet { background: var(--sp-violet); color: #fff; }
+.sp-badge--gold { background: var(--sp-gold); color: #1A1200; }
+.sp-badge--danger { background: rgba(244, 63, 94, 0.16); color: #FB7185; }
+.sp-badge--neutral { background: var(--sp-surface-2); color: var(--sp-text-muted); }
+.sp-badge--soft { background: rgba(31, 223, 110, 0.14); color: var(--sp-green); }
+
+/* ==========================================================================
+   Card / Tile
+   ========================================================================== */
+.sp-card {
+  background: var(--sp-surface);
+  border: 1px solid var(--sp-line);
+  border-radius: var(--sp-radius-lg);
+  box-shadow: var(--sp-shadow-sm);
+  overflow: hidden;
+  transition: transform 0.18s ease, background-color 0.2s ease, box-shadow 0.24s ease;
+}
+.sp-card--pad { padding: var(--sp-space-5); }
+.sp-card--hover:hover { transform: translateY(-3px); background: var(--sp-surface-2); box-shadow: var(--sp-shadow-md); }
+.sp-card__body { padding: var(--sp-space-4); }
+.sp-card__title { font-size: 1.05rem; font-weight: 700; margin: 0 0 0.15rem; color: var(--sp-text-strong); }
+.sp-card__sub { font-size: 0.82rem; color: var(--sp-text-muted); }
+
+/* Album/artist art — square with soft rounding, gradient fallback */
+.sp-art {
+  position: relative; aspect-ratio: 1 / 1; width: 100%;
+  border-radius: var(--sp-radius-md);
+  background: linear-gradient(135deg, rgba(31,223,110,0.22), rgba(139,92,246,0.22));
+  display: grid; place-items: center;
+  color: rgba(255,255,255,0.35); font-size: 2.2rem;
+}
+.sp-art--rounded { border-radius: var(--sp-radius-md); box-shadow: 0 8px 24px -12px rgba(0,0,0,0.7); }
+
+/* ==========================================================================
+   Stat
+   ========================================================================== */
+.sp-stat { padding: var(--sp-space-5); background: var(--sp-surface); border: 1px solid var(--sp-line); border-radius: var(--sp-radius-lg); }
+.sp-stat__label { font-size: 0.82rem; color: var(--sp-text-muted); }
+.sp-stat__value { font-size: 2rem; font-weight: 800; color: var(--sp-green); letter-spacing: -0.02em; }
+.sp-stat__delta { font-size: 0.8rem; color: var(--sp-text-muted); }
+
+/* ==========================================================================
+   Now Playing / progress
+   ========================================================================== */
+.sp-progress { width: 100%; height: 6px; border-radius: var(--sp-radius-pill); background: var(--sp-line); overflow: hidden; }
+.sp-progress__fill { height: 100%; background: var(--sp-green); border-radius: var(--sp-radius-pill); }
+
+/* ==========================================================================
+   Vibes panel (AI / violet)
+   ========================================================================== */
+.sp-vibes {
+  padding: var(--sp-space-5);
+  border-radius: var(--sp-radius-lg);
+  background: linear-gradient(135deg, rgba(139,92,246,0.16), rgba(31,223,110,0.06));
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.35);
+}
+
+/* ==========================================================================
+   Field / Input
+   ========================================================================== */
+.sp-field { display: flex; flex-direction: column; gap: var(--sp-space-2); }
+.sp-field__label { font-size: 0.85rem; font-weight: 600; color: var(--sp-text-strong); }
+.sp-input {
+  font-family: var(--sp-font-sans); font-size: 1rem; color: var(--sp-text);
+  background: var(--sp-bg);
+  border: 1px solid var(--sp-line);
+  border-radius: var(--sp-radius-pill);
+  padding: 0.65rem 1.1rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sp-input::placeholder { color: var(--sp-text-faint); }
+.sp-input:focus { outline: none; border-color: var(--sp-green); box-shadow: 0 0 0 3px rgba(31, 223, 110, 0.18); }
+
+/* ==========================================================================
+   Sidebar nav item
+   ========================================================================== */
+.sp-nav { display: flex; flex-direction: column; gap: 0.25rem; }
+.sp-nav__item {
+  display: flex; align-items: center; gap: var(--sp-space-3);
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--sp-radius-md);
+  color: var(--sp-text-muted); font-weight: 500; text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.sp-nav__item:hover { background: var(--sp-line); color: var(--sp-text); }
+.sp-nav__item--active { background: rgba(31, 223, 110, 0.12); color: var(--sp-green); font-weight: 600; }
+
+/* ==========================================================================
+   Alert
+   ========================================================================== */
+.sp-alert { padding: var(--sp-space-4) var(--sp-space-5); border-radius: var(--sp-radius-md); font-weight: 500; }
+.sp-alert--success { background: var(--sp-green); color: #04140A; }
+.sp-alert--info { background: rgba(58, 190, 249, 0.14); color: #7DD3FC; border: 1px solid rgba(58,190,249,0.3); }
+.sp-alert--danger { background: rgba(244, 63, 94, 0.14); color: #FB7185; border: 1px solid rgba(244,63,94,0.3); }

@@ -28,17 +28,22 @@ templ CreateMixtapeModal() {
 
 // CreateMixtapeModalContent renders the inner content of the mixtape modal.
 templ CreateMixtapeModalContent(params CreateMixtapeParams) {
-	<div class="modal-box">
+	<div class="modal-box rounded-2xl border border-base-300">
 		<form method="dialog">
 			<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
 		</form>
-		<h3 class="font-bold text-lg flex items-center gap-2">
-			<span class="icon-[heroicons--musical-note] w-5 h-5 text-primary"></span>
-			Create Mixtape from { params.SeedName }
-		</h3>
-		<p class="text-sm text-base-content/60 py-2">
-			Generate a mixtape inspired by this { string(params.SeedType) } using AI.
-		</p>
+		<div class="vibe-gradient vibe-ring -mx-6 -mt-6 mb-4 px-6 py-5 rounded-t-2xl">
+			<div class="flex items-center gap-2">
+				<h3 class="font-bold text-lg tracking-tight flex items-center gap-2">
+					<span class="icon-[heroicons--sparkles] w-5 h-5 text-secondary"></span>
+					Create Mixtape from { params.SeedName }
+				</h3>
+				<span class="badge badge-secondary badge-sm gap-1">AI</span>
+			</div>
+			<p class="text-sm text-base-content/70 pt-1">
+				Generate a mixtape inspired by this { string(params.SeedType) } using AI.
+			</p>
+		</div>
 		<form
 			hx-post={ fmt.Sprintf("/library/%s/%d/create-mixtape", params.SeedType, params.SeedID) }
 			hx-swap="none"
@@ -87,7 +92,7 @@ templ CreateMixtapeModalContent(params CreateMixtapeParams) {
 			</div>
 			<div class="modal-action">
 				<button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
-				<button type="submit" class="btn btn-primary gap-2">
+				<button type="submit" class="btn btn-secondary gap-2">
 					<span class="icon-[heroicons--sparkles] w-4 h-4"></span>
 					Create Mixtape
 				</button>

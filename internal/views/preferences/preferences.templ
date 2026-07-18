@@ -10,29 +10,35 @@ import (
 templ Appearance(user *ent.User, cfg *config.Config) {
 	@layouts.Dashboard("Appearance | Spotter", cfg, "/preferences/appearance") {
 		<div class="max-w-5xl mx-auto">
-			<div class="mb-8">
-				<h2 class="text-3xl font-bold">Appearance</h2>
-				<p class="text-base-content/60 mt-2">Customize your visual preferences</p>
-			</div>
+			<header class="mb-8">
+				<p class="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Preferences</p>
+				<h2 class="text-3xl font-bold tracking-tight mt-1">Appearance</h2>
+				<p class="text-base-content/60 mt-2">Tune the look and feel of your Spotter experience.</p>
+			</header>
 			<div class="space-y-6">
 				<!-- Theme Settings Card -->
-				<div class="card bg-base-100 shadow-xl">
+				<div class="card bg-base-100 border border-base-300 rounded-2xl shadow-xl">
 					<div class="card-body">
-						<h3 class="card-title">
-							<span class="icon-[heroicons--paint-brush] w-6 h-6"></span>
-							Theme & Display
-						</h3>
-						<form id="preferences-form" hx-post="/preferences/appearance" hx-swap="none" class="space-y-6 mt-4">
+						<div class="flex items-center gap-3">
+							<span class="grid place-items-center w-11 h-11 rounded-xl bg-primary/10 text-primary shrink-0">
+								<span class="icon-[heroicons--paint-brush] w-6 h-6"></span>
+							</span>
+							<div>
+								<h3 class="text-lg font-bold tracking-tight">Theme &amp; Display</h3>
+								<p class="text-sm text-base-content/60">Colors, density, and how much fits on a page.</p>
+							</div>
+						</div>
+						<form id="preferences-form" hx-post="/preferences/appearance" hx-swap="none" class="space-y-6 mt-6">
 							<!-- Theme Selection -->
 							<div class="form-control">
 								<label class="label">
-									<span class="label-text font-medium">Theme</span>
+									<span class="label-text font-semibold">Theme</span>
 									<span class="label-text-alt text-base-content/60">Choose your preferred color scheme</span>
 								</label>
 								<select
 									name="theme"
 									id="theme-select"
-									class="select select-bordered w-full"
+									class="select select-bordered w-full rounded-xl"
 									onchange="applyTheme(this.value)"
 								>
 									for _, theme := range cfg.AvailableThemes() {
@@ -43,7 +49,7 @@ templ Appearance(user *ent.User, cfg *config.Config) {
 							<!-- Pagination Size -->
 							<div class="form-control">
 								<label class="label">
-									<span class="label-text font-medium">Items Per Page</span>
+									<span class="label-text font-semibold">Items Per Page</span>
 									<span class="label-text-alt text-base-content/60">Number of items to show per page</span>
 								</label>
 								<input
@@ -53,10 +59,10 @@ templ Appearance(user *ent.User, cfg *config.Config) {
 									min="10"
 									max="100"
 									step="5"
-									class="input input-bordered w-full max-w-xs"
+									class="input input-bordered w-full max-w-xs rounded-xl"
 								/>
 							</div>
-							<div class="card-actions justify-end">
+							<div class="card-actions justify-end pt-2">
 								<button type="submit" class="btn btn-primary gap-2">
 									<span class="icon-[heroicons--check] w-5 h-5"></span>
 									Save Settings
