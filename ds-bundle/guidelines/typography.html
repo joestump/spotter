@@ -1,0 +1,27 @@
+<!-- @dsCard group="Foundations" name="Typography" subtitle="Figtree — geometric display to small" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="spotter">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Typography — Spotter</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; }
+  .stage { padding: 40px; display: flex; flex-direction: column; gap: 20px; }
+  .row { display: grid; grid-template-columns: 130px 1fr; gap: 24px; align-items: baseline; border-bottom: 1px dashed var(--sp-line); padding-bottom: 16px; }
+  .lbl { font: 700 13px/1.3 var(--sp-font-sans); color: var(--sp-text-muted); }
+  .lbl code { display:block; font: 400 11px/1.4 var(--sp-font-mono); color: var(--sp-text-faint); }
+</style>
+</head>
+<body class="sp-root">
+  <div class="stage">
+    <div class="row"><span class="lbl">Display<code>800</code></span><span class="sp-display">Spotter</span></div>
+    <div class="row"><span class="lbl">H1<code>800</code></span><span class="sp-h1">Generate a mixtape</span></div>
+    <div class="row"><span class="lbl">H2<code>700</code></span><span class="sp-h2">Your listening, enriched</span></div>
+    <div class="row"><span class="lbl">H3<code>700</code></span><span class="sp-h3">Vibes Engine</span></div>
+    <div class="row"><span class="lbl">Body<code>400</code></span><span class="sp-body">AI-powered music discovery and playlist sync for Navidrome.</span></div>
+    <div class="row"><span class="lbl">Small<code>muted</code></span><span class="sp-small">42 tracks · synced 3m ago</span></div>
+  </div>
+</body>
+</html>

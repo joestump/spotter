@@ -4,17 +4,20 @@ import "spotter/internal/views/layouts"
 
 templ Login(navidromeURL string, errorMsg string) {
 	@layouts.Base("Login | Spotter") {
-		<div class="hero min-h-screen bg-base-200">
-			<div class="hero-content flex-col">
-				<div class="card w-full max-w-lg shadow-2xl bg-base-100">
+		<div class="hero min-h-screen bg-base-200 relative overflow-hidden">
+			<!-- Ambient brand glow: green + violet, the Spotter energy -->
+			<div class="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-primary/20 blur-3xl"></div>
+			<div class="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-secondary/20 blur-3xl"></div>
+			<div class="hero-content flex-col relative z-10">
+				<div class="card w-full max-w-lg shadow-2xl bg-base-100 border border-base-300">
 					<div class="card-body">
 						<!-- Logo -->
 						<div class="flex items-center justify-center gap-4 mb-6">
 							<div class="relative">
 								<span class="icon-[heroicons--musical-note] w-12 h-12 text-primary"></span>
-								<span class="absolute inset-0 icon-[heroicons--musical-note] w-12 h-12 text-primary opacity-30 blur-sm"></span>
+								<span class="absolute inset-0 icon-[heroicons--musical-note] w-12 h-12 text-primary opacity-40 blur-md"></span>
 							</div>
-							<h1 class="text-4xl font-bold text-primary tracking-wide">Spotter</h1>
+							<h1 class="text-4xl brand-wordmark text-primary">Spotter</h1>
 						</div>
 						if errorMsg != "" {
 							<div class="alert alert-error shadow-sm">

@@ -1,0 +1,7 @@
+{
+  "projectId": "76ec4472-fa47-43c8-aea6-c9ebaf66f76f",
+  "projectName": "Spotter Design System",
+  "shape": "custom",
+  "localDir": "ds-bundle",
+  "note": "Hand-authored, class-based (.sp-*) design system — NOT converter-generated. Spotter's production UI is Go + templ + Tailwind/DaisyUI (theme lives in tailwind.config.js as the 'spotter' DaisyUI theme), so the design-sync converter path (compiled JS component lib) does not apply. ds-bundle/ ships styles.css + tokens + @dsCard HTML previews + .prompt.md docs + README conventions header; each prompt.md maps .sp-* classes to the app's DaisyUI classes. No _ds_bundle.js, no _ds_sync.json anchor (re-syncs re-verify/re-upload the whole bundle). Ownable identity: Spotter Green #1FDF6E + Vibe Violet #8B5CF6 (deliberately NOT Spotify #1DB954/#1ED760)."
+}

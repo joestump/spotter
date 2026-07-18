@@ -1,0 +1,30 @@
+<!-- @dsCard group="Forms" name="Input" subtitle="Pill inputs, labeled fields, green focus ring" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="spotter">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Input — Spotter</title>
+<link rel="stylesheet" href="../../../styles.css" />
+<style>
+  body { margin: 0; }
+  .stage { padding: 40px; display: flex; flex-direction: column; gap: 24px; max-width: 440px; }
+</style>
+</head>
+<body class="sp-root">
+  <div class="stage">
+    <div class="sp-field">
+      <label class="sp-field__label" for="u">Navidrome username</label>
+      <input class="sp-input" id="u" placeholder="you@library" />
+    </div>
+    <div class="sp-field">
+      <label class="sp-field__label" for="v">Describe the vibe</label>
+      <input class="sp-input" id="v" placeholder="rainy sunday, mellow indie…" />
+    </div>
+    <div class="sp-row" style="flex-wrap:nowrap">
+      <input class="sp-input" style="flex:1" placeholder="Search your library…" />
+      <button class="sp-btn sp-btn--primary sp-btn--icon" aria-label="Search">⌕</button>
+    </div>
+  </div>
+</body>
+</html>

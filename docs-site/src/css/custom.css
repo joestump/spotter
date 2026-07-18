@@ -1,21 +1,27 @@
 /**
- * Spotter Docs — Spotify-Inspired Theme
+ * Spotter Docs — Spotter Design System
  *
- * Dark-first design with proper light mode support.
- * Preserves all design plugin badge/RFC/requirement-box styles.
+ * Dark-first design language shared with the Spotter application.
+ * Ownable identity (its own thing, not any streaming service's brand):
+ *   Spotter Green  #1FDF6E  — primary
+ *   Vibe Violet    #8B5CF6  — AI / Vibes accent
+ * Near-black surfaces, Figtree type, pill controls. Mirrors the DaisyUI
+ * `spotter` theme in tailwind.config.js. Preserves the design-plugin
+ * badge / RFC / requirement-box styles.
  */
+@import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,400..600&display=swap');
 
 /* ============================================
    CSS Custom Properties — Dark Mode (default)
    ============================================ */
 :root {
-  --ifm-color-primary: #1DB954;
-  --ifm-color-primary-dark: #1AA64B;
-  --ifm-color-primary-darker: #189D47;
-  --ifm-color-primary-darkest: #14823A;
-  --ifm-color-primary-light: #22CC5D;
-  --ifm-color-primary-lighter: #2ED065;
-  --ifm-color-primary-lightest: #4ADB7A;
+  --ifm-color-primary: #1FDF6E;
+  --ifm-color-primary-dark: #17C25E;
+  --ifm-color-primary-darker: #14B455;
+  --ifm-color-primary-darkest: #0E9445;
+  --ifm-color-primary-light: #3BE888;
+  --ifm-color-primary-lighter: #54ED9C;
+  --ifm-color-primary-lightest: #7DF3B7;
 
   --ifm-background-color: #121212;
   --ifm-background-surface-color: #1e1e1e;
@@ -24,11 +30,11 @@
   --ifm-heading-color: #FFFFFF;
 
   --ifm-code-font-size: 95%;
-  --ifm-heading-font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --ifm-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --ifm-heading-font-family: 'Figtree', 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ifm-font-family-base: 'Figtree', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
-  --ifm-link-color: #1DB954;
-  --ifm-link-hover-color: #22CC5D;
+  --ifm-link-color: #1FDF6E;
+  --ifm-link-hover-color: #3BE888;
 
   --ifm-navbar-background-color: #121212;
   --ifm-navbar-link-color: #E0E0E0;
@@ -37,11 +43,11 @@
   --ifm-footer-background-color: #0a0a0a;
   --ifm-footer-color: #B3B3B3;
   --ifm-footer-link-color: #B3B3B3;
-  --ifm-footer-link-hover-color: #1DB954;
+  --ifm-footer-link-hover-color: #1FDF6E;
 
   --ifm-menu-color: #B3B3B3;
-  --ifm-menu-color-active: #1DB954;
-  --ifm-menu-color-background-active: rgba(29, 185, 84, 0.1);
+  --ifm-menu-color-active: #1FDF6E;
+  --ifm-menu-color-background-active: rgba(31, 223, 110, 0.1);
   --ifm-menu-color-background-hover: rgba(255, 255, 255, 0.05);
 
   --ifm-table-background: #1e1e1e;
@@ -56,13 +62,13 @@
   --ifm-hr-border-color: rgba(255, 255, 255, 0.08);
   --ifm-toc-border-color: rgba(255, 255, 255, 0.08);
 
-  --docusaurus-highlighted-code-line-bg: rgba(29, 185, 84, 0.15);
+  --docusaurus-highlighted-code-line-bg: rgba(31, 223, 110, 0.15);
 
   /* Custom properties for homepage */
   --spotter-surface: #1e1e1e;
   --spotter-surface-hover: #282828;
   --spotter-surface-border: rgba(255, 255, 255, 0.08);
-  --spotter-surface-border-hover: rgba(29, 185, 84, 0.3);
+  --spotter-surface-border-hover: rgba(31, 223, 110, 0.3);
   --spotter-text-primary: #FFFFFF;
   --spotter-text-secondary: #B3B3B3;
   --spotter-text-body: #E0E0E0;
@@ -81,13 +87,13 @@
    Light Mode Overrides
    ============================================ */
 [data-theme='light'] {
-  --ifm-color-primary: #1DB954;
-  --ifm-color-primary-dark: #1AA64B;
-  --ifm-color-primary-darker: #189D47;
-  --ifm-color-primary-darkest: #14823A;
-  --ifm-color-primary-light: #22CC5D;
-  --ifm-color-primary-lighter: #2ED065;
-  --ifm-color-primary-lightest: #4ADB7A;
+  --ifm-color-primary: #1FDF6E;
+  --ifm-color-primary-dark: #17C25E;
+  --ifm-color-primary-darker: #14B455;
+  --ifm-color-primary-darkest: #0E9445;
+  --ifm-color-primary-light: #3BE888;
+  --ifm-color-primary-lighter: #54ED9C;
+  --ifm-color-primary-lightest: #7DF3B7;
 
   --ifm-background-color: #FAFAFA;
   --ifm-background-surface-color: #FFFFFF;
@@ -95,8 +101,8 @@
   --ifm-font-color-secondary: #666666;
   --ifm-heading-color: #191414;
 
-  --ifm-link-color: #1DB954;
-  --ifm-link-hover-color: #14823A;
+  --ifm-link-color: #1FDF6E;
+  --ifm-link-hover-color: #0E9445;
 
   --ifm-navbar-background-color: #FFFFFF;
   --ifm-navbar-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
@@ -106,11 +112,11 @@
   --ifm-footer-background-color: #191414;
   --ifm-footer-color: #B3B3B3;
   --ifm-footer-link-color: #B3B3B3;
-  --ifm-footer-link-hover-color: #1DB954;
+  --ifm-footer-link-hover-color: #1FDF6E;
 
   --ifm-menu-color: #555555;
-  --ifm-menu-color-active: #1DB954;
-  --ifm-menu-color-background-active: rgba(29, 185, 84, 0.08);
+  --ifm-menu-color-active: #1FDF6E;
+  --ifm-menu-color-background-active: rgba(31, 223, 110, 0.08);
   --ifm-menu-color-background-hover: rgba(0, 0, 0, 0.04);
 
   --ifm-table-background: #FFFFFF;
@@ -125,12 +131,12 @@
   --ifm-hr-border-color: #E0E0E0;
   --ifm-toc-border-color: #E0E0E0;
 
-  --docusaurus-highlighted-code-line-bg: rgba(29, 185, 84, 0.1);
+  --docusaurus-highlighted-code-line-bg: rgba(31, 223, 110, 0.1);
 
   --spotter-surface: #FFFFFF;
   --spotter-surface-hover: #F5F5F5;
   --spotter-surface-border: #E0E0E0;
-  --spotter-surface-border-hover: rgba(29, 185, 84, 0.4);
+  --spotter-surface-border-hover: rgba(31, 223, 110, 0.4);
   --spotter-text-primary: #191414;
   --spotter-text-secondary: #666666;
   --spotter-text-body: #333333;
@@ -293,9 +299,9 @@ code {
    Buttons — Spotify Style
    ============================================ */
 .button--spotify {
-  background-color: #1DB954;
+  background-color: #1FDF6E;
   color: #FFFFFF;
-  border: 2px solid #1DB954;
+  border: 2px solid #1FDF6E;
   font-weight: 700;
   border-radius: 500px;
   padding: 0.75rem 2rem;
@@ -307,8 +313,8 @@ code {
 }
 
 .button--spotify:hover {
-  background-color: #1ed760;
-  border-color: #1ed760;
+  background-color: #3BE888;
+  border-color: #3BE888;
   color: #FFFFFF;
   transform: scale(1.04);
   text-decoration: none;
@@ -333,8 +339,8 @@ code {
 }
 
 .button--spotify-outline:hover {
-  border-color: #1DB954;
-  color: #1DB954;
+  border-color: #1FDF6E;
+  color: #1FDF6E;
   transform: scale(1.04);
   text-decoration: none;
 }
@@ -361,7 +367,7 @@ code {
   left: -10%;
   width: 120%;
   height: 200%;
-  background: radial-gradient(ellipse at 50% 0%, rgba(29, 185, 84, 0.12) 0%, transparent 60%);
+  background: radial-gradient(ellipse at 50% 0%, rgba(31, 223, 110, 0.12) 0%, transparent 60%);
   pointer-events: none;
 }
 
@@ -370,14 +376,14 @@ code {
 }
 
 [data-theme='light'] .hero--spotter::before {
-  background: radial-gradient(ellipse at 50% 0%, rgba(29, 185, 84, 0.08) 0%, transparent 60%);
+  background: radial-gradient(ellipse at 50% 0%, rgba(31, 223, 110, 0.08) 0%, transparent 60%);
 }
 
 .hero__logo {
   font-size: 4.5rem;
   display: block;
   margin-bottom: 1rem;
-  filter: drop-shadow(0 4px 12px rgba(29, 185, 84, 0.3));
+  filter: drop-shadow(0 4px 12px rgba(31, 223, 110, 0.3));
   animation: float 3s ease-in-out infinite;
 }
 
@@ -397,14 +403,14 @@ code {
 }
 
 .hero__title--spotter span {
-  background: linear-gradient(135deg, #FFFFFF 0%, #1DB954 100%);
+  background: linear-gradient(135deg, #FFFFFF 0%, #1FDF6E 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 [data-theme='light'] .hero__title--spotter span {
-  background: linear-gradient(135deg, #191414 0%, #1DB954 100%);
+  background: linear-gradient(135deg, #191414 0%, #1FDF6E 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -450,14 +456,14 @@ code {
 }
 
 .ai-disclosure__link {
-  color: #1DB954;
+  color: #1FDF6E;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.2s ease;
 }
 
 .ai-disclosure__link:hover {
-  color: #1ed760;
+  color: #3BE888;
   text-decoration: none;
 }
 
@@ -488,7 +494,7 @@ code {
 .stat-number {
   font-size: 2.5rem;
   font-weight: 900;
-  color: #1DB954;
+  color: #1FDF6E;
   letter-spacing: -0.03em;
   line-height: 1.1;
 }
@@ -558,7 +564,7 @@ code {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #1DB954, #1ed760);
+  background: linear-gradient(90deg, #1FDF6E, #3BE888);
   opacity: 0;
   transition: opacity 0.25s ease;
 }
@@ -597,14 +603,14 @@ code {
 }
 
 .feature-card__link {
-  color: #1DB954;
+  color: #1FDF6E;
   font-weight: 600;
   font-size: 0.85rem;
   transition: color 0.2s ease;
 }
 
 .feature-card:hover .feature-card__link {
-  color: #1ed760;
+  color: #3BE888;
 }
 
 /* ============================================
@@ -831,25 +837,25 @@ code {
   text-decoration: none;
   padding: 0.1rem 0.35rem;
   border-radius: 0.25rem;
-  background-color: rgba(29, 185, 84, 0.1);
+  background-color: rgba(31, 223, 110, 0.1);
   color: var(--ifm-color-primary-dark);
-  border: 1px solid rgba(29, 185, 84, 0.2);
+  border: 1px solid rgba(31, 223, 110, 0.2);
   transition: background-color 0.2s, border-color 0.2s;
   white-space: nowrap;
 }
 .rfc-ref:hover {
-  background-color: rgba(29, 185, 84, 0.2);
-  border-color: rgba(29, 185, 84, 0.4);
+  background-color: rgba(31, 223, 110, 0.2);
+  border-color: rgba(31, 223, 110, 0.4);
   text-decoration: none;
 }
 [data-theme='dark'] .rfc-ref {
-  background-color: rgba(29, 185, 84, 0.15);
+  background-color: rgba(31, 223, 110, 0.15);
   color: var(--ifm-color-primary-light);
-  border-color: rgba(29, 185, 84, 0.3);
+  border-color: rgba(31, 223, 110, 0.3);
 }
 [data-theme='dark'] .rfc-ref:hover {
-  background-color: rgba(29, 185, 84, 0.25);
-  border-color: rgba(29, 185, 84, 0.5);
+  background-color: rgba(31, 223, 110, 0.25);
+  border-color: rgba(31, 223, 110, 0.5);
 }
 
 /* ============================================
@@ -947,3 +953,59 @@ code {
     font-size: 1.75rem;
   }
 }
+
+/* ============================================
+   Spotter cohesion layer — green + Vibe Violet,
+   pill controls (matches the DaisyUI `spotter` app theme)
+   ============================================ */
+:root {
+  --spotter-violet: #8B5CF6;
+  --spotter-violet-light: #A78BFA;
+  --spotter-gold: #F5B921;
+}
+
+/* Pill buttons, like the app's CTAs */
+.button,
+.pagination-nav__link {
+  border-radius: 9999px;
+}
+.pagination-nav__link {
+  border-radius: 16px;
+}
+.button--primary {
+  box-shadow: 0 8px 24px -8px rgba(31, 223, 110, 0.5);
+  transition: transform 0.16s ease, box-shadow 0.22s ease;
+}
+.button--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 30px -6px rgba(31, 223, 110, 0.6);
+}
+
+/* Vibe Violet accents — AI/Vibes energy, and the second half of the identity */
+.markdown a code,
+a.card:hover {
+  border-color: var(--spotter-violet);
+}
+blockquote {
+  border-left: 4px solid var(--spotter-violet);
+  border-radius: 0 10px 10px 0;
+}
+/* "tip" admonitions ride the green, "note"/"info" ride the violet */
+.theme-admonition-note,
+.theme-admonition-info {
+  border-color: var(--spotter-violet) !important;
+}
+.theme-admonition-note .admonition-icon svg,
+.theme-admonition-info .admonition-icon svg {
+  fill: var(--spotter-violet);
+}
+
+/* Inline code chips get the green tint used across the app */
+code {
+  border-radius: 6px;
+}
+
+/* Rounded media + code blocks, matching the app's soft corners */
+.markdown img { border-radius: 12px; }
+div[class^='codeBlockContainer'] { border-radius: 12px; }
+

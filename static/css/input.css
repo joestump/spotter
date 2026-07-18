@@ -1,6 +1,70 @@
+/* Figtree — geometric, Circular-adjacent, open-source (SIL OFL). Spotter's face. */
+@import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,400..600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ===========================================================================
+   Spotter design layer — Spotify-evoking polish that cascades through every
+   templ view via DaisyUI semantic classes. Ownable identity: spring-green
+   primary + electric-violet secondary on near-black. See tailwind.config.js.
+   =========================================================================== */
+@layer base {
+  html {
+    font-family: 'Figtree', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'ss01';
+  }
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Figtree', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+  /* Spotify-esque brand wordmark: heavy + tight */
+  .brand-wordmark { font-weight: 800; letter-spacing: -0.03em; }
+}
+
+@layer components {
+  /* Primary buttons carry a soft green glow — the signature CTA energy. */
+  .btn-primary {
+    box-shadow: 0 8px 28px -8px rgba(31, 223, 110, 0.5);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 10px 32px -6px rgba(31, 223, 110, 0.6);
+    transform: translateY(-1px);
+  }
+  .btn-secondary {
+    box-shadow: 0 8px 28px -8px rgba(139, 92, 246, 0.5);
+  }
+
+  /* Cards lift on hover — the browsable "shelf" feel of a music app. */
+  .card {
+    transition: transform 0.18s ease, box-shadow 0.24s ease, background-color 0.2s ease;
+  }
+  .card.card-hover:hover,
+  .tile-hover:hover {
+    transform: translateY(-3px);
+    background-color: var(--fallback-b3, oklch(var(--b3)));
+  }
+
+  /* Album/artist art gets Spotify's soft rounding + depth. */
+  .art-rounded { border-radius: 0.75rem; box-shadow: 0 8px 24px -12px rgba(0,0,0,0.7); }
+
+  /* Sidebar active item: green accent bar + tinted pill. */
+  .menu li > a.menu-active,
+  .menu li > a.active,
+  .menu li > a:focus.active {
+    background-color: rgba(31, 223, 110, 0.12);
+    color: #1FDF6E;
+    font-weight: 600;
+  }
+
+  /* AI / Vibes surfaces lean on the violet so they read as "smart" features. */
+  .vibe-gradient {
+    background-image: linear-gradient(135deg, rgba(139,92,246,0.22), rgba(31,223,110,0.10));
+  }
+  .vibe-ring { box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.35); }
+}
 
 .htmx-request .htmx-indicator-hide,
 .htmx-request.htmx-indicator-hide {

@@ -1,0 +1,67 @@
+/**
+ * Spotter Design Tokens — the single source of truth for the Spotter look.
+ * Ownable identity that EVOKES a music-streaming aesthetic without copying any
+ * real brand: spring-green primary + electric-violet secondary on near-black.
+ * (Deliberately NOT #1DB954 / #1ED760.)
+ *
+ * Consumed by every rendered design via styles.css's @import closure.
+ * Reference with var(--sp-*). Mirrors the DaisyUI `spotter` theme used by the
+ * production app (tailwind.config.js).
+ */
+:root {
+  /* Brand */
+  --sp-green: #1FDF6E;          /* primary — spring-emerald */
+  --sp-green-hi: #3BE888;       /* hover / light */
+  --sp-green-lo: #17C25E;       /* pressed / dark */
+  --sp-violet: #8B5CF6;         /* secondary — AI / Vibes */
+  --sp-violet-hi: #A78BFA;
+  --sp-violet-lo: #6D3FE0;
+  --sp-gold: #F5B921;           /* sparing energy accent */
+
+  /* Near-black elevation ramp (cool-tinted, ownable) */
+  --sp-bg: #0C0D10;             /* page background (darkest) */
+  --sp-surface: #16181D;        /* cards, sidebar, navbar */
+  --sp-surface-2: #1C1F26;      /* raised / neutral */
+  --sp-line: #252830;           /* borders, hover */
+  --sp-line-soft: rgba(255, 255, 255, 0.08);
+
+  /* Text */
+  --sp-text: #E6E7EA;
+  --sp-text-strong: #FFFFFF;
+  --sp-text-muted: #A6A8AF;
+  --sp-text-faint: #6E7078;
+
+  /* Semantic */
+  --sp-info: #3ABEF9;
+  --sp-success: #1FDF6E;
+  --sp-warning: #F5B921;
+  --sp-danger: #F43F5E;
+
+  /* Radii — pill controls, soft cards (Spotify-esque) */
+  --sp-radius-sm: 6px;
+  --sp-radius-md: 10px;
+  --sp-radius-lg: 16px;
+  --sp-radius-xl: 24px;
+  --sp-radius-pill: 9999px;
+
+  /* Spacing (4px base) */
+  --sp-space-1: 4px;
+  --sp-space-2: 8px;
+  --sp-space-3: 12px;
+  --sp-space-4: 16px;
+  --sp-space-5: 24px;
+  --sp-space-6: 32px;
+  --sp-space-7: 48px;
+  --sp-space-8: 64px;
+
+  /* Shadows + brand glows */
+  --sp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --sp-shadow-md: 0 8px 24px -12px rgba(0, 0, 0, 0.7);
+  --sp-shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.8);
+  --sp-glow-green: 0 8px 28px -8px rgba(31, 223, 110, 0.5);
+  --sp-glow-violet: 0 8px 28px -8px rgba(139, 92, 246, 0.5);
+
+  /* Type — Figtree (geometric, open-source SIL OFL) */
+  --sp-font-sans: 'Figtree', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sp-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}

@@ -25,9 +25,9 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, "sqlite3", cfg.Database.Driver)
 	assert.Equal(t, "file:spotter.db?cache=shared&_fk=1", cfg.Database.Source)
 	assert.Equal(t, "http://127.0.0.1:8080/auth/spotify/callback", cfg.Spotify.RedirectURL)
-	assert.Equal(t, "light,dark,cupcake", cfg.Theme.Available)
-	assert.Equal(t, "dark", cfg.Theme.Default)
-	assert.Equal(t, []string{"light", "dark", "cupcake"}, cfg.AvailableThemes())
+	assert.Equal(t, "spotter,night,synthwave,dracula,dark,light", cfg.Theme.Available)
+	assert.Equal(t, "spotter", cfg.Theme.Default)
+	assert.Equal(t, []string{"spotter", "night", "synthwave", "dracula", "dark", "light"}, cfg.AvailableThemes())
 	assert.Equal(t, "text", cfg.Log.Format)
 }
 
@@ -135,7 +135,7 @@ func TestAvailableThemesDefaultsWhenNotSet(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should return default themes when not configured
-	assert.Equal(t, []string{"light", "dark", "cupcake"}, cfg.AvailableThemes())
+	assert.Equal(t, []string{"spotter", "night", "synthwave", "dracula", "dark", "light"}, cfg.AvailableThemes())
 }
 
 func TestAvailableThemesTrimsWhitespace(t *testing.T) {

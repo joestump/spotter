@@ -1,0 +1,39 @@
+<!-- @dsCard group="Actions" name="Button" subtitle="Green primary / violet secondary / outline / ghost / danger · 3 sizes" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="spotter">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Button — Spotter</title>
+<link rel="stylesheet" href="../../../styles.css" />
+<style>
+  body { margin: 0; }
+  .stage { padding: 40px; display: flex; flex-direction: column; gap: 26px; }
+  .stage-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+  .lbl { font: 600 12px/1 var(--sp-font-sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--sp-text-faint); }
+</style>
+</head>
+<body class="sp-root">
+  <div class="stage">
+    <span class="lbl">Variants</span>
+    <div class="stage-row">
+      <button class="sp-btn sp-btn--primary">Generate Mixtape</button>
+      <button class="sp-btn sp-btn--secondary">Ask Vibes AI</button>
+      <button class="sp-btn sp-btn--outline">Sync</button>
+      <button class="sp-btn sp-btn--ghost">Cancel</button>
+      <button class="sp-btn sp-btn--danger">Delete</button>
+    </div>
+    <span class="lbl">Sizes</span>
+    <div class="stage-row">
+      <button class="sp-btn sp-btn--primary sp-btn--sm">Small</button>
+      <button class="sp-btn sp-btn--primary">Default</button>
+      <button class="sp-btn sp-btn--primary sp-btn--lg">Large</button>
+    </div>
+    <span class="lbl">Icon</span>
+    <div class="stage-row">
+      <button class="sp-btn sp-btn--primary sp-btn--icon" aria-label="Play">▶</button>
+      <button class="sp-btn sp-btn--secondary sp-btn--icon" aria-label="Shuffle">⇄</button>
+    </div>
+  </div>
+</body>
+</html>

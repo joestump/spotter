@@ -274,8 +274,8 @@ func Load() (*Config, error) {
 	v.SetDefault("server.write_timeout", "60s")
 	v.SetDefault("server.idle_timeout", "120s")
 	v.SetDefault("sync.interval", "5m")
-	v.SetDefault("theme.available", "light,dark,cupcake")
-	v.SetDefault("theme.default", "dark")
+	v.SetDefault("theme.available", "spotter,night,synthwave,dracula,dark,light")
+	v.SetDefault("theme.default", "spotter")
 	v.SetDefault("database.driver", "sqlite3")
 	v.SetDefault("database.source", "file:spotter.db?cache=shared&_fk=1")
 
