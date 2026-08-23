@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -235,12 +236,19 @@ func main() {
 					logger.Error("failed to fetch users for background sync", "error", err)
 					continue
 				}
-				syncErrors := 0
+				// Governing: ADR-0019, SPEC observability REQ "BG-001", REQ "BG-002" — the error
+				// counter is atomic (incremented from per-user goroutines) and the tick metric is
+				// emitted only after joining this tick's goroutines, so duration_ms measures the
+				// actual sync work rather than goroutine spawn time and the counter is stable.
+				var syncErrors atomic.Int64
+				var tickWG sync.WaitGroup
 				for _, u := range users {
 					// Governing: SPEC graceful-shutdown REQ-WG-002 (wg.Add before spawn, defer wg.Done first)
 					wg.Add(1)
+					tickWG.Add(1)
 					go func(user *ent.User) {
 						defer wg.Done()
+						defer tickWG.Done()
 						// Governing: SPEC graceful-shutdown REQ-SEM-003, REQ-SEM-004 (semaphore acquire with ctx)
 						select {
 						case sem <- struct{}{}:
@@ -251,15 +259,16 @@ func main() {
 						// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
 						if err := syncer.Sync(ctx, user); err != nil {
 							logger.Error("background sync failed", "username", user.Username, "error", err)
-							syncErrors++
+							syncErrors.Add(1)
 						}
 					}(u)
 				}
+				tickWG.Wait()
 				logger.Info("metric.background_tick",
 					"loop", "sync",
 					"users_processed", len(users),
 					"duration_ms", time.Since(tickStart).Milliseconds(),
-					"errors", syncErrors)
+					"errors", int(syncErrors.Load()))
 			}
 		}
 	}()
@@ -291,12 +300,18 @@ func main() {
 					logger.Error("failed to fetch users for metadata sync", "error", err)
 					return
 				}
-				metadataErrors := 0
+				// Governing: ADR-0019, SPEC observability REQ "BG-001", REQ "BG-002" — atomic error
+				// counter and post-join emission so duration_ms measures actual tick work and the
+				// counter is stable (see sync loop above).
+				var metadataErrors atomic.Int64
+				var tickWG sync.WaitGroup
 				for _, u := range users {
 					// Governing: SPEC graceful-shutdown REQ-WG-002 (wg.Add before spawn, defer wg.Done first)
 					wg.Add(1)
+					tickWG.Add(1)
 					go func(user *ent.User) {
 						defer wg.Done()
+						defer tickWG.Done()
 						// Governing: SPEC graceful-shutdown REQ-SEM-003, REQ-SEM-004 (semaphore acquire with ctx)
 						select {
 						case sem <- struct{}{}:
@@ -307,15 +322,16 @@ func main() {
 						// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
 						if err := metadataSvc.SyncAll(ctx, user); err != nil {
 							logger.Error("metadata sync failed", "username", user.Username, "error", err)
-							metadataErrors++
+							metadataErrors.Add(1)
 						}
 					}(u)
 				}
+				tickWG.Wait()
 				logger.Info("metric.background_tick",
 					"loop", "metadata",
 					"users_processed", len(users),
 					"duration_ms", time.Since(tickStart).Milliseconds(),
-					"errors", metadataErrors)
+					"errors", int(metadataErrors.Load()))
 			}
 
 			// Initial delay to let the app start up
@@ -380,12 +396,18 @@ func main() {
 					logger.Error("failed to fetch users for playlist sync", "error", err)
 					continue
 				}
-				plSyncErrors := 0
+				// Governing: ADR-0019, SPEC observability REQ "BG-001", REQ "BG-002" — atomic error
+				// counter and post-join emission so duration_ms measures actual tick work and the
+				// counter is stable (see sync loop above).
+				var plSyncErrors atomic.Int64
+				var tickWG sync.WaitGroup
 				for _, u := range users {
 					// Governing: SPEC graceful-shutdown REQ-WG-002 (wg.Add before spawn, defer wg.Done first)
 					wg.Add(1)
+					tickWG.Add(1)
 					go func(user *ent.User) {
 						defer wg.Done()
+						defer tickWG.Done()
 						// Governing: SPEC graceful-shutdown REQ-SEM-003, REQ-SEM-004 (semaphore acquire with ctx)
 						select {
 						case sem <- struct{}{}:
@@ -396,15 +418,16 @@ func main() {
 						// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
 						if err := playlistSyncSvc.SyncAllEnabledPlaylists(ctx, user.ID); err != nil {
 							logger.Error("playlist sync failed", "username", user.Username, "error", err)
-							plSyncErrors++
+							plSyncErrors.Add(1)
 						}
 					}(u)
 				}
+				tickWG.Wait()
 				logger.Info("metric.background_tick",
 					"loop", "playlist_sync",
 					"users_processed", len(users),
 					"duration_ms", time.Since(tickStart).Milliseconds(),
-					"errors", plSyncErrors)
+					"errors", int(plSyncErrors.Load()))
 			}
 		}
 	}()
