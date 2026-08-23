@@ -402,7 +402,8 @@ func newViper() *viper.Viper {
 	// Playlist sync defaults
 	v.SetDefault("playlist_sync.sync_interval", "1h")
 	v.SetDefault("playlist_sync.delete_on_unsync", false)
-	v.SetDefault("playlist_sync.min_match_confidence", 0.8)
+	// Governing: ADR-0014, SPEC playlist-sync-navidrome REQ-PLSYNC-003 (default 0.7; issue #330 aligned config with the ADR)
+	v.SetDefault("playlist_sync.min_match_confidence", 0.7)
 	v.SetDefault("playlist_sync.include_unmatched_tracks", false)
 
 	// Vibes (mixtape generation) defaults
@@ -416,7 +417,7 @@ func newViper() *viper.Viper {
 	v.SetDefault("vibes.max_tokens", 4000)          // Enough for track list + explanations
 	v.SetDefault("vibes.timeout_seconds", 120)      // 2 minutes
 	v.SetDefault("vibes.prompts_directory", "")     // Falls back to metadata.ai.prompts_directory
-	v.SetDefault("vibes.min_match_confidence", 0.7) // Lower than playlist sync for more matches
+	v.SetDefault("vibes.min_match_confidence", 0.7) // Same as playlist sync default (ADR-0014)
 
 	// Metadata enrichment defaults
 	v.SetDefault("metadata.enabled", true)
