@@ -35,9 +35,9 @@ func CreateEntityTagsTable(ctx context.Context, driver string, db *sql.DB) error
 // SQLite default ("sqlite3").
 func entityTagsDDL(driver string) []string {
 	switch driver {
-	case "postgres":
+	case driverPostgres:
 		return entityTagsPostgres
-	case "mysql":
+	case driverMySQL:
 		return entityTagsMySQL
 	default:
 		return entityTagsSQLite
