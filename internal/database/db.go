@@ -14,7 +14,11 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const driverPostgres = "postgres"
+const (
+	driverPostgres = "postgres"
+	driverMySQL    = "mysql"
+	driverSQLite   = "sqlite3"
+)
 
 func NewClient(driver, source string, encryptor *crypto.Encryptor) (*ent.Client, error) {
 	client, err := ent.Open(driver, source)
@@ -56,10 +60,10 @@ func driverToStdlib(driver string) string {
 	switch driver {
 	case driverPostgres:
 		return driverPostgres
-	case "mysql":
-		return "mysql"
+	case driverMySQL:
+		return driverMySQL
 	default:
-		return "sqlite3"
+		return driverSQLite
 	}
 }
 
