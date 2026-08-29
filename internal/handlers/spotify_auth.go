@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"spotter/ent/user"
@@ -105,24 +106,21 @@ func (h *Handler) SpotifyCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse state to extract CSRF token and encrypted user ID
-	parts := stateParam
-	colonIdx := -1
-	for i := len(parts) - 1; i >= 0; i-- {
-		if parts[i] == ':' {
-			colonIdx = i
-			break
-		}
-	}
-
-	if colonIdx == -1 {
+	// Parse state to extract CSRF token and encrypted user ID.
+	//
+	// Split on the FIRST colon, not the last. The encrypted half is produced by
+	// Encryptor.EncryptInt, which returns "enc:v1:<ciphertext>" -- it contains
+	// colons of its own. Scanning backwards therefore split inside the marker,
+	// yielding csrfState="<csrf>:enc:v1" and an encryptedUserID missing its
+	// marker, so every Spotify callback failed the CSRF comparison with
+	// error=invalid_state. The CSRF token is URL-safe base64 and never contains
+	// a colon, so the first colon is always the real delimiter.
+	csrfState, encryptedUserID, found := strings.Cut(stateParam, ":")
+	if !found {
 		h.Logger.Error("Spotify callback: invalid state format (missing colon)", "remote_ip", r.RemoteAddr)
 		http.Redirect(w, r, "/auth/login?error=invalid_state", http.StatusSeeOther)
 		return
 	}
-
-	csrfState := stateParam[:colonIdx]
-	encryptedUserID := stateParam[colonIdx+1:]
 
 	// Verify CSRF state against cookie
 	stateCookie, err := r.Cookie(spotifyStateCookie)

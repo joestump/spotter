@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"spotter/ent/user"
@@ -96,23 +97,19 @@ func (h *Handler) LastFMCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse state cookie to extract encrypted user ID (format: "state:encrypted_user_id")
-	stateValue := stateCookie.Value
-	colonIdx := -1
-	for i := len(stateValue) - 1; i >= 0; i-- {
-		if stateValue[i] == ':' {
-			colonIdx = i
-			break
-		}
-	}
-
-	if colonIdx == -1 {
+	// Parse state cookie to extract encrypted user ID (format: "state:encrypted_user_id").
+	//
+	// Split on the FIRST colon, for the same reason as the Spotify handler: the
+	// encrypted half is "enc:v1:<ciphertext>" and contains colons. Scanning
+	// backwards dropped the marker, and this path only kept working because
+	// Decrypt falls back to treating unmarked input as legacy base64. That
+	// fallback is not something to rely on.
+	_, encryptedUserID, found := strings.Cut(stateCookie.Value, ":")
+	if !found {
 		h.Logger.Error("Last.fm callback: invalid state format (missing colon)", "remote_ip", r.RemoteAddr)
 		http.Redirect(w, r, "/auth/login?error=invalid_state", http.StatusSeeOther)
 		return
 	}
-
-	encryptedUserID := stateValue[colonIdx+1:]
 
 	// Decrypt user ID from state
 	userID, err := h.Encryptor.DecryptInt(encryptedUserID)
