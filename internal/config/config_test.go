@@ -617,7 +617,7 @@ func TestHistoryLookbackFor(t *testing.T) {
 		"zero":    "0",
 	}
 
-	lookback, unlimited = cfg.HistoryLookbackFor("lastfm")
+	_, unlimited = cfg.HistoryLookbackFor("lastfm")
 	assert.True(t, unlimited, "unlimited keyword removes the bound")
 
 	lookback, unlimited = cfg.HistoryLookbackFor("listenbrainz")
