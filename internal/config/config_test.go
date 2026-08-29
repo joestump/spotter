@@ -70,6 +70,42 @@ func TestHistoryLookbackDuration_Fallback(t *testing.T) {
 	assert.Equal(t, 720*time.Hour, cfg.HistoryLookbackDuration(), "non-positive value falls back to 720h")
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (per-provider lookback override)
+func TestHistoryLookbackFor(t *testing.T) {
+	var cfg Config
+	cfg.Sync.HistoryLookback = "48h"
+
+	lookback, unlimited := cfg.HistoryLookbackFor("spotify")
+	assert.Equal(t, 48*time.Hour, lookback, "falls back to global lookback")
+	assert.False(t, unlimited, "global fallback is never unlimited")
+
+	cfg.Sync.ProviderLookback = map[string]string{
+		"lastfm":  "unlimited",
+		"spotify": "2160h",
+		"weird":   "not-a-duration",
+	}
+
+	lookback, unlimited = cfg.HistoryLookbackFor("lastfm")
+	assert.True(t, unlimited, "unlimited keyword removes the bound")
+
+	lookback, unlimited = cfg.HistoryLookbackFor("listenbrainz")
+	assert.Equal(t, 48*time.Hour, lookback, "providers without an entry use the global lookback")
+	assert.False(t, unlimited, "providers without an entry are never unlimited")
+
+	lookback, _ = cfg.HistoryLookbackFor("spotify")
+	assert.Equal(t, 2160*time.Hour, lookback, "per-provider duration overrides global")
+
+	lookback, unlimited = cfg.HistoryLookbackFor("weird")
+	assert.Equal(t, 48*time.Hour, lookback, "invalid per-provider value falls back to global")
+	assert.False(t, unlimited)
+
+	_, unlimited = cfg.HistoryLookbackFor("zero")
+	assert.False(t, unlimited)
+	cfg.Sync.ProviderLookback["zero"] = "0"
+	_, unlimited = cfg.HistoryLookbackFor("zero")
+	assert.True(t, unlimited, "0 means unlimited")
+}
+
 func TestLogFormatConfig(t *testing.T) {
 	t.Setenv("SPOTTER_NAVIDROME_BASE_URL", "http://localhost:4533")
 	t.Setenv("SPOTTER_OPENAI_API_KEY", "sk-test-key")

@@ -154,6 +154,10 @@ type Config struct {
 		// HistoryLookback bounds how far back the first history sync reaches when a
 		// user has no existing listens (duration string, e.g. "720h").
 		HistoryLookback string `mapstructure:"history_lookback"`
+		// ProviderLookback overrides HistoryLookback per listen provider, keyed by
+		// provider type (e.g. "lastfm"). A value of "0" or "unlimited" removes the
+		// bound entirely so that provider syncs its full available history.
+		ProviderLookback map[string]string `mapstructure:"provider_lookback"`
 	} `mapstructure:"sync"`
 	Theme struct {
 		Available string `mapstructure:"available"` // Comma-separated list of DaisyUI theme names
@@ -264,6 +268,24 @@ func (c *Config) HistoryLookbackDuration() time.Duration {
 		return defaultLookback
 	}
 	return d
+}
+
+// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (per-provider override)
+// HistoryLookbackFor returns the lookback for a specific listen provider.
+// The per-provider map (sync.provider_lookback) wins over the global
+// sync.history_lookback. A per-provider value of "0" or "unlimited" reports
+// unlimited=true, meaning the provider should sync its full available history.
+func (c *Config) HistoryLookbackFor(provider string) (lookback time.Duration, unlimited bool) {
+	if v, ok := c.Sync.ProviderLookback[provider]; ok {
+		trimmed := strings.ToLower(strings.TrimSpace(v))
+		if trimmed == "0" || trimmed == "unlimited" {
+			return 0, true
+		}
+		if d, err := time.ParseDuration(trimmed); err == nil && d > 0 {
+			return d, false
+		}
+	}
+	return c.HistoryLookbackDuration(), false
 }
 
 // Default startup delays for the background loops. Duration strings so the
