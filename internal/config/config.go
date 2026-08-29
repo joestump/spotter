@@ -149,6 +149,7 @@ type Config struct {
 		// ProviderLookback overrides HistoryLookback per listen provider, keyed by
 		// provider type (e.g. "lastfm"). A value of "0" or "unlimited" removes the
 		// bound entirely so that provider syncs its full available history.
+		// YAML-only: viper env overrides cannot populate nested maps.
 		ProviderLookback map[string]string `mapstructure:"provider_lookback"`
 	} `mapstructure:"sync"`
 	Theme struct {
