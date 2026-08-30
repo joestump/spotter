@@ -635,6 +635,38 @@ func TestHistoryLookbackFor(t *testing.T) {
 	assert.True(t, unlimited, "0 means unlimited")
 }
 
+// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (per-provider lookback via env)
+func TestProviderLookbackEnv(t *testing.T) {
+	t.Run("JSON env override", func(t *testing.T) {
+		setRequiredEnvVars(t)
+		t.Setenv("SPOTTER_SYNC_PROVIDER_LOOKBACK", `{"lastfm":"unlimited","spotify":"2160h"}`)
+
+		cfg, err := Load()
+		require.NoError(t, err)
+
+		_, unlimited := cfg.HistoryLookbackFor("lastfm")
+		assert.True(t, unlimited, "unlimited flows through the env map")
+
+		lookback, _ := cfg.HistoryLookbackFor("spotify")
+		assert.Equal(t, 2160*time.Hour, lookback)
+	})
+
+	t.Run("invalid JSON falls back to the global lookback", func(t *testing.T) {
+		setRequiredEnvVars(t)
+		t.Setenv("SPOTTER_SYNC_HISTORY_LOOKBACK", "168h")
+		t.Setenv("SPOTTER_SYNC_PROVIDER_LOOKBACK", `{not-json`)
+
+		cfg, err := Load()
+		require.NoError(t, err)
+
+		assert.Empty(t, cfg.Sync.ProviderLookback, "invalid JSON leaves the map unset")
+
+		lookback, unlimited := cfg.HistoryLookbackFor("lastfm")
+		assert.False(t, unlimited, "invalid JSON must not report unlimited")
+		assert.Equal(t, 168*time.Hour, lookback, "falls back to the global lookback")
+	})
+}
+
 // Governing: SPEC-0014 REQ "Test Coverage" (valid drivers, invalid driver rejection, default source per driver)
 func TestConfig_ValidDrivers(t *testing.T) {
 	for _, driver := range []string{"sqlite3", "postgres", "mysql"} {

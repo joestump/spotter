@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -454,7 +456,34 @@ func newViper() *viper.Viper {
 	v.SetDefault("metadata.images.max_height", 1000)
 	v.SetDefault("metadata.ai.prompts_directory", "./data/prompts")
 
+	applyProviderLookbackEnv(v)
+
 	return v
+}
+
+// applyProviderLookbackEnv supports configuring the per-provider lookback map
+// from the environment, which Viper's AutomaticEnv cannot do on its own (env
+// vars cannot address map keys). SPOTTER_SYNC_PROVIDER_LOOKBACK holds a JSON
+// object keyed by provider type, e.g.:
+//
+//	SPOTTER_SYNC_PROVIDER_LOOKBACK={"lastfm":"unlimited","spotify":"2160h"}
+//
+// Keys are provider types ("lastfm", "spotify", "navidrome"); values use the
+// same syntax as sync.history_lookback: a Go duration, "0", or "unlimited".
+// Invalid JSON logs a warning and leaves the map unset, so a typo falls back
+// to the global sync.history_lookback rather than applying a partial map.
+func applyProviderLookbackEnv(v *viper.Viper) {
+	raw := os.Getenv("SPOTTER_SYNC_PROVIDER_LOOKBACK")
+	if strings.TrimSpace(raw) == "" {
+		return
+	}
+	var m map[string]string
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		slog.Warn("ignoring invalid SPOTTER_SYNC_PROVIDER_LOOKBACK (must be a JSON object)",
+			"error", err)
+		return
+	}
+	v.Set("sync.provider_lookback", m)
 }
 
 // validateAndDefaultDatabase validates the database driver and applies the

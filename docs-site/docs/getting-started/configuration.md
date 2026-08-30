@@ -63,6 +63,7 @@ SPOTTER_DATABASE_SOURCE=host=localhost port=5432 dbname=spotter user=spotter pas
 | :--- | :--- | :--- |
 | `SPOTTER_SYNC_INTERVAL` | How often to sync data from providers (Go duration format) | `5m` |
 | `SPOTTER_SYNC_HISTORY_LOOKBACK` | Initial listen-history window for users with no prior listens (Go duration format) | `720h` (30 days) |
+| `SPOTTER_SYNC_PROVIDER_LOOKBACK` | Per-provider override of the initial lookback, as a JSON object keyed by provider type (`lastfm`, `spotify`, `navidrome`). Values are a Go duration, `0`, or `unlimited`. Invalid JSON is ignored with a warning. | *None* |
 
 ## Theme Configuration
 
@@ -211,6 +212,9 @@ SPOTTER_DATABASE_SOURCE=host=localhost port=5432 dbname=spotter user=spotter pas
 SPOTTER_SYNC_INTERVAL=5m
 # Initial history window for users with no prior listens (default 720h = 30 days)
 # SPOTTER_SYNC_HISTORY_LOOKBACK=720h
+# Per-provider override of the initial lookback (JSON object keyed by provider
+# type). Values are a Go duration, "0", or "unlimited" (full available history).
+# SPOTTER_SYNC_PROVIDER_LOOKBACK={"lastfm":"unlimited","spotify":"2160h"}
 
 # ===================
 # Theme Configuration
