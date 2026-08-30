@@ -651,15 +651,19 @@ func TestProviderLookbackEnv(t *testing.T) {
 		assert.Equal(t, 2160*time.Hour, lookback)
 	})
 
-	t.Run("invalid JSON is ignored", func(t *testing.T) {
+	t.Run("invalid JSON falls back to the global lookback", func(t *testing.T) {
 		setRequiredEnvVars(t)
+		t.Setenv("SPOTTER_SYNC_HISTORY_LOOKBACK", "168h")
 		t.Setenv("SPOTTER_SYNC_PROVIDER_LOOKBACK", `{not-json`)
 
 		cfg, err := Load()
 		require.NoError(t, err)
 
-		_, unlimited := cfg.HistoryLookbackFor("lastfm")
-		assert.False(t, unlimited, "invalid JSON leaves the map empty")
+		assert.Empty(t, cfg.Sync.ProviderLookback, "invalid JSON leaves the map unset")
+
+		lookback, unlimited := cfg.HistoryLookbackFor("lastfm")
+		assert.False(t, unlimited, "invalid JSON must not report unlimited")
+		assert.Equal(t, 168*time.Hour, lookback, "falls back to the global lookback")
 	})
 }
 
