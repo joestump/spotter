@@ -468,9 +468,10 @@ func newViper() *viper.Viper {
 //
 //	SPOTTER_SYNC_PROVIDER_LOOKBACK={"lastfm":"unlimited","spotify":"2160h"}
 //
-// Values use the same syntax as the config file: durations, "0", or
-// "unlimited". Invalid JSON logs a warning and is ignored, so a typo cannot
-// blank out the file-based map.
+// Keys are provider types ("lastfm", "spotify", "navidrome"); values use the
+// same syntax as sync.history_lookback: a Go duration, "0", or "unlimited".
+// Invalid JSON logs a warning and leaves the map unset, so a typo falls back
+// to the global sync.history_lookback rather than applying a partial map.
 func applyProviderLookbackEnv(v *viper.Viper) {
 	raw := os.Getenv("SPOTTER_SYNC_PROVIDER_LOOKBACK")
 	if strings.TrimSpace(raw) == "" {
