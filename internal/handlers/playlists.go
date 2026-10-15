@@ -221,6 +221,27 @@ func (h *Handler) TogglePlaylistSync(w http.ResponseWriter, r *http.Request) {
 
 	newSyncState := !pl.SyncToNavidrome
 
+	// Governing: SPEC-0015 REQ playlist-pairing — enabling sync is persisted only after the
+	// Navidrome name conflict is resolved. Persisting it first left the scheduler free to
+	// create the duplicate playlist this flow exists to prevent, because the conflict card
+	// offers only pair/rename: a user who simply closes it would otherwise leave an unpaired
+	// playlist marked as syncing.
+	if newSyncState && h.PlaylistSyncSvc != nil && pl.NavidromePlaylistID == "" {
+		conflict, conflictErr := h.findNavidromeConflict(r.Context(), pl, u.ID)
+		if conflictErr != nil {
+			h.Logger.Warn("failed to check for Navidrome conflict",
+				"playlist_id", playlistID,
+				"error", conflictErr)
+		} else if conflict != nil {
+			h.Logger.Info("Navidrome conflict detected, showing conflict UI without enabling sync",
+				"playlist_id", playlistID,
+				"conflict_id", conflict.ID,
+				"conflict_name", conflict.Name)
+			h.Render(w, r, playlists.NavidromeConflict(pl, conflict))
+			return
+		}
+	}
+
 	updatedPlaylist, err := h.Client.Playlist.UpdateOne(pl).
 		SetSyncToNavidrome(newSyncState).
 		Save(r.Context())
@@ -244,23 +265,6 @@ func (h *Handler) TogglePlaylistSync(w http.ResponseWriter, r *http.Request) {
 	// CRITICAL: Use a detached context with timeout since r.Context() is cancelled when response completes
 	if h.PlaylistSyncSvc != nil {
 		if newSyncState {
-			// Governing: SPEC-0015 REQ playlist-pairing — check for Navidrome conflict before sync
-			if updatedPlaylist.NavidromePlaylistID == "" {
-				conflict, conflictErr := h.findNavidromeConflict(r.Context(), updatedPlaylist, u.ID)
-				if conflictErr != nil {
-					h.Logger.Warn("failed to check for Navidrome conflict",
-						"playlist_id", playlistID,
-						"error", conflictErr)
-				} else if conflict != nil {
-					h.Logger.Info("Navidrome conflict detected, showing conflict UI",
-						"playlist_id", playlistID,
-						"conflict_id", conflict.ID,
-						"conflict_name", conflict.Name)
-					h.Render(w, r, playlists.NavidromeConflict(updatedPlaylist, conflict))
-					return
-				}
-			}
-
 			// Sync enabled - trigger immediate sync to Navidrome (async)
 			h.Logger.Debug("dispatching async sync to Navidrome",
 				"playlist_id", playlistID,

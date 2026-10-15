@@ -71,6 +71,9 @@ func (Playlist) Fields() []ent.Field {
 			Optional().
 			Default("pending").
 			Comment("State of sync to Navidrome: pending, syncing, success, warning, error"),
+		field.Bool("active").
+			Default(true).
+			Comment("False once the source provider stopped returning this playlist. Governing: SPEC listen-playlist-sync REQ-SYNC-032"),
 		field.Int("matched_track_count").
 			Default(0).
 			Comment("Number of tracks successfully matched in Navidrome"),
