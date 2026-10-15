@@ -22,6 +22,12 @@ func (Listen) Fields() []ent.Field {
 		field.Time("played_at"),
 		field.String("url").
 			Optional(),
+		// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (dedup key includes provider track ID)
+		field.String("provider_track_id").
+			Optional().
+			Default("").
+			MaxLen(2048).
+			Comment("Provider-specific track ID used for de-duplication when available"),
 	}
 }
 

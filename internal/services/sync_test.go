@@ -9,6 +9,7 @@ import (
 
 	"spotter/ent"
 	"spotter/ent/enttest"
+	"spotter/ent/listen"
 	"spotter/ent/playlist"
 	"spotter/ent/playlisttrack"
 	"spotter/internal/config"
@@ -937,4 +938,143 @@ func TestSyncer_PreservesCatalogLinksOnPlaylistSync(t *testing.T) {
 	if pt.Edges.Album != nil {
 		assert.Equal(t, catalogAlbum.ID, pt.Edges.Album.ID, "Should link to same catalog album")
 	}
+}
+
+// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (the ±window absorbs
+// cross-provider echoes, never a genuine same-provider repeat)
+func TestPersistListens_SameProviderRepeatWithinWindowPersists(t *testing.T) {
+	client, syncer, _ := setupTestSyncer(t)
+	ctx := context.Background()
+	user := createTestUser(t, client)
+
+	firstPlay := time.Now().Add(-10 * time.Minute).Truncate(time.Second)
+
+	// A 1:50 track played twice from the same provider two minutes apart:
+	// both plays are genuine and must persist.
+	mock := &mockProvider{
+		providerType: providers.TypeSpotify,
+		tracks: []providers.Track{
+			{ID: "sp-repeat-a", Name: "Quick Listen", Artist: "Some Artist", Album: "Some Album", PlayedAt: firstPlay},
+			{ID: "sp-repeat-b", Name: "Quick Listen", Artist: "Some Artist", Album: "Some Album", PlayedAt: firstPlay.Add(2 * time.Minute)},
+		},
+	}
+	syncer.Register(mockFactory(mock))
+	require.NoError(t, syncer.SyncRecentListens(ctx, user))
+
+	count, err := client.Listen.Query().Where(listen.TrackName("Quick Listen")).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, count, "same-provider repeats two minutes apart must both persist")
+}
+
+// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (a cross-provider echo inside the ±window still dedupes)
+func TestPersistListens_CrossProviderEchoWithinWindowDedupes(t *testing.T) {
+	client, syncer, _ := setupTestSyncer(t)
+	ctx := context.Background()
+	user := createTestUser(t, client)
+
+	playedAt := time.Now().Add(-10 * time.Minute).Truncate(time.Second)
+
+	spotify := &mockProvider{
+		providerType: providers.TypeSpotify,
+		tracks: []providers.Track{
+			{ID: "sp-echo-1", Name: "Echo Track", Artist: "Some Artist", Album: "Some Album", PlayedAt: playedAt},
+		},
+	}
+	syncer.Register(mockFactory(spotify))
+	require.NoError(t, syncer.SyncRecentListens(ctx, user))
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	echo := &mockProvider{
+		providerType: providers.TypeNavidrome,
+		tracks: []providers.Track{
+			{ID: "nd-echo-1", Name: "Echo Track", Artist: "Some Artist", Album: "Some Album", PlayedAt: playedAt.Add(30 * time.Second)},
+		},
+	}
+	echoSyncer := services.NewSyncer(client, &config.Config{}, logger, events.NewBus(), nil)
+	echoSyncer.Register(mockFactory(echo))
+	require.NoError(t, echoSyncer.SyncRecentListens(ctx, user))
+
+	count, err := client.Listen.Query().Where(listen.TrackName("Echo Track")).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "cross-provider echo within the ±window must still dedupe")
+}
+
+// sinceCapturingProvider records the since timestamp passed to GetRecentListens.
+type sinceCapturingProvider struct {
+	providerType  providers.Type
+	receivedSince time.Time
+}
+
+func (m *sinceCapturingProvider) Type() providers.Type {
+	return m.providerType
+}
+
+func (m *sinceCapturingProvider) GetRecentListens(ctx context.Context, since time.Time, callback func([]providers.Track) error) error {
+	m.receivedSince = since
+	return nil
+}
+
+// Governing: SPEC listen-playlist-sync REQ-SYNC-020 (first sync is bounded by the configured lookback)
+func TestSyncHistory_ConfiguredLookback_NoListens(t *testing.T) {
+	client := enttest.Open(t, "sqlite3", "file:ent_lookback?mode=memory&cache=shared&_fk=1")
+	t.Cleanup(func() { client.Close() })
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := &config.Config{}
+	cfg.Sync.HistoryLookback = "24h"
+	syncer := services.NewSyncer(client, cfg, logger, events.NewBus(), nil)
+
+	ctx := context.Background()
+	user := createTestUser(t, client)
+
+	mock := &sinceCapturingProvider{providerType: providers.TypeSpotify}
+	syncer.Register(mockFactory(mock))
+
+	before := time.Now()
+	require.NoError(t, syncer.SyncRecentListens(ctx, user))
+	after := time.Now()
+
+	assert.False(t, mock.receivedSince.Before(before.Add(-24*time.Hour)), "since should not predate now-24h")
+	assert.False(t, mock.receivedSince.After(after.Add(-24*time.Hour)), "since should not postdate now-24h")
+}
+
+// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (dedup by provider+provider_track_id+played_at)
+func TestPersistListens_ProviderTrackIDDedup(t *testing.T) {
+	client, syncer, _ := setupTestSyncer(t)
+	ctx := context.Background()
+	user := createTestUser(t, client)
+
+	playedAt := time.Now().Add(-time.Hour).Truncate(time.Second)
+
+	// First sync stores the listen with the provider track ID.
+	first := &mockProvider{
+		providerType: providers.TypeSpotify,
+		tracks: []providers.Track{
+			{ID: "sp-track-1", Name: "Original Title", Artist: "Some Artist", Album: "Some Album", PlayedAt: playedAt},
+		},
+	}
+	syncer.Register(mockFactory(first))
+	require.NoError(t, syncer.SyncRecentListens(ctx, user))
+
+	listens, err := client.Listen.Query().All(ctx)
+	require.NoError(t, err)
+	require.Len(t, listens, 1)
+	assert.Equal(t, "sp-track-1", listens[0].ProviderTrackID)
+
+	// Second sync reports the same play with a different display title (e.g. the
+	// provider renamed the track). The provider ID + played_at dedup key must
+	// still recognize it as the same listen.
+	second := &mockProvider{
+		providerType: providers.TypeSpotify,
+	}
+	second.tracks = []providers.Track{
+		{ID: "sp-track-1", Name: "Original Title (2011 Remaster)", Artist: "Some Artist", Album: "Some Album", PlayedAt: playedAt},
+	}
+	secondSyncer := services.NewSyncer(client, &config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)), events.NewBus(), nil)
+	secondSyncer.Register(mockFactory(second))
+	require.NoError(t, secondSyncer.SyncRecentListens(ctx, user))
+
+	count, err := client.Listen.Query().Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "same provider track ID + played_at must not create a second listen")
 }
