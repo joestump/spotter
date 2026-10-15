@@ -62,7 +62,8 @@ entity creation.
 ## Consequences
 
 * REQ-SYNC-021's open question is closed for story #327 without widening the
-  sync write path; #327 ships the de-duplication and lookback fixes only.
+  sync write path; #327 ships the de-duplication fixes only (the lookback clause was already satisfied by
+  the merged per-provider lookback work).
 * Listen rows keep no dangling half-linked catalog edges, and first sync keeps
   its current performance envelope.
 * If the async linking story later lands under #304, it can promote the SHOULD
