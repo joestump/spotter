@@ -462,8 +462,17 @@ func (p *Provider) GetPlaylists(ctx context.Context) ([]providers.Playlist, erro
 		// Build external URL to Navidrome web UI
 		externalURL := fmt.Sprintf("%s/app/#/playlist/%s", baseURL, pl.ID)
 
-		// Fetch tracks, unique artists and albums for this playlist
-		tracks, uniqueArtists, uniqueAlbums := p.getPlaylistTracks(ctx, pl.ID)
+		// Fetch tracks, unique artists and albums for this playlist. A read failure is
+		// reported with an empty track list rather than failing the whole import: the
+		// importer skips persisting empty track lists, so the stored playlist is left
+		// untouched and a later sync repopulates it.
+		tracks, uniqueArtists, uniqueAlbums, tracksErr := p.getPlaylistTracks(ctx, pl.ID)
+		if tracksErr != nil {
+			p.logger.Warn("failed to fetch tracks for playlist, importing without track list",
+				"playlist_id", pl.ID,
+				"playlist_name", pl.Name,
+				"error", tracksErr)
+		}
 
 		playlists = append(playlists, providers.Playlist{
 			ID:            pl.ID,
@@ -483,8 +492,11 @@ func (p *Provider) GetPlaylists(ctx context.Context) ([]providers.Playlist, erro
 	return playlists, nil
 }
 
-// getPlaylistTracks fetches all tracks in a playlist along with unique artist/album counts
-func (p *Provider) getPlaylistTracks(ctx context.Context, playlistID string) (tracks []providers.Track, uniqueArtists, uniqueAlbums int) {
+// getPlaylistTracks fetches all tracks in a playlist along with unique artist/album counts.
+// A read failure is returned as an error: callers that reconcile tracks must not treat an
+// unreadable playlist as an empty one, or a transient provider error becomes "remove nothing,
+// add everything" and the remote playlist grows on every retry.
+func (p *Provider) getPlaylistTracks(ctx context.Context, playlistID string) (tracks []providers.Track, uniqueArtists, uniqueAlbums int, err error) {
 	// Generate Auth Parameters
 	salt := generateSalt()
 	token := generateToken(p.auth.Password, salt)
@@ -504,13 +516,13 @@ func (p *Provider) getPlaylistTracks(ctx context.Context, playlistID string) (tr
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		p.logger.Debug("failed to create request for playlist details", "error", err)
-		return nil, 0, 0
+		return nil, 0, 0, fmt.Errorf("failed to create playlist details request: %w", err)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		p.logger.Debug("failed to fetch playlist details", "error", err)
-		return nil, 0, 0
+		return nil, 0, 0, fmt.Errorf("failed to fetch playlist details: %w", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -520,7 +532,7 @@ func (p *Provider) getPlaylistTracks(ctx context.Context, playlistID string) (tr
 
 	if resp.StatusCode != http.StatusOK {
 		p.logger.Debug("navidrome API returned non-OK status for playlist details", "status", resp.StatusCode)
-		return nil, 0, 0
+		return nil, 0, 0, resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("getPlaylist.view returned status: %d", resp.StatusCode))
 	}
 
 	var result struct {
@@ -540,11 +552,11 @@ func (p *Provider) getPlaylistTracks(ctx context.Context, playlistID string) (tr
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		p.logger.Debug("failed to decode playlist details response", "error", err)
-		return nil, 0, 0
+		return nil, 0, 0, fmt.Errorf("failed to decode playlist details response: %w", err)
 	}
 
 	if result.SubsonicResponse.Status != "ok" {
-		return nil, 0, 0
+		return nil, 0, 0, fmt.Errorf("getPlaylist.view returned status %q", result.SubsonicResponse.Status)
 	}
 
 	artists := make(map[string]struct{})
@@ -573,7 +585,7 @@ func (p *Provider) getPlaylistTracks(ctx context.Context, playlistID string) (tr
 		})
 	}
 
-	return tracks, len(artists), len(albums)
+	return tracks, len(artists), len(albums), nil
 }
 
 func (p *Provider) CreatePlaylist(ctx context.Context, name, description string, tracks []providers.Track) error {
@@ -854,8 +866,17 @@ func (p *Provider) UpdatePlaylistTracks(ctx context.Context, remotePlaylistID st
 	// 2. Remove all existing tracks
 	// 3. Add all new tracks
 
-	// First, get current tracks to know their indices
-	currentTracks, _, _ := p.getPlaylistTracks(ctx, remotePlaylistID)
+	// First, get current tracks to know their indices. An unreadable playlist is not an
+	// empty one: abort instead of sending an update that would add every track on top of
+	// the existing ones and double the playlist on every retry during an outage.
+	// Governing: SPEC playlist-sync-navidrome REQ-PLSYNC-031, REQ-PLSYNC-013
+	currentTracks, _, _, err := p.getPlaylistTracks(ctx, remotePlaylistID)
+	if err != nil {
+		p.logger.Error("aborting playlist track update because current tracks could not be read",
+			"playlist_id", remotePlaylistID,
+			"error", err)
+		return fmt.Errorf("failed to read current playlist tracks: %w", err)
+	}
 
 	p.logger.Debug("fetched current playlist tracks",
 		"playlist_id", remotePlaylistID,

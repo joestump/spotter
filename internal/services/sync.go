@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"spotter/ent"
 	"spotter/ent/listen"
 	"spotter/ent/playlist"
 	"spotter/ent/playlisttrack"
+	"spotter/ent/predicate"
 	"spotter/ent/syncevent"
 	"spotter/ent/user"
 	"spotter/internal/config"
@@ -563,6 +565,22 @@ func (s *Syncer) syncPlaylists(ctx context.Context, u *ent.User, activeProviders
 				fmt.Sprintf("Completed syncing playlists from %s: no playlists found", providerName), nil)
 		}
 
+		// A fetch that succeeded but stopped returning a playlist means it is gone from the
+		// source: mark it inactive instead of leaving a stale entry behind.
+		// Governing: SPEC listen-playlist-sync REQ-SYNC-032
+		if provErr == nil {
+			deactivated, deactivateErr := s.markMissingPlaylistsInactive(ctx, u, provider.Type(), playlists)
+			if deactivateErr != nil {
+				s.logger.Warn("failed to mark disappeared playlists inactive",
+					"provider", providerName,
+					"error", deactivateErr)
+			} else if deactivated > 0 {
+				s.logger.Info("marked disappeared playlists inactive",
+					"provider", providerName,
+					"count", deactivated)
+			}
+		}
+
 		// Update last_synced_at after sync attempt
 		if err := s.updateLastSyncedAt(ctx, u, provider.Type()); err != nil {
 			s.logger.Warn("failed to update last_synced_at", "provider", provider.Type(), "error", err)
@@ -820,7 +838,8 @@ func (s *Syncer) persistPlaylists(ctx context.Context, u *ent.User, source provi
 
 		var playlistID int
 		if existingPlaylist != nil {
-			// Update existing playlist
+			// Update existing playlist. A playlist the provider returned again is active
+			// again, undoing an earlier REQ-SYNC-032 inactivation.
 			_, err := s.client.Playlist.UpdateOne(existingPlaylist).
 				SetName(pl.Name).
 				SetDescription(pl.Description).
@@ -829,6 +848,7 @@ func (s *Syncer) persistPlaylists(ctx context.Context, u *ent.User, source provi
 				SetTrackCount(pl.TrackCount).
 				SetUniqueArtists(pl.UniqueArtists).
 				SetUniqueAlbums(pl.UniqueAlbums).
+				SetActive(true).
 				Save(ctx)
 			if err != nil {
 				s.logger.Warn("failed to update playlist", "name", pl.Name, "error", err)
@@ -879,6 +899,37 @@ func (s *Syncer) persistPlaylists(ctx context.Context, u *ent.User, source provi
 	return addedCount, updatedCount, nil
 }
 
+// markMissingPlaylistsInactive implements the REQ-SYNC-032 MUST: playlists a previous sync
+// imported but this successful fetch did not return are marked inactive instead of deleted, so
+// nothing is destroyed - including playlists with sync enabled, which the spec forbids deleting
+// automatically. A playlist that comes back is reactivated when it is upserted again. Only a
+// fetch that succeeded reaches this: a failed one returns earlier, so an outage cannot dim a
+// library.
+// Governing: SPEC listen-playlist-sync REQ-SYNC-032
+func (s *Syncer) markMissingPlaylistsInactive(ctx context.Context, u *ent.User, source providers.Type, present []providers.Playlist) (int, error) {
+	preds := []predicate.Playlist{
+		playlist.HasUserWith(user.ID(u.ID)),
+		playlist.Source(string(source)),
+		playlist.Active(true),
+	}
+	if len(present) > 0 {
+		remoteIDs := make([]string, 0, len(present))
+		for _, pl := range present {
+			remoteIDs = append(remoteIDs, pl.ID)
+		}
+		preds = append(preds, playlist.RemoteIDNotIn(remoteIDs...))
+	}
+
+	deactivated, err := s.client.Playlist.Update().
+		Where(preds...).
+		SetActive(false).
+		Save(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to mark disappeared playlists inactive: %w", err)
+	}
+	return deactivated, nil
+}
+
 // Governing: SPEC listen-playlist-sync REQ-SYNC-031 (upsert PlaylistTrack with position), REQ-SYNC-032 (removed tracks deleted)
 // persistPlaylistTracks saves tracks for a playlist, upserting to preserve catalog links
 func (s *Syncer) persistPlaylistTracks(ctx context.Context, playlistID int, tracks []providers.Track) error {
@@ -904,19 +955,26 @@ func (s *Syncer) persistPlaylistTracks(ctx context.Context, playlistID int, trac
 		return fmt.Errorf("failed to get existing playlist tracks: %w", err)
 	}
 
-	// Build maps for quick lookup of existing tracks
+	// Build lookup queues for quick lookup of existing tracks. Every occurrence of a key is
+	// kept, in position order, so a playlist that legitimately contains the same track twice
+	// matches each occurrence against its own row instead of onto the row written last.
 	// Use remote_id as primary key, fall back to track_name+artist_name
-	existingByRemoteID := make(map[string]*ent.PlaylistTrack)
-	existingByNameArtist := make(map[string]*ent.PlaylistTrack)
+	// Governing: SPEC listen-playlist-sync REQ-SYNC-031 (upsert with position)
+	existingByRemoteID := make(map[string][]*ent.PlaylistTrack)
+	existingByNameArtist := make(map[string][]*ent.PlaylistTrack)
 	existingIDs := make(map[int]bool)
+
+	sort.Slice(existingTracks, func(i, j int) bool {
+		return existingTracks[i].Position < existingTracks[j].Position
+	})
 
 	for _, pt := range existingTracks {
 		existingIDs[pt.ID] = true
 		if pt.RemoteID != "" {
-			existingByRemoteID[pt.RemoteID] = pt
+			existingByRemoteID[pt.RemoteID] = append(existingByRemoteID[pt.RemoteID], pt)
 		}
 		key := pt.TrackName + "|" + pt.ArtistName
-		existingByNameArtist[key] = pt
+		existingByNameArtist[key] = append(existingByNameArtist[key], pt)
 	}
 
 	// First, move all existing tracks to negative positions to avoid unique constraint conflicts
@@ -932,6 +990,20 @@ func (s *Syncer) persistPlaylistTracks(ctx context.Context, playlistID int, trac
 	addedCount := 0
 	updatedCount := 0
 
+	// takeExisting consumes the next unconsumed row stored under key, so repeated tracks in
+	// the incoming list claim separate rows instead of rewriting one row twice and deleting
+	// its twin as unseen.
+	takeExisting := func(candidates map[string][]*ent.PlaylistTrack, key string) *ent.PlaylistTrack {
+		for len(candidates[key]) > 0 {
+			candidate := candidates[key][0]
+			candidates[key] = candidates[key][1:]
+			if !seenIDs[candidate.ID] {
+				return candidate
+			}
+		}
+		return nil
+	}
+
 	for i, track := range tracks {
 		if track.Name == "" || track.Artist == "" {
 			continue
@@ -940,11 +1012,11 @@ func (s *Syncer) persistPlaylistTracks(ctx context.Context, playlistID int, trac
 		// Try to find existing track by remote_id first, then by name+artist
 		var existing *ent.PlaylistTrack
 		if track.ID != "" {
-			existing = existingByRemoteID[track.ID]
+			existing = takeExisting(existingByRemoteID, track.ID)
 		}
 		if existing == nil {
 			key := track.Name + "|" + track.Artist
-			existing = existingByNameArtist[key]
+			existing = takeExisting(existingByNameArtist, key)
 		}
 
 		if existing != nil {
