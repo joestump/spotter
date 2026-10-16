@@ -616,7 +616,7 @@ func (s *Syncer) persistListens(ctx context.Context, u *ent.User, source provide
 
 		// Cross-provider de-duplication: check if a similar listen exists within a time window
 		// This prevents duplicate entries when the same song is reported by multiple providers
-		if s.isDuplicateListen(ctx, u, track) {
+		if s.isDuplicateListen(ctx, u, source, track) {
 			s.logger.Debug("skipping duplicate listen (cross-provider)", "track", track.Name, "artist", track.Artist, "played_at", track.PlayedAt)
 			skippedCount++
 			s.logEvent(ctx, u, syncevent.EventTypeTrackSkipped, providerName,
@@ -626,17 +626,24 @@ func (s *Syncer) persistListens(ctx context.Context, u *ent.User, source provide
 		}
 
 		// Governing: SPEC graceful-shutdown REQ-REC-001 (idempotent sync), REQ-REC-003 (existence check before insert)
+		// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (dedup by provider+provider_track_id+played_at
+		// when the provider supplies a track ID; fall back to provider+track_name+artist_name+played_at)
 		// Check if it exists to avoid unique constraint violations.
-		// We use the fields defined in the unique index: played_at, source, track_name, artist_name, user.
-		exists, err := s.client.Listen.Query().
+		existsQuery := s.client.Listen.Query().
 			Where(
 				listen.HasUserWith(user.ID(u.ID)),
 				listen.Source(string(source)),
 				listen.PlayedAt(track.PlayedAt),
+			)
+		if track.ID != "" {
+			existsQuery = existsQuery.Where(listen.ProviderTrackID(track.ID))
+		} else {
+			existsQuery = existsQuery.Where(
 				listen.TrackName(track.Name),
 				listen.ArtistName(track.Artist),
-			).
-			Exist(ctx)
+			)
+		}
+		exists, err := existsQuery.Exist(ctx)
 
 		if err != nil {
 			s.logger.Warn("failed to check existence of listen", "error", err)
@@ -662,6 +669,10 @@ func (s *Syncer) persistListens(ctx context.Context, u *ent.User, source provide
 
 		if track.URL != "" {
 			builder.SetURL(track.URL)
+		}
+		// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (store provider track ID for de-duplication)
+		if track.ID != "" {
+			builder.SetProviderTrackID(track.ID)
 		}
 
 		l, err := builder.Save(ctx)
@@ -689,9 +700,14 @@ func (s *Syncer) persistListens(ctx context.Context, u *ent.User, source provide
 	return savedCount, skippedCount, nil
 }
 
-// isDuplicateListen checks if a similar listen already exists across all providers.
-// It uses a time window to account for slight timing differences between providers.
-func (s *Syncer) isDuplicateListen(ctx context.Context, u *ent.User, track providers.Track) bool {
+// isDuplicateListen checks if a similar listen already exists from another
+// provider within the window. It uses a time window to account for slight
+// timing differences between providers, and excludes the listen's own source:
+// the window absorbs cross-provider echoes only, so a genuine repeat play of a
+// short track from the same provider is never swallowed (that source's own
+// duplicates are handled by the exact source+played_at+track-ID check in
+// persistListens).
+func (s *Syncer) isDuplicateListen(ctx context.Context, u *ent.User, source providers.Type, track providers.Track) bool {
 	// Use a 2-minute window to catch duplicates from different providers
 	// that might have slightly different timestamps for the same play
 	timeWindow := 2 * time.Minute
@@ -705,6 +721,7 @@ func (s *Syncer) isDuplicateListen(ctx context.Context, u *ent.User, track provi
 			listen.ArtistName(track.Artist),
 			listen.PlayedAtGTE(startTime),
 			listen.PlayedAtLTE(endTime),
+			listen.SourceNEQ(string(source)),
 		).
 		Exist(ctx)
 
