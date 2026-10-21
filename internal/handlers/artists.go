@@ -260,6 +260,7 @@ func (h *Handler) getTopTracksForArtist(ctx context.Context, userID int, artistN
 			Where(
 				track.Name(r.TrackName),
 				track.HasArtistWith(artist.Name(artistName)),
+				track.HasArtistWith(artist.HasUserWith(user.ID(userID))),
 			).
 			WithAlbum(func(q *ent.AlbumQuery) {
 				q.WithImages()

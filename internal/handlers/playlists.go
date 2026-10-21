@@ -1109,42 +1109,53 @@ func (h *Handler) applyEnhancementToNavidrome(ctx context.Context, u *ent.User, 
 			"error", err)
 	}
 
-	// Add new tracks in order
-	for i, trackID := range trackIDs {
-		track, err := h.Client.Track.Get(ctx, trackID)
-		if err != nil {
-			h.Logger.Warn("track not found, skipping",
+	// Add new tracks in order. Only tracks owned by the requesting user are
+	// written, so a candidate that names another user's track can never land in
+	// this playlist and break the later Navidrome sync (ADR-0022).
+	ownedTracks := h.tracksOwnedBy(ctx, u.ID, trackIDs)
+	owned := make(map[int]*ent.Track, len(ownedTracks))
+	for _, t := range ownedTracks {
+		owned[t.ID] = t
+	}
+
+	added := 0
+	for _, trackID := range trackIDs {
+		libraryTrack, ok := owned[trackID]
+		if !ok {
+			h.Logger.Warn("track is not in this user's library, skipping",
 				"track_id", trackID,
-				"error", err)
+				"user_id", u.ID)
 			continue
 		}
 
 		// Get artist and album names
 		artistName := ""
 		albumName := ""
-		if edges, err := track.Edges.ArtistOrErr(); err == nil && edges != nil {
+		if edges, err := libraryTrack.Edges.ArtistOrErr(); err == nil && edges != nil {
 			artistName = edges.Name
 		}
-		if edges, err := track.Edges.AlbumOrErr(); err == nil && edges != nil {
+		if edges, err := libraryTrack.Edges.AlbumOrErr(); err == nil && edges != nil {
 			albumName = edges.Name
 		}
 
 		// Get duration if available
 		durationMs := 0
-		if track.DurationMs != nil {
-			durationMs = *track.DurationMs
+		if libraryTrack.DurationMs != nil {
+			durationMs = *libraryTrack.DurationMs
 		}
 
+		added++
 		_, err = h.Client.PlaylistTrack.Create().
 			SetPlaylist(pl).
-			SetTrack(track).
-			SetPosition(i + 1).
-			SetTrackName(track.Name).
+			SetTrack(libraryTrack).
+			SetPosition(added).
+			SetTrackName(libraryTrack.Name).
 			SetArtistName(artistName).
 			SetAlbumName(albumName).
 			SetDurationMs(durationMs).
 			Save(ctx)
 		if err != nil {
+			added--
 			h.Logger.Error("failed to create playlist track",
 				"playlist_id", pl.ID,
 				"track_id", trackID,
@@ -1154,7 +1165,7 @@ func (h *Handler) applyEnhancementToNavidrome(ctx context.Context, u *ent.User, 
 
 	// Update playlist track count
 	_, err = h.Client.Playlist.UpdateOne(pl).
-		SetTrackCount(len(trackIDs)).
+		SetTrackCount(added).
 		SetUpdatedAt(time.Now()).
 		Save(ctx)
 	if err != nil {
