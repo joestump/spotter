@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"spotter/ent"
+	"spotter/ent/album"
 	"spotter/ent/artist"
 	"spotter/ent/dj"
 	"spotter/ent/listen"
@@ -536,6 +538,87 @@ func (h *Handler) ToggleMixtapeSync(w http.ResponseWriter, r *http.Request) {
 	h.HTMXEvent(w, "mixtape-updated", http.StatusOK)
 }
 
+// maxSeedTrackIDs bounds how many request-supplied track IDs one generation may be seeded with.
+const maxSeedTrackIDs = 100
+
+// mixtapeSeed resolves a generation request's seed parameters against the
+// requesting user's library, so another user's artist, album or track metadata
+// can never be embedded in a stored generation prompt (ADR-0022). IDs the user
+// does not own are dropped instead of resolved.
+func (h *Handler) mixtapeSeed(ctx context.Context, userID int, form url.Values) *vibes.Seed {
+	switch form.Get("seed_type") {
+	case "artist":
+		artistID, err := strconv.Atoi(form.Get("seed_id"))
+		if err != nil || artistID <= 0 {
+			return nil
+		}
+		a, err := h.Client.Artist.Query().
+			Where(artist.ID(artistID), artist.HasUserWith(user.ID(userID))).
+			Only(ctx)
+		if err != nil {
+			h.Logger.Debug("artist seed is not in this user's library", "artist_id", artistID, "user_id", userID)
+			return nil
+		}
+		return vibes.NewArtistSeed(a)
+	case "album":
+		albumID, err := strconv.Atoi(form.Get("seed_id"))
+		if err != nil || albumID <= 0 {
+			return nil
+		}
+		al, err := h.Client.Album.Query().
+			Where(album.ID(albumID), album.HasUserWith(user.ID(userID))).
+			Only(ctx)
+		if err != nil {
+			h.Logger.Debug("album seed is not in this user's library", "album_id", albumID, "user_id", userID)
+			return nil
+		}
+		return vibes.NewAlbumSeed(al)
+	case "tracks":
+		tracks := h.tracksOwnedBy(ctx, userID, parseCommaSeparatedIDs(form.Get("track_ids")))
+		if len(tracks) == 0 {
+			return nil
+		}
+		return vibes.NewTracksSeed(tracks)
+	}
+	return nil
+}
+
+// tracksOwnedBy returns the named tracks that belong to userID, dropping any ID
+// that names another user's track (ADR-0022).
+func (h *Handler) tracksOwnedBy(ctx context.Context, userID int, trackIDs []int) []*ent.Track {
+	if len(trackIDs) == 0 {
+		return nil
+	}
+	tracks, err := h.Client.Track.Query().
+		Where(
+			track.IDIn(trackIDs...),
+			track.HasArtistWith(artist.HasUserWith(user.ID(userID))),
+		).
+		WithArtist().
+		WithAlbum().
+		All(ctx)
+	if err != nil {
+		h.Logger.Error("failed to load tracks for user", "error", err, "user_id", userID)
+		return nil
+	}
+	return tracks
+}
+
+// parseCommaSeparatedIDs parses a comma-separated list of positive IDs and
+// caps the list so a request cannot widen a query without bound.
+func parseCommaSeparatedIDs(s string) []int {
+	var ids []int
+	for _, part := range strings.Split(s, ",") {
+		if id, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && id > 0 {
+			ids = append(ids, id)
+		}
+		if len(ids) >= maxSeedTrackIDs {
+			break
+		}
+	}
+	return ids
+}
+
 // GenerateMixtape generates tracks for a mixtape using the AI-powered vibes engine
 func (h *Handler) GenerateMixtape(w http.ResponseWriter, r *http.Request) {
 	u := h.RequireUser(w, r)
@@ -574,40 +657,7 @@ func (h *Handler) GenerateMixtape(w http.ResponseWriter, r *http.Request) {
 	// Parse optional seed data from the request
 	var seed *vibes.Seed
 	if err := r.ParseForm(); err == nil {
-		seedType := r.FormValue("seed_type")
-		seedID := r.FormValue("seed_id")
-
-		switch seedType {
-		case "artist":
-			if artistID, err := strconv.Atoi(seedID); err == nil {
-				a, err := h.Client.Artist.Get(r.Context(), artistID)
-				if err == nil {
-					seed = vibes.NewArtistSeed(a)
-					h.Logger.Debug("using artist seed", "artist_id", artistID, "artist_name", a.Name)
-				}
-			}
-		case "album":
-			if albumID, err := strconv.Atoi(seedID); err == nil {
-				album, err := h.Client.Album.Get(r.Context(), albumID)
-				if err == nil {
-					seed = vibes.NewAlbumSeed(album)
-					h.Logger.Debug("using album seed", "album_id", albumID, "album_name", album.Name)
-				}
-			}
-		case "tracks":
-			if trackIDsStr := r.FormValue("track_ids"); trackIDsStr != "" {
-				var trackIDs []int
-				for _, idStr := range strings.Split(trackIDsStr, ",") {
-					if id, err := strconv.Atoi(strings.TrimSpace(idStr)); err == nil {
-						trackIDs = append(trackIDs, id)
-					}
-				}
-				if len(trackIDs) > 0 {
-					seed = vibes.NewTrackIDsSeed(trackIDs)
-					h.Logger.Debug("using tracks seed", "track_ids", trackIDs)
-				}
-			}
-		}
+		seed = h.mixtapeSeed(r.Context(), u.ID, r.Form)
 	}
 
 	// Create the generation request
@@ -758,14 +808,11 @@ func (h *Handler) MixtapeShow(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if len(trackIDs) > 0 {
-			// Query tracks with artist and album
-			tracks, err = h.Client.Track.Query().
-				Where(track.IDIn(trackIDs...)).
-				WithArtist().
-				WithAlbum().
-				All(r.Context())
-			if err != nil {
-				h.Logger.Error("failed to query mixtape tracks", "error", err, "mixtape_id", m.ID)
+			// Resolve the stored IDs against the viewer's library, so an ID that
+			// names another user's track renders nothing rather than another
+			// user's row and art (ADR-0022)
+			tracks = h.tracksOwnedBy(r.Context(), u.ID, trackIDs)
+			if tracks == nil {
 				tracks = []*ent.Track{}
 			}
 

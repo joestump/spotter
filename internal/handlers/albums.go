@@ -210,9 +210,13 @@ func (h *Handler) getAlbumStats(ctx context.Context, userID int, a *ent.Album, t
 }
 
 func (h *Handler) getAlbumTracksWithListens(ctx context.Context, userID int, a *ent.Album) []albums.TrackWithListens {
-	// Get tracks from the album
+	// Get tracks from the album, scoped to the viewing user so another user's
+	// track rows cannot appear on this album page (ADR-0022)
 	tracks, err := h.Client.Track.Query().
-		Where(track.HasAlbumWith(album.ID(a.ID))).
+		Where(
+			track.HasAlbumWith(album.ID(a.ID)),
+			track.HasArtistWith(artist.HasUserWith(user.ID(userID))),
+		).
 		Order(ent.Asc(track.FieldDiscNumber), ent.Asc(track.FieldTrackNumber)).
 		All(ctx)
 	if err != nil {

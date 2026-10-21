@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"spotter/ent"
+	"spotter/ent/album"
 	"spotter/ent/artist"
 	"spotter/ent/listen"
 	"spotter/ent/track"
@@ -294,9 +295,13 @@ func (g *MixtapeGenerator) loadSeedData(ctx context.Context, req *GenerationRequ
 		if req.Seed.Artist == nil {
 			return nil
 		}
-		// Load full artist with edges
+		// Load full artist with edges, scoped to the requesting user so another
+		// user's artist metadata can never reach a stored prompt (ADR-0022).
 		a, err := g.client.Artist.Query().
-			Where(artist.ID(req.Seed.Artist.ID)).
+			Where(
+				artist.ID(req.Seed.Artist.ID),
+				artist.HasUserWith(user.ID(req.UserID)),
+			).
 			WithAlbums().
 			WithTracks().
 			Only(ctx)
@@ -309,12 +314,17 @@ func (g *MixtapeGenerator) loadSeedData(ctx context.Context, req *GenerationRequ
 		if req.Seed.Album == nil {
 			return nil
 		}
-		// Load album with artist edge
-		album, err := g.client.Album.Get(ctx, req.Seed.Album.ID)
+		// Load album with artist edge, scoped to the requesting user (ADR-0022).
+		albumEntity, err := g.client.Album.Query().
+			Where(
+				album.ID(req.Seed.Album.ID),
+				album.HasUserWith(user.ID(req.UserID)),
+			).
+			Only(ctx)
 		if err == nil {
-			req.Seed.Album = album
+			req.Seed.Album = albumEntity
 			// Load artist
-			albumArtist, err := album.QueryArtist().Only(ctx)
+			albumArtist, err := albumEntity.QueryArtist().Only(ctx)
 			if err != nil {
 				g.logger.Debug("failed to load album artist", "album_id", album.ID, "error", err)
 			} else if albumArtist != nil {
@@ -325,8 +335,13 @@ func (g *MixtapeGenerator) loadSeedData(ctx context.Context, req *GenerationRequ
 
 	case SeedTypeTracks:
 		if len(req.Seed.TrackIDs) > 0 && len(req.Seed.Tracks) == 0 {
+			// Seed track IDs come from the request, so they must be resolved
+			// against the requesting user's library (ADR-0022).
 			tracks, err := g.client.Track.Query().
-				Where(track.IDIn(req.Seed.TrackIDs...)).
+				Where(
+					track.IDIn(req.Seed.TrackIDs...),
+					track.HasArtistWith(artist.HasUserWith(user.ID(req.UserID))),
+				).
 				WithArtist().
 				WithAlbum().
 				All(ctx)

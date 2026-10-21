@@ -348,8 +348,14 @@ func (s *SimilarArtistsService) storeSimilarArtists(ctx context.Context, userID 
 		return fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// Get source artist
-	sourceArtist, err := s.client.Artist.Get(ctx, sourceArtistID)
+	// Get source artist, scoped to the user so a stale or forged ID cannot
+	// attach another user's artist to this user's relationships (ADR-0022)
+	sourceArtist, err := s.client.Artist.Query().
+		Where(
+			artist.ID(sourceArtistID),
+			artist.HasUserWith(user.ID(userID)),
+		).
+		Only(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get source artist: %w", err)
 	}
