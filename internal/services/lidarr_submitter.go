@@ -17,8 +17,11 @@ import (
 	"time"
 
 	"spotter/ent"
+	"spotter/ent/album"
+	"spotter/ent/artist"
 	"spotter/ent/lidarrqueue"
 	"spotter/ent/syncevent"
+	"spotter/ent/user"
 	"spotter/internal/config"
 
 	"entgo.io/ent/dialect/sql"
@@ -132,6 +135,13 @@ func (s *LidarrSubmitter) tick(ctx context.Context) {
 	submittedCount := 0
 	skippedCount := 0
 
+	// Hot-loop guard: items whose status UPDATE failed after a submission
+	// attempt are excluded from re-selection for the remainder of this tick.
+	// Otherwise a persistently failing UPDATE leaves the row eligible and the
+	// loop would re-query and resubmit the same item in a tight loop.
+	// Governing: SPEC-0017 REQ "Background Submitter Goroutine"
+	var skipIDs []int
+
 	for {
 		// Check for cancellation
 		select {
@@ -174,6 +184,32 @@ func (s *LidarrSubmitter) tick(ctx context.Context) {
 
 		item := items[0]
 
+		// The queue row's own user edge is the only authority for who a
+		// submission is made for. Entity edges are addressed by bare ID below,
+		// so they must never be trusted to name the requesting user.
+		// Governing: ADR-0031 (proposed), issue #367
+		owner, ownerErr := s.queueOwner(ctx, item)
+		if ownerErr != nil {
+			s.logger.Error("metric.lidarr.failed",
+				"entity_type", item.EntityType,
+				"entity_id", item.EntityID,
+				"item_id", item.ID,
+				"error", ownerErr.Error(),
+				"attempts", maxAttempts,
+				"permanent", true,
+			)
+			if err := s.db.LidarrQueue.UpdateOneID(item.ID).
+				SetAttempts(maxAttempts).
+				SetLastError(ownerErr.Error()).
+				SetStatus(lidarrqueue.StatusFailed).
+				Exec(ctx); err != nil {
+				s.logger.Error("failed to update queue item after owner lookup failure", "error", err, "item_id", item.ID)
+				skipIDs = append(skipIDs, item.ID)
+			}
+			skippedCount++
+			continue
+		}
+
 		// Check Lidarr queue depth before submitting
 		// Governing: SPEC-0017 REQ "Background Submitter Goroutine"
 		depth, err := s.getQueueDepth(ctx)
@@ -214,7 +250,7 @@ func (s *LidarrSubmitter) tick(ctx context.Context) {
 
 		// Submit the item
 		start := time.Now()
-		lidarrID, submitErr := s.submitItem(ctx, item)
+		lidarrID, submitErr := s.submitItem(ctx, item, owner)
 		duration := time.Since(start)
 
 		if submitErr != nil {
@@ -275,11 +311,11 @@ func (s *LidarrSubmitter) tick(ctx context.Context) {
 
 		// Update the entity's lidarr_id and lidarr_status
 		// Governing: SPEC-0017 REQ "Background Submitter Goroutine"
-		s.updateEntityLidarrID(ctx, item, lidarrID)
+		s.updateEntityLidarrID(ctx, item, owner, lidarrID)
 
 		// Log SyncEvent for successful submission
 		// Governing: SPEC-0017 REQ "Observability"
-		s.logSubmissionEvent(ctx, item, lidarrID)
+		s.logSubmissionEvent(ctx, item, owner, lidarrID)
 
 		submittedCount++
 	}
@@ -316,22 +352,62 @@ func (s *LidarrSubmitter) getQueueDepth(ctx context.Context) (int, error) {
 	return result.TotalRecords, nil
 }
 
-// submitItem submits a queue item to Lidarr.
-// Returns the Lidarr ID on success.
-// Governing: SPEC-0017 REQ "Background Submitter Goroutine"
-func (s *LidarrSubmitter) submitItem(ctx context.Context, item *ent.LidarrQueue) (int, error) {
+// queueOwner resolves the user that owns a queue row. The row's own user edge
+// is required by the schema (ent/schema/lidarr_queue.go), so a row without one
+// is corrupt and must not be submitted on anyone's behalf.
+// Governing: ADR-0031 (proposed), issue #367
+func (s *LidarrSubmitter) queueOwner(ctx context.Context, item *ent.LidarrQueue) (*ent.User, error) {
+	owner, err := item.QueryUser().Only(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("queue row has no owner (item %d): %w", item.ID, err)
+	}
+	return owner, nil
+}
+
+// entityOwnedBy reports whether the entity a queue row names belongs to the row's
+// owner. It is the fail-closed gate that keeps a foreign or stale entity ID from
+// reaching Lidarr or a writeback.
+// Governing: ADR-0031 (proposed), issue #367
+func (s *LidarrSubmitter) entityOwnedBy(ctx context.Context, item *ent.LidarrQueue, owner *ent.User) (bool, error) {
 	switch item.EntityType {
 	case lidarrqueue.EntityTypeArtist:
-		return s.submitArtist(ctx, item)
+		return s.db.Artist.Query().
+			Where(artist.ID(item.EntityID), artist.HasUserWith(user.ID(owner.ID))).
+			Exist(ctx)
 	case lidarrqueue.EntityTypeAlbum:
-		return s.submitAlbum(ctx, item)
+		return s.db.Album.Query().
+			Where(album.ID(item.EntityID), album.HasUserWith(user.ID(owner.ID))).
+			Exist(ctx)
+	default:
+		return false, nil
+	}
+}
+
+// submitItem submits a queue item to Lidarr on behalf of the queue row's owner.
+// Returns the Lidarr ID on success.
+// Governing: SPEC-0017 REQ "Background Submitter Goroutine", ADR-0031 (proposed)
+func (s *LidarrSubmitter) submitItem(ctx context.Context, item *ent.LidarrQueue, owner *ent.User) (int, error) {
+	owned, err := s.entityOwnedBy(ctx, item, owner)
+	if err != nil {
+		return 0, fmt.Errorf("failed to verify entity ownership: %w", err)
+	}
+	if !owned {
+		return 0, fmt.Errorf("%s %d does not belong to the queue owner (user %d)", item.EntityType, item.EntityID, owner.ID)
+	}
+
+	switch item.EntityType {
+	case lidarrqueue.EntityTypeArtist:
+		return s.submitArtist(ctx, item, owner)
+	case lidarrqueue.EntityTypeAlbum:
+		return s.submitAlbum(ctx, item, owner)
 	default:
 		return 0, fmt.Errorf("unknown entity type: %s", item.EntityType)
 	}
 }
 
-// submitArtist adds an artist to Lidarr by MusicBrainz ID.
-func (s *LidarrSubmitter) submitArtist(ctx context.Context, item *ent.LidarrQueue) (int, error) {
+// submitArtist adds an artist to Lidarr by MusicBrainz ID. The submission is
+// keyed on the queue row's own MusicBrainz ID, so no local entity is loaded.
+func (s *LidarrSubmitter) submitArtist(ctx context.Context, item *ent.LidarrQueue, owner *ent.User) (int, error) {
 	// Lookup artist in Lidarr
 	u := fmt.Sprintf("artist/lookup?term=lidarr:%s", item.MusicbrainzID)
 	var results []lidarrSubmitArtist
@@ -420,14 +496,27 @@ func (s *LidarrSubmitter) fetchArtistByMBID(ctx context.Context, mbid string) (*
 }
 
 // submitAlbum adds an album to Lidarr by MusicBrainz ID.
-func (s *LidarrSubmitter) submitAlbum(ctx context.Context, item *ent.LidarrQueue) (int, error) {
-	// First, ensure the artist is in Lidarr. Load album with artist edge.
-	albumEntity, err := s.db.Album.Get(ctx, item.EntityID)
+// The album and its artist are loaded under the queue owner's predicate, so the
+// owner invariant lives in the query rather than in the caller.
+// Governing: ADR-0031 (proposed), issue #367
+func (s *LidarrSubmitter) submitAlbum(ctx context.Context, item *ent.LidarrQueue, owner *ent.User) (int, error) {
+	// First, ensure the artist is in Lidarr. Load album scoped to the owner.
+	albumEntity, err := s.db.Album.Query().
+		Where(
+			album.ID(item.EntityID),
+			album.HasUserWith(user.ID(owner.ID)),
+		).
+		Only(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to load album entity: %w", err)
 	}
 
-	artistEntity, err := albumEntity.QueryArtist().Only(ctx)
+	artistEntity, err := s.db.Artist.Query().
+		Where(
+			artist.HasUserWith(user.ID(owner.ID)),
+			artist.HasAlbumsWith(album.ID(albumEntity.ID)),
+		).
+		Only(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to load artist for album: %w", err)
 	}
@@ -497,65 +586,72 @@ func (s *LidarrSubmitter) fetchAlbumByMBID(ctx context.Context, mbid string, art
 	return nil, fmt.Errorf("album with mbid %s not found in lidarr despite existing", mbid)
 }
 
-// updateEntityLidarrID updates the lidarr_id and lidarr_status fields on the corresponding artist or album entity.
-// Governing: SPEC-0017 REQ "Background Submitter Goroutine"
-func (s *LidarrSubmitter) updateEntityLidarrID(ctx context.Context, item *ent.LidarrQueue, lidarrID int) {
+// updateEntityLidarrID updates the lidarr_id and lidarr_status fields on the
+// corresponding artist or album entity. The update carries the queue owner's
+// predicate, so a queue row can never write another user's catalog row.
+// Governing: SPEC-0017 REQ "Background Submitter Goroutine", ADR-0031 (proposed)
+func (s *LidarrSubmitter) updateEntityLidarrID(ctx context.Context, item *ent.LidarrQueue, owner *ent.User, lidarrID int) {
 	lidarrIDStr := fmt.Sprintf("%d", lidarrID)
 	switch item.EntityType {
 	case lidarrqueue.EntityTypeArtist:
-		if err := s.db.Artist.UpdateOneID(item.EntityID).
+		n, err := s.db.Artist.Update().
+			Where(artist.ID(item.EntityID), artist.HasUserWith(user.ID(owner.ID))).
 			SetLidarrID(lidarrIDStr).
 			SetLidarrStatus("monitored").
-			Exec(ctx); err != nil {
+			Save(ctx)
+		if err != nil {
 			s.logger.Error("failed to update artist lidarr_id", "error", err, "entity_id", item.EntityID)
+		} else if n == 0 {
+			s.logger.Error("refused to update lidarr_id on an artist the queue owner does not own",
+				"entity_id", item.EntityID, "owner_id", owner.ID)
 		}
 	case lidarrqueue.EntityTypeAlbum:
-		if err := s.db.Album.UpdateOneID(item.EntityID).
+		n, err := s.db.Album.Update().
+			Where(album.ID(item.EntityID), album.HasUserWith(user.ID(owner.ID))).
 			SetLidarrID(lidarrIDStr).
 			SetLidarrStatus("monitored").
-			Exec(ctx); err != nil {
+			Save(ctx)
+		if err != nil {
 			s.logger.Error("failed to update album lidarr_id", "error", err, "entity_id", item.EntityID)
+		} else if n == 0 {
+			s.logger.Error("refused to update lidarr_id on an album the queue owner does not own",
+				"entity_id", item.EntityID, "owner_id", owner.ID)
 		}
 	}
 }
 
 // logSubmissionEvent creates a SyncEvent record for a successful Lidarr submission.
-// Governing: SPEC-0017 REQ "Observability"
-func (s *LidarrSubmitter) logSubmissionEvent(ctx context.Context, item *ent.LidarrQueue, lidarrID int) {
-	// Determine the event type and get the user from the entity
+// The notified user is the queue row's owner, never the loaded entity's user edge.
+// Governing: SPEC-0017 REQ "Observability", ADR-0031 (proposed)
+func (s *LidarrSubmitter) logSubmissionEvent(ctx context.Context, item *ent.LidarrQueue, owner *ent.User, lidarrID int) {
+	// Determine the event type and the message; the entity name is cosmetic and
+	// is loaded under the owner's predicate when available.
 	var eventType syncevent.EventType
-	var userID int
 	var message string
 
 	switch item.EntityType {
 	case lidarrqueue.EntityTypeArtist:
 		eventType = syncevent.EventTypeLidarrArtistSubmitted
-		artist, err := s.db.Artist.Get(ctx, item.EntityID)
-		if err != nil {
+		name := ""
+		if a, err := s.db.Artist.Query().
+			Where(artist.ID(item.EntityID), artist.HasUserWith(user.ID(owner.ID))).
+			Only(ctx); err == nil {
+			name = a.Name
+		} else if !ent.IsNotFound(err) {
 			s.logger.Error("failed to load artist for sync event", "error", err, "entity_id", item.EntityID)
-			return
 		}
-		user, err := artist.QueryUser().Only(ctx)
-		if err != nil {
-			s.logger.Error("failed to load user for sync event", "error", err, "entity_id", item.EntityID)
-			return
-		}
-		userID = user.ID
-		message = fmt.Sprintf("Submitted artist to Lidarr: %s", artist.Name)
+		message = fmt.Sprintf("Submitted artist to Lidarr: %s", name)
 	case lidarrqueue.EntityTypeAlbum:
 		eventType = syncevent.EventTypeLidarrAlbumSubmitted
-		album, err := s.db.Album.Get(ctx, item.EntityID)
-		if err != nil {
+		name := ""
+		if a, err := s.db.Album.Query().
+			Where(album.ID(item.EntityID), album.HasUserWith(user.ID(owner.ID))).
+			Only(ctx); err == nil {
+			name = a.Name
+		} else if !ent.IsNotFound(err) {
 			s.logger.Error("failed to load album for sync event", "error", err, "entity_id", item.EntityID)
-			return
 		}
-		user, err := album.QueryUser().Only(ctx)
-		if err != nil {
-			s.logger.Error("failed to load user for sync event", "error", err, "entity_id", item.EntityID)
-			return
-		}
-		userID = user.ID
-		message = fmt.Sprintf("Submitted album to Lidarr: %s", album.Name)
+		message = fmt.Sprintf("Submitted album to Lidarr: %s", name)
 	default:
 		return
 	}
@@ -573,7 +669,7 @@ func (s *LidarrSubmitter) logSubmissionEvent(ctx context.Context, item *ent.Lida
 	}
 
 	if err := s.db.SyncEvent.Create().
-		SetUserID(userID).
+		SetUserID(owner.ID).
 		SetEventType(eventType).
 		SetProvider("lidarr").
 		SetMessage(message).
@@ -589,7 +685,11 @@ func isPermanentLidarrError(errMsg string) bool {
 		strings.Contains(errMsg, "ArtistPathValidator") ||
 		strings.Contains(errMsg, "already configured for an existing artist") ||
 		strings.Contains(errMsg, "not found in lidarr lookup for mbid") ||
-		strings.Contains(errMsg, "artist not found in lidarr for album submission")
+		strings.Contains(errMsg, "artist not found in lidarr for album submission") ||
+		// Ownership failures never heal on retry: the row names an entity its
+		// owner does not own. Governing: ADR-0031 (proposed)
+		strings.Contains(errMsg, "does not belong to the queue owner") ||
+		strings.Contains(errMsg, "queue row has no owner")
 }
 
 // ComputeBackoff calculates the retry time using exponential backoff with jitter.
