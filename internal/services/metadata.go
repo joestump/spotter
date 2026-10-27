@@ -367,7 +367,7 @@ func (s *MetadataService) processListenEntry(ctx context.Context, u *ent.User, a
 
 	// Get or create track
 	if trackName != "" {
-		_, isNew, err = s.getOrCreateTrack(ctx, art, alb, trackName)
+		_, isNew, err = s.getOrCreateTrack(ctx, u, art, alb, trackName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get/create track: %w", err)
 		}
@@ -487,19 +487,28 @@ func (s *MetadataService) getOrCreateAlbum(ctx context.Context, u *ent.User, art
 }
 
 // getOrCreateTrack finds or creates a track in the catalog.
-func (s *MetadataService) getOrCreateTrack(ctx context.Context, art *ent.Artist, alb *ent.Album, name string) (*ent.Track, bool, error) {
-	// Build query
-	query := s.client.Track.Query().
-		Where(
-			track.Name(name),
-			track.HasArtistWith(artist.ID(art.ID)),
-		)
+// Tracks are unique per (artist, name) — see the unique index in
+// ent/schema/track.go — so an album mismatch must not create a duplicate.
+// The lookup carries the owner predicate through the artist edge, so matching
+// never crosses into another user's catalog even if a caller hands over a
+// foreign artist; alb must come from getOrCreateAlbum(u, ..), which is likewise
+// owner-scoped.
+// Governing: SPEC metadata-enrichment-pipeline (catalog uniqueness), SPEC graceful-shutdown REQ-REC-003, ADR-0031 (proposed)
+func (s *MetadataService) getOrCreateTrack(ctx context.Context, u *ent.User, art *ent.Artist, alb *ent.Album, name string) (*ent.Track, bool, error) {
+	// lookup finds the track by (artist, name), the unique identity, inside u's catalog.
+	lookup := func() (*ent.Track, error) {
+		return s.client.Track.Query().
+			Where(
+				track.Name(name),
+				track.HasArtistWith(
+					artist.ID(art.ID),
+					artist.HasUserWith(user.ID(u.ID)),
+				),
+			).
+			Only(ctx)
+}
 
-	if alb != nil {
-		query = query.Where(track.HasAlbumWith(album.ID(alb.ID)))
-	}
-
-	existing, err := query.Only(ctx)
+existing, err := lookup()
 	if err == nil {
 		return existing, false, nil
 	}
@@ -1873,11 +1882,23 @@ func (s *MetadataService) MatchListens(ctx context.Context, u *ent.User) (int, e
 				).
 				Only(ctx)
 			if err == nil {
-				query := s.client.Track.Query().
-					Where(
-						track.Name(l.TrackName),
-						track.HasArtistWith(artist.ID(art.ID)),
-					)
+				// Tracks are unique per (artist, name) — see ent/schema/track.go —
+				// so prefer the album-scoped match but fall back to the
+				// (artist, name) identity when the album edge differs or is unset.
+				// The artist predicate names the owner as well as the ID, so the
+				// query asserts the invariant instead of relying on the caller.
+				// Governing: SPEC metadata-enrichment-pipeline (catalog uniqueness), ADR-0031 (proposed)
+				baseQuery := func() *ent.TrackQuery {
+					return s.client.Track.Query().
+						Where(
+							track.Name(l.TrackName),
+							track.HasArtistWith(
+								artist.ID(art.ID),
+								artist.HasUserWith(user.ID(u.ID)),
+							),
+						)
+				}
+				query := baseQuery()
 
 				// If we have an album name, also match on that for more precision
 				if l.AlbumName != "" {
