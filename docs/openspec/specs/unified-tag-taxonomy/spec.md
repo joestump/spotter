@@ -104,8 +104,12 @@ The combination `(tag_id, entity_type, entity_id)` SHALL be unique. The table SH
 composite index on `(user_id, tag_type, tag_name, entity_type)` for filtered library queries.
 
 The `entity_tags` table SHALL be kept in sync with the Ent junction tables. When a tag-entity
-association is created or removed via Ent edges, the corresponding `entity_tags` row SHALL be
-created or deleted within the same transaction.
+association is created via an Ent edge, the corresponding `entity_tags` row SHALL be written
+immediately afterwards with `ON CONFLICT DO NOTHING` semantics, and a row found missing SHALL be
+repaired by the next upsert for that entity. The edge write and the row write do not share a
+transaction (ADR-0032). When an association is removed, the corresponding row SHALL be deleted in
+the same change; no removal path exists in the code yet, so that clause is recorded as
+unimplemented in ADR-0032.
 
 #### Scenario: Filter artists by AI tag
 

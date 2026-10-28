@@ -506,9 +506,9 @@ func (s *MetadataService) getOrCreateTrack(ctx context.Context, u *ent.User, art
 				),
 			).
 			Only(ctx)
-}
+	}
 
-existing, err := lookup()
+	existing, err := lookup()
 	if err == nil {
 		return existing, false, nil
 	}
@@ -778,12 +778,10 @@ func (s *MetadataService) enrichArtist(ctx context.Context, u *ent.User, art *en
 		return err
 	}
 
-	// Upsert typed tags for the artist entity
+	// Upsert typed tags for the artist entity through the shared tag write path
 	// Governing: SPEC-0014 REQ "Enricher Integration", SPEC-0014 REQ "Denormalized Entity Tags Table"
-	if len(allTypedTags) > 0 {
-		if err := tags.UpsertTagsForEntity(ctx, s.client, s.db, u.ID, "artist", art.ID, allTypedTags); err != nil {
-			s.logger.Warn("failed to upsert typed tags for artist", "artist", art.Name, "error", err)
-		}
+	if err := s.PersistTypedTags(ctx, u.ID, "artist", art.ID, allTypedTags); err != nil {
+		s.logger.Warn("failed to upsert typed tags for artist", "artist", art.Name, "error", err)
 	}
 
 	// Log enrichment event
@@ -1198,12 +1196,10 @@ func (s *MetadataService) enrichAlbum(ctx context.Context, u *ent.User, alb *ent
 		return err
 	}
 
-	// Upsert typed tags for the album entity
+	// Upsert typed tags for the album entity through the shared tag write path
 	// Governing: SPEC-0014 REQ "Enricher Integration", SPEC-0014 REQ "Denormalized Entity Tags Table"
-	if len(allTypedTags) > 0 {
-		if err := tags.UpsertTagsForEntity(ctx, s.client, s.db, u.ID, "album", alb.ID, allTypedTags); err != nil {
-			s.logger.Warn("failed to upsert typed tags for album", "album", alb.Name, "error", err)
-		}
+	if err := s.PersistTypedTags(ctx, u.ID, "album", alb.ID, allTypedTags); err != nil {
+		s.logger.Warn("failed to upsert typed tags for album", "album", alb.Name, "error", err)
 	}
 
 	// Log enrichment event
@@ -1496,12 +1492,10 @@ func (s *MetadataService) enrichTrack(ctx context.Context, u *ent.User, t *ent.T
 		return err
 	}
 
-	// Upsert typed tags for the track entity
+	// Upsert typed tags for the track entity through the shared tag write path
 	// Governing: SPEC-0014 REQ "Enricher Integration", SPEC-0014 REQ "Denormalized Entity Tags Table"
-	if len(allTypedTags) > 0 {
-		if err := tags.UpsertTagsForEntity(ctx, s.client, s.db, u.ID, "track", t.ID, allTypedTags); err != nil {
-			s.logger.Warn("failed to upsert typed tags for track", "track", t.Name, "error", err)
-		}
+	if err := s.PersistTypedTags(ctx, u.ID, "track", t.ID, allTypedTags); err != nil {
+		s.logger.Warn("failed to upsert typed tags for track", "track", t.Name, "error", err)
 	}
 
 	// Log enrichment event (only for tracks with enrichers used to avoid spam)

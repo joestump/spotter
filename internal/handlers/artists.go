@@ -580,6 +580,14 @@ func (h *Handler) ArtistRegenerateAI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// Write the typed tags through the shared tag write path so
+			// regenerated AI tags reach the taxonomy (and therefore tag
+			// browsing and filtering) now, not on the next enrichment cycle.
+			// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0025, issue #349
+			if err := h.MetadataSvc.PersistTypedTags(r.Context(), u.ID, "artist", a.ID, data.TypedTags); err != nil {
+				h.Logger.Error("failed to persist regenerated AI tags for artist", "error", err, "artist", a.Name)
+			}
+
 			h.Logger.Info("regenerated AI content for artist", "artist", a.Name)
 		}
 	}
