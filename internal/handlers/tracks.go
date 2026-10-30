@@ -370,6 +370,14 @@ func (h *Handler) TrackRegenerateAI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// Write the typed tags through the shared tag write path so
+			// regenerated AI tags reach the taxonomy (and therefore tag
+			// browsing and filtering) now, not on the next enrichment cycle.
+			// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0025, issue #349
+			if err := h.MetadataSvc.PersistTypedTags(r.Context(), u.ID, "track", t.ID, data.TypedTags); err != nil {
+				h.Logger.Error("failed to persist regenerated AI tags for track", "error", err, "track", t.Name)
+			}
+
 			h.Logger.Info("regenerated AI content for track", "track", t.Name)
 		}
 	}

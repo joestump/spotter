@@ -135,13 +135,6 @@ func (s *LidarrSubmitter) tick(ctx context.Context) {
 	submittedCount := 0
 	skippedCount := 0
 
-	// Hot-loop guard: items whose status UPDATE failed after a submission
-	// attempt are excluded from re-selection for the remainder of this tick.
-	// Otherwise a persistently failing UPDATE leaves the row eligible and the
-	// loop would re-query and resubmit the same item in a tight loop.
-	// Governing: SPEC-0017 REQ "Background Submitter Goroutine"
-	var skipIDs []int
-
 	for {
 		// Check for cancellation
 		select {
@@ -204,7 +197,6 @@ func (s *LidarrSubmitter) tick(ctx context.Context) {
 				SetStatus(lidarrqueue.StatusFailed).
 				Exec(ctx); err != nil {
 				s.logger.Error("failed to update queue item after owner lookup failure", "error", err, "item_id", item.ID)
-				skipIDs = append(skipIDs, item.ID)
 			}
 			skippedCount++
 			continue
