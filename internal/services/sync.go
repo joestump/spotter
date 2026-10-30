@@ -709,10 +709,7 @@ func (s *Syncer) persistListens(ctx context.Context, u *ent.User, source provide
 				fmt.Sprintf("Added: %s by %s", track.Name, track.Artist),
 				map[string]interface{}{"track": track.Name, "artist": track.Artist, "album": track.Album})
 
-			s.bus.Publish(u.ID, events.Event{
-				Type:    events.EventTypeRecentListen,
-				Payload: l,
-			})
+			s.bus.PublishRecentListen(u.ID, l)
 		}
 	}
 	return savedCount, skippedCount, nil

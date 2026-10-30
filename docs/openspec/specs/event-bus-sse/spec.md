@@ -1,8 +1,8 @@
 # Real-Time Event Bus and SSE Streaming for Async Operation Feedback
 
 **Status:** accepted
-**Version:** 0.1.0
-**Last Updated:** 2026-02-21
+**Version:** 0.2.0
+**Last Updated:** 2026-10-30
 **Governing ADRs:** ADR-0007 (in-memory event bus), ADR-0001 (HTMX + Templ)
 
 ## Overview
@@ -95,7 +95,7 @@ type Event struct {
 
 **REQ-SSE-003** — The SSE handler MUST use `http.Flusher` to flush after each event. If the `ResponseWriter` does not support flushing, the handler MUST return a 500 error.
 
-**REQ-SSE-004** — The SSE handler MUST detect client disconnection via `r.Context().Done()` and return cleanly, triggering the cleanup function to remove the subscriber.
+**REQ-SSE-004** — The SSE handler MUST detect client disconnection via `r.Context().Done()` and return cleanly, triggering the cleanup function to remove the subscriber. Because the server hands every request the process root context (SPEC graceful-shutdown REQ-CTX-004, ADR-0018), cancelling that context at shutdown ends open streams through this same path, so `http.Server.Shutdown()` does not have to wait for the hard-exit timer.
 
 **REQ-SSE-005** — Each SSE event MUST use the `EventType` string as the `event:` field in the SSE protocol:
 ```text
@@ -103,6 +103,10 @@ event: mixtape-generated
 data: <div id="mixtape-42" ...>...</div>
 
 ```
+
+**REQ-SSE-006** — The SSE handler MUST write a comment frame (`: heartbeat`) to every open stream on a fixed interval (15 seconds by default) and flush it. Heartbeats keep intermediates from dropping an idle stream and reveal clients that disappeared without closing the connection: the failed write ends the handler, which releases the subscriber.
+
+**REQ-SSE-007** — Before streaming, the SSE handler MUST clear the connection's read and write deadlines, so a stream is not terminated by `server.write_timeout` and the events published while a client reconnects are not lost (the bus keeps no replay buffer). Header reading stays bounded by `server.read_header_timeout`.
 
 ### HTMX Integration
 

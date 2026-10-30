@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -629,6 +630,12 @@ func main() {
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
 	}
+
+	// Requests are handed the root context, so cancelling it at SIGTERM also ends
+	// long-lived streams (SSE), which select on r.Context(). Without this an open
+	// browser tab holds srv.Shutdown open until the hard-exit timer fires os.Exit(1).
+	// Governing: ADR-0018, SPEC graceful-shutdown REQ-CTX-004
+	srv.BaseContext = func(net.Listener) context.Context { return ctx }
 
 	// Start the HTTP server in a goroutine
 	go func() {
