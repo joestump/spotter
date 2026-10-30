@@ -14,6 +14,7 @@ import (
 	"spotter/internal/config"
 	"spotter/internal/crypto"
 	"spotter/internal/events"
+	"spotter/internal/lifecycle"
 	"spotter/internal/services"
 	"spotter/internal/vibes"
 
@@ -36,6 +37,11 @@ type contextKey string
 const UserContextKey contextKey = "user"
 
 type Handler struct {
+	// Jobs ties background work a request starts but does not wait for to the
+	// application lifecycle, so shutdown cancels it and drains it before exiting.
+	// Governing: ADR-0018 (graceful shutdown), SPEC graceful-shutdown REQ-CTX-003, REQ-WG-003
+	Jobs *lifecycle.Jobs
+
 	Client            *ent.Client
 	Config            *config.Config
 	Logger            *slog.Logger

@@ -30,6 +30,9 @@ const (
 
 	// Governing: SPEC similar-artists-discovery REQ-SIM-003 (60s HTTP client timeout)
 	defaultSimilarArtistsTimeout = 60 * time.Second
+
+	// Governing: SPEC similar-artists-discovery REQ-SIM-061 (500ms between artists in a bulk pass)
+	similarArtistsBulkDelay = 500 * time.Millisecond
 )
 
 // SimilarArtistsService handles finding and storing similar artist relationships.
@@ -455,6 +458,15 @@ func (s *SimilarArtistsService) FindSimilarArtistsForAll(ctx context.Context, us
 
 	processed := 0
 	for _, a := range artists {
+		// Governing: SPEC graceful-shutdown REQ-CTX-001 (background work stops on ctx.Done)
+		if err := ctx.Err(); err != nil {
+			s.logger.Info("similar artist enrichment cancelled",
+				"user_id", userID,
+				"processed", processed,
+				"total", len(artists))
+			return err
+		}
+
 		// Check if we already have recent similar artists for this artist
 		existing, err := s.client.SimilarArtist.Query().
 			Where(
@@ -469,6 +481,13 @@ func (s *SimilarArtistsService) FindSimilarArtistsForAll(ctx context.Context, us
 
 		// Find similar artists
 		if err := s.FindSimilarArtists(ctx, userID, a.ID); err != nil {
+			if ctx.Err() != nil {
+				s.logger.Info("similar artist enrichment cancelled",
+					"user_id", userID,
+					"processed", processed,
+					"total", len(artists))
+				return ctx.Err()
+			}
 			s.logger.Warn("failed to find similar artists",
 				"artist_id", a.ID,
 				"artist_name", a.Name,
@@ -478,8 +497,17 @@ func (s *SimilarArtistsService) FindSimilarArtistsForAll(ctx context.Context, us
 
 		processed++
 
-		// Add a small delay to avoid rate limiting
-		time.Sleep(500 * time.Millisecond)
+		// Governing: SPEC similar-artists-discovery REQ-SIM-061 (500ms between artists),
+		// SPEC graceful-shutdown REQ-CTX-001 (the pause is cancellable, not a blind sleep)
+		select {
+		case <-ctx.Done():
+			s.logger.Info("similar artist enrichment cancelled",
+				"user_id", userID,
+				"processed", processed,
+				"total", len(artists))
+			return ctx.Err()
+		case <-time.After(similarArtistsBulkDelay):
+		}
 	}
 
 	s.logger.Info("completed similar artist enrichment",
