@@ -5,7 +5,9 @@ endif
 
 BINARY_NAME=spotter-server
 ADMIN_BINARY_NAME=spotter-admin
-MAIN_PATH=./cmd/server/main.go
+# Package path, not a single file: go build with a file argument compiles only
+# that file, so any second file in package main is invisible to the binary.
+MAIN_PATH=./cmd/server
 ADMIN_MAIN_PATH=./cmd/admin/main.go
 
 # Determine version: git tag > branch name > short SHA
