@@ -48,6 +48,10 @@ type Handler struct {
 	PlaylistEnhancer  *vibes.PlaylistEnhancer
 	SimilarArtistsSvc *services.SimilarArtistsService
 	Bus               *events.Bus
+	// SSEHeartbeatInterval is how often a keep-alive comment frame is written to
+	// an open SSE stream; zero uses defaultSSEHeartbeatInterval.
+	// Governing: SPEC event-bus-sse REQ-SSE-006
+	SSEHeartbeatInterval time.Duration
 	// Governing: SPEC-0015 REQ "Cooldown Reset on Recovery", ADR-0026
 	Notifier services.SyncNotifier
 }

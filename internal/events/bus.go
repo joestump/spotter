@@ -3,6 +3,9 @@ package events
 
 import (
 	"sync"
+	"time"
+
+	"spotter/ent"
 )
 
 // Governing: SPEC event-bus-sse REQ-BUS-011 (EventType string constants)
@@ -35,6 +38,18 @@ const (
 type Event struct {
 	Type    EventType
 	Payload any
+}
+
+// RecentListenPayload describes a listen the syncer just saved. The bus carries
+// this instead of an ent entity so subscribers never hold a stale database row.
+// Governing: SPEC event-bus-sse REQ-BUS-011 (recent-listen payload type), REQ-BUS-012
+type RecentListenPayload struct {
+	ListenID   int
+	TrackName  string
+	ArtistName string
+	AlbumName  string
+	Source     string
+	PlayedAt   time.Time
 }
 
 // Governing: SPEC event-bus-sse REQ-BUS-012 (typed payload structs), REQ-BUS-013 (IconType field)
@@ -191,6 +206,25 @@ func (b *Bus) Publish(userID int, event Event) {
 			}
 		}
 	}
+}
+
+// PublishRecentListen publishes a recent-listen event for a saved listen.
+// Governing: SPEC event-bus-sse REQ-BUS-012 (convenience publisher per event type)
+func (b *Bus) PublishRecentListen(userID int, listen *ent.Listen) {
+	if listen == nil {
+		return
+	}
+	b.Publish(userID, Event{
+		Type: EventTypeRecentListen,
+		Payload: RecentListenPayload{
+			ListenID:   listen.ID,
+			TrackName:  listen.TrackName,
+			ArtistName: listen.ArtistName,
+			AlbumName:  listen.AlbumName,
+			Source:     listen.Source,
+			PlayedAt:   listen.PlayedAt,
+		},
+	})
 }
 
 // PublishNotification is a convenience method to publish a notification event.
