@@ -29,6 +29,7 @@ import (
 	enricherSpotify "spotter/internal/enrichers/spotify"
 	"spotter/internal/events"
 	"spotter/internal/handlers"
+	"spotter/internal/lifecycle"
 	"spotter/internal/mailer"
 	internalMiddleware "spotter/internal/middleware"
 	"spotter/internal/notifications"
@@ -205,8 +206,13 @@ func main() {
 	maxJobs := cfg.GetMaxConcurrentJobs()
 	sem := make(chan struct{}, maxJobs)
 
-	// Governing: SPEC graceful-shutdown REQ-WG-001 (single shared WaitGroup for all per-user goroutines)
-	var wg sync.WaitGroup
+	// Governing: SPEC graceful-shutdown REQ-WG-001 (single shared WaitGroup for all per-user goroutines),
+	// REQ-WG-004 (the ticker loops themselves are tracked separately)
+	// jobs tracks the per-user work the background loops and the HTTP handlers spawn;
+	// loops tracks the ticker loops themselves, so joining a loop never joins its jobs.
+	jobs := lifecycle.NewJobs(ctx)
+	var loops loopSet
+	h.Jobs = jobs
 
 	// Governing: ADR-0013 (goroutine ticker scheduling), SPEC listen-playlist-sync REQ-SYNC-040 (configurable ticker interval)
 	// Governing: SPEC listen-playlist-sync REQ-SYNC-041 (per-user goroutines for parallel sync)
@@ -219,9 +225,7 @@ func main() {
 	logger.Info("background sync configured", "interval", syncInterval)
 
 	// Governing: ADR-0019 (structured metrics), SPEC observability REQ "BG-001", REQ "BG-002"
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	loops.Start(func() {
 		ticker := time.NewTicker(syncInterval)
 		defer ticker.Stop()
 		// Governing: SPEC graceful-shutdown REQ-CTX-001 (select on ctx.Done vs ticker.C)
@@ -244,25 +248,23 @@ func main() {
 				var syncErrors atomic.Int64
 				var tickWG sync.WaitGroup
 				for _, u := range users {
-					// Governing: SPEC graceful-shutdown REQ-WG-002 (wg.Add before spawn, defer wg.Done first)
-					wg.Add(1)
+					// Governing: SPEC graceful-shutdown REQ-WG-002 (Add before spawn, Done deferred first)
 					tickWG.Add(1)
-					go func(user *ent.User) {
-						defer wg.Done()
+					jobs.StartWith(tickWG.Done, func(jobCtx context.Context) {
 						defer tickWG.Done()
 						// Governing: SPEC graceful-shutdown REQ-SEM-003, REQ-SEM-004 (semaphore acquire with ctx)
 						select {
 						case sem <- struct{}{}:
 							defer func() { <-sem }()
-						case <-ctx.Done():
+						case <-jobCtx.Done():
 							return
 						}
 						// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
-						if err := syncer.Sync(ctx, user); err != nil {
-							logger.Error("background sync failed", "username", user.Username, "error", err)
+						if err := syncer.Sync(jobCtx, u); err != nil {
+							logger.Error("background sync failed", "username", u.Username, "error", err)
 							syncErrors.Add(1)
 						}
-					}(u)
+					})
 				}
 				tickWG.Wait()
 				logger.Info("metric.background_tick",
@@ -272,7 +274,7 @@ func main() {
 					"errors", int(syncErrors.Load()))
 			}
 		}
-	}()
+	})
 
 	// Background Metadata Enrichment Loop
 	// Governing: SPEC metadata-enrichment-pipeline REQ-ENRICH-040 (background scheduler on configurable interval),
@@ -288,10 +290,8 @@ func main() {
 			"interval", metadataInterval,
 			"order", cfg.MetadataEnricherOrder())
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		var metadataTick loopGuard
+		loops.Start(func() {
 			// Governing: ADR-0019 (structured metrics), SPEC observability REQ "BG-001", REQ "BG-002"
 			syncMetadataForUsers := func() {
 				tickStart := time.Now()
@@ -307,25 +307,23 @@ func main() {
 				var metadataErrors atomic.Int64
 				var tickWG sync.WaitGroup
 				for _, u := range users {
-					// Governing: SPEC graceful-shutdown REQ-WG-002 (wg.Add before spawn, defer wg.Done first)
-					wg.Add(1)
+					// Governing: SPEC graceful-shutdown REQ-WG-002 (Add before spawn, Done deferred first)
 					tickWG.Add(1)
-					go func(user *ent.User) {
-						defer wg.Done()
+					jobs.StartWith(tickWG.Done, func(jobCtx context.Context) {
 						defer tickWG.Done()
 						// Governing: SPEC graceful-shutdown REQ-SEM-003, REQ-SEM-004 (semaphore acquire with ctx)
 						select {
 						case sem <- struct{}{}:
 							defer func() { <-sem }()
-						case <-ctx.Done():
+						case <-jobCtx.Done():
 							return
 						}
 						// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
-						if err := metadataSvc.SyncAll(ctx, user); err != nil {
-							logger.Error("metadata sync failed", "username", user.Username, "error", err)
+						if err := metadataSvc.SyncAll(jobCtx, u); err != nil {
+							logger.Error("metadata sync failed", "username", u.Username, "error", err)
 							metadataErrors.Add(1)
 						}
-					}(u)
+					})
 				}
 				tickWG.Wait()
 				logger.Info("metric.background_tick",
@@ -343,22 +341,22 @@ func main() {
 			}
 
 			// Run immediately on startup
-			syncMetadataForUsers()
+			guardedTick(&metadataTick, logger, "metadata", syncMetadataForUsers)
 
 			ticker := time.NewTicker(metadataInterval)
 			defer ticker.Stop()
 			// Governing: SPEC graceful-shutdown REQ-CTX-001 (select on ctx.Done vs ticker.C)
-			// Governing: SPEC metadata-enrichment-pipeline REQ-ENRICH-041 (duplicate ticks skipped —
-			// syncMetadataForUsers blocks synchronously, so ticker events during execution are dropped)
+			// Governing: SPEC metadata-enrichment-pipeline REQ-ENRICH-041 (metadataTick is held for the
+			// whole run, so a tick that lands while the previous enrichment is still going is skipped)
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					syncMetadataForUsers()
+					guardedTick(&metadataTick, logger, "metadata", syncMetadataForUsers)
 				}
 			}
-		}()
+		})
 	} else {
 		logger.Info("metadata enrichment disabled")
 	}
@@ -372,9 +370,7 @@ func main() {
 	}
 	logger.Info("playlist sync configured", "interval", playlistSyncInterval)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	loops.Start(func() {
 		// Initial delay to let the app start up
 		select {
 		case <-ctx.Done():
@@ -403,25 +399,23 @@ func main() {
 				var plSyncErrors atomic.Int64
 				var tickWG sync.WaitGroup
 				for _, u := range users {
-					// Governing: SPEC graceful-shutdown REQ-WG-002 (wg.Add before spawn, defer wg.Done first)
-					wg.Add(1)
+					// Governing: SPEC graceful-shutdown REQ-WG-002 (Add before spawn, Done deferred first)
 					tickWG.Add(1)
-					go func(user *ent.User) {
-						defer wg.Done()
+					jobs.StartWith(tickWG.Done, func(jobCtx context.Context) {
 						defer tickWG.Done()
 						// Governing: SPEC graceful-shutdown REQ-SEM-003, REQ-SEM-004 (semaphore acquire with ctx)
 						select {
 						case sem <- struct{}{}:
 							defer func() { <-sem }()
-						case <-ctx.Done():
+						case <-jobCtx.Done():
 							return
 						}
 						// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
-						if err := playlistSyncSvc.SyncAllEnabledPlaylists(ctx, user.ID); err != nil {
-							logger.Error("playlist sync failed", "username", user.Username, "error", err)
+						if err := playlistSyncSvc.SyncAllEnabledPlaylists(jobCtx, u.ID); err != nil {
+							logger.Error("playlist sync failed", "username", u.Username, "error", err)
 							plSyncErrors.Add(1)
 						}
-					}(u)
+					})
 				}
 				tickWG.Wait()
 				logger.Info("metric.background_tick",
@@ -431,18 +425,91 @@ func main() {
 					"errors", int(plSyncErrors.Load()))
 			}
 		}
-	}()
+	})
+
+	// Background Similar Artist Bulk Enrichment Loop (only when an AI provider is configured)
+	// Governing: SPEC similar-artists-discovery REQ-SIM-060 (7 day cache skips recently processed
+	// artists) and REQ-SIM-061 (500ms pause between artists), design "Bulk Enrichment Flow"
+	// Governing: ADR-0013 (goroutine ticker background scheduling), ADR-0018 (cancellable background work)
+	{
+		const similarArtistsBulkInterval = 7 * 24 * time.Hour
+		if cfg.IsOpenAIEnabled() && similarArtistsSvc != nil {
+			var similarArtistsTick loopGuard
+			loops.Start(func() {
+				syncSimilarArtistsForUsers := func() {
+					tickStart := time.Now()
+					// Governing: SPEC graceful-shutdown REQ-CTX-003 (per-user goroutines use root ctx)
+					users, err := client.User.Query().All(ctx)
+					if err != nil {
+						logger.Error("failed to fetch users for similar artist enrichment", "error", err)
+						return
+					}
+					var bulkErrors atomic.Int64
+					var tickWG sync.WaitGroup
+					for _, u := range users {
+						// Governing: SPEC graceful-shutdown REQ-WG-002 (Add before spawn, Done deferred first)
+						tickWG.Add(1)
+						jobs.StartWith(tickWG.Done, func(jobCtx context.Context) {
+							defer tickWG.Done()
+							// Governing: SPEC graceful-shutdown REQ-SEM-003, REQ-SEM-004 (semaphore acquire with ctx)
+							select {
+							case sem <- struct{}{}:
+								defer func() { <-sem }()
+							case <-jobCtx.Done():
+								return
+							}
+							// Governing: SPEC graceful-shutdown REQ-CTX-002 (cancelled ctx passed to service methods)
+							if err := similarArtistsSvc.FindSimilarArtistsForAll(jobCtx, u.ID); err != nil {
+								logger.Error("similar artist enrichment failed", "username", u.Username, "error", err)
+								bulkErrors.Add(1)
+							}
+						})
+					}
+					tickWG.Wait()
+					logger.Info("metric.background_tick",
+						"loop", "similar_artists",
+						"users_processed", len(users),
+						"duration_ms", time.Since(tickStart).Milliseconds(),
+						"errors", int(bulkErrors.Load()))
+				}
+
+				// Initial delay to keep the pass off the app's startup path
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(5 * time.Minute):
+				}
+
+				guardedTick(&similarArtistsTick, logger, "similar_artists", syncSimilarArtistsForUsers)
+
+				ticker := time.NewTicker(similarArtistsBulkInterval)
+				defer ticker.Stop()
+				// Governing: SPEC graceful-shutdown REQ-CTX-001 (select on ctx.Done vs ticker.C)
+				// Governing: SPEC metadata-enrichment-pipeline REQ-ENRICH-041 (same skip-a-tick guard
+				// pattern: a weekly pass that overruns is skipped rather than stacked)
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						guardedTick(&similarArtistsTick, logger, "similar_artists", syncSimilarArtistsForUsers)
+					}
+				}
+			})
+			logger.Info("similar artist bulk enrichment configured", "interval", similarArtistsBulkInterval)
+		} else {
+			logger.Info("similar artist bulk enrichment disabled (no AI provider configured)")
+		}
+	}
 
 	// Governing: SPEC-0017 REQ "Background Submitter Goroutine", ADR-0029, ADR-0013
 	// Governing: ADR-0009 (Lidarr optional — submitter skipped when unconfigured)
 	// Background Lidarr Queue Submitter (only if Lidarr is configured)
 	if cfg.IsLidarrEnabled() {
 		lidarrSubmitter := services.NewLidarrSubmitter(client, cfg, logger)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		loops.Start(func() {
 			lidarrSubmitter.Run(ctx)
-		}()
+		})
 		logger.Info("lidarr queue submitter enabled",
 			"submit_interval", cfg.Lidarr.SubmitInterval,
 			"queue_max", cfg.Lidarr.QueueMax)
@@ -646,51 +713,53 @@ func main() {
 		}
 	}()
 
+	// Governing: SPEC graceful-shutdown REQ-SIG-004 (name the received signal on the log line)
+	// sigCh is registered before waiting: signal.NotifyContext only cancels the context, so a
+	// channel registered afterwards would only ever see the second signal and never the first.
+	sigCh := make(chan os.Signal, 2)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	defer signal.Stop(sigCh)
+
 	// Wait for shutdown signal
 	<-ctx.Done()
-	logger.Info("shutdown initiated, waiting for background jobs to finish")
+	receivedSignal := "unknown"
+	select {
+	case s, ok := <-sigCh:
+		if ok {
+			receivedSignal = s.String()
+		}
+	default:
+	}
+	logger.Info("shutdown initiated", "signal", receivedSignal, "timeout", shutdownTimeout)
 
 	// Governing: SPEC graceful-shutdown REQ-SIG-004 (second signal -> hard exit)
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		if _, ok := <-sigCh; ok {
-			logger.Error("second signal received, forcing exit")
+		if s, ok := <-sigCh; ok {
+			logger.Error("second signal received, forcing exit", "signal", s.String())
 			os.Exit(1)
 		}
 	}()
 
-	// Governing: SPEC graceful-shutdown REQ-TMO-002 (hard exit timer)
-	// Governing: SPEC graceful-shutdown REQ-TMO-004 (non-zero exit code on timeout)
-	timer := time.AfterFunc(shutdownTimeout, func() {
-		logger.Error("shutdown timeout exceeded, forcing exit")
-		os.Exit(1)
+	// Governing: SPEC graceful-shutdown REQ-TMO-003 (drain background work inside the budget
+	// first, then shut the HTTP server down with the remaining allowance)
+	runShutdownSequence(shutdownSteps{
+		Logger:    logger,
+		Budget:    shutdownTimeout,
+		CloseJobs: jobs.Close,
+		Drain: func(drainCtx context.Context) error {
+			return drainBackground(drainCtx, &loops, jobs)
+		},
+		Running:      jobs.Running,
+		PendingLoops: loops.Pending,
+		ShutdownHTTP: srv.Shutdown,
+		// Governing: SPEC graceful-shutdown REQ-TMO-002 (hard exit timer), REQ-TMO-004 (non-zero exit on timeout)
+		HardExit: func() {
+			logger.Error("shutdown timeout exceeded, forcing exit")
+			os.Exit(1)
+		},
 	})
-	defer timer.Stop()
-
-	// Governing: SPEC graceful-shutdown REQ-CTX-004 (HTTP server uses Shutdown(ctx) for graceful drain)
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error("server shutdown error", "error", err)
-	}
-
-	// Governing: SPEC graceful-shutdown REQ-WG-003 (wait for all per-user goroutines to drain)
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	// Governing: SPEC graceful-shutdown REQ-WG-004 (wg.Wait combined with shutdown timeout to avoid indefinite blocking)
-	select {
-	case <-done:
-		// Governing: SPEC graceful-shutdown REQ-TMO-005 (clean shutdown exits with code 0)
-		logger.Info("all background jobs finished cleanly")
-	case <-shutdownCtx.Done():
-		logger.Warn("shutdown timeout exceeded")
-	}
+	// Governing: SPEC graceful-shutdown REQ-TMO-005 (clean shutdown exits with code 0)
+	logger.Info("shutdown complete")
 }
 
 // Governing: ADR-0005 (Navidrome primary identity), ADR-0002 (Chi router), SPEC user-authentication REQ "MIDDLEWARE-001", REQ "MIDDLEWARE-002", REQ "MIDDLEWARE-003", REQ "MIDDLEWARE-004"

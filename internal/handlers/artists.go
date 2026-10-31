@@ -660,9 +660,18 @@ func (h *Handler) ArtistFindSimilar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Run in background
-	go func() {
-		ctx := context.Background()
+	// Governing: SPEC graceful-shutdown REQ-CTX-002, REQ-CTX-003, REQ-WG-003 (the lookup runs on
+	// the application context and is tracked, so shutdown cancels it and drains it instead of
+	// leaving an untracked goroutine racing process exit)
+	runFindSimilar := func(ctx context.Context) {
 		if err := h.SimilarArtistsSvc.FindSimilarArtists(ctx, u.ID, artistID); err != nil {
+			if ctx.Err() != nil {
+				h.Logger.Info("similar artists lookup cancelled",
+					"artist_id", artistID,
+					"artist_name", a.Name,
+					"error", err)
+				return
+			}
 			h.Logger.Error("failed to find similar artists",
 				"artist_id", artistID,
 				"artist_name", a.Name,
@@ -674,7 +683,18 @@ func (h *Handler) ArtistFindSimilar(w http.ResponseWriter, r *http.Request) {
 					"error")
 			}
 		}
-	}()
+	}
+
+	if h.Jobs != nil {
+		if !h.Jobs.Start(runFindSimilar) {
+			http.Error(w, "Server is shutting down", http.StatusServiceUnavailable)
+			return
+		}
+	} else {
+		// Governing: SPEC similar-artists-discovery REQ-SIM-081 (optional wiring may be absent in
+		// tests; without a tracker the lookup keeps the context it used to invent)
+		go func() { runFindSimilar(context.Background()) }()
+	}
 
 	// Send notification that search started
 	if h.Bus != nil {
