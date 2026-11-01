@@ -2,8 +2,8 @@
 
 **Status:** accepted
 **Version:** 0.1.0
-**Last Updated:** 2026-02-21
-**Governing ADRs:** ADR-0005 (Navidrome primary identity), ADR-0006 (AES-256-GCM encryption), ADR-0002 (Chi router)
+**Last Updated:** 2026-11-01
+**Governing ADRs:** ADR-0005 (Navidrome primary identity), ADR-0006 (AES-256-GCM encryption), ADR-0002 (Chi router), ADR-0028 (CSRF protection strategy)
 
 ## Overview
 
@@ -11,7 +11,7 @@ Spotter delegates primary authentication to Navidrome's Subsonic API, avoiding a
 
 Beyond the primary login, Spotter supports two OAuth provider integrations. Spotify uses a standard OAuth2 authorization code flow with PKCE-less redirect, CSRF protection via a state cookie containing a random token, and an encrypted user ID embedded in the state parameter for session recovery in the callback. Last.fm uses a similar flow adapted to its non-standard auth API (token-based rather than authorization code). Both flows store their respective tokens/session keys in encrypted Ent entities (`SpotifyAuth`, `LastFMAuth`).
 
-The `AuthMiddleware` function (defined in `cmd/server/main.go`) protects all routes except the login page, logout, and OAuth callbacks. It reads the `spotter_token` cookie, queries the PostgreSQL (Ent ORM) for the user, and injects the `*ent.User` into the request context via `handlers.UserContextKey`.
+The `AuthMiddleware` function (defined in `cmd/server/main.go`) protects all routes except the login page, logout, and OAuth callbacks. It reads the `spotter_token` cookie, validates the signed JWT it carries, loads the `User` entity by `claims.UserID` (Ent ORM), and injects the `*ent.User` into the request context via `handlers.UserContextKey`.
 
 ## Scope
 
@@ -19,6 +19,7 @@ This spec covers:
 - Navidrome passthrough login flow (credential validation, user upsert, cookie setting)
 - Session cookie configuration and lifecycle
 - `AuthMiddleware` request authentication
+- Security response headers
 - Spotify OAuth2 authorization code flow with CSRF state protection
 - Last.fm authentication flow with token exchange
 - OAuth token storage in encrypted Ent entities
@@ -77,15 +78,26 @@ Out of scope: Navidrome Subsonic API internals, background sync behavior after l
 
 ### AuthMiddleware
 
-**REQ-MIDDLEWARE-001** — The `AuthMiddleware` function (`cmd/server/main.go:360-389`) MUST be applied to all protected route groups via `r.Use(AuthMiddleware(client))`.
+**REQ-MIDDLEWARE-001** — The `AuthMiddleware` function (in `cmd/server/main.go`) MUST be applied to all protected route groups via `r.Use(AuthMiddleware(client, jwtManager, logger))`.
 
 **REQ-MIDDLEWARE-002** — The middleware MUST read the `spotter_token` cookie from the request. If the cookie is missing or its value is empty, the middleware MUST redirect to `/auth/login` with HTTP 303.
 
-**REQ-MIDDLEWARE-003** — The middleware MUST query the Ent `User` entity by `username` from the cookie value. If no user is found (or a database error occurs), the middleware MUST redirect to `/auth/login`.
+**REQ-MIDDLEWARE-003** — The middleware MUST treat the cookie value as the signed JWT defined in REQ-SESSION-001, not as a username. WHEN a request arrives with a session cookie THEN the middleware SHALL validate the token's signature and expiry via `auth.JWTManager.ValidateToken()`, extract `claims.UserID`, and load the corresponding Ent `User` entity by that ID. If the token fails validation or no user is found (or a database error occurs), the middleware MUST redirect to `/auth/login`.
 
 **REQ-MIDDLEWARE-004** — On successful user lookup, the middleware MUST inject the `*ent.User` into the request context using `handlers.UserContextKey` (a typed `contextKey` string `"user"`) and call `next.ServeHTTP()`.
 
 **REQ-MIDDLEWARE-005** — Handlers MUST retrieve the authenticated user via `h.GetUser(r.Context())`, which extracts the `*ent.User` from the context. A `nil` return value indicates no authenticated user.
+
+### Security Headers
+
+**REQ-SECHEAD-001** — The `SecurityHeaders` middleware (`internal/middleware/security.go`) MUST be applied globally via `r.Use(internalMiddleware.SecurityHeaders)` and MUST set the following headers on every response:
+- `X-Frame-Options: DENY`
+- `X-Content-Type-Options: nosniff`
+- `X-XSS-Protection: 1; mode=block`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Content-Security-Policy:` a policy whose `default-src` is `'self'`, with script, style, and connect sources restricted to same-origin and explicitly allowed CDNs (see `internal/middleware/security.go` for the current directive list)
+
+**REQ-SECHEAD-002** — These headers MUST act as defense-in-depth for the CSRF mitigations of ADR-0028 (`X-Frame-Options` and CSP block clickjacking-based CSRF); they do not replace the state-parameter and SameSite protections defined there and in the OAuth flows below.
 
 ### Spotify OAuth
 
@@ -157,7 +169,7 @@ sequenceDiagram
     participant Browser
     participant Handler as PostLogin\n(auth.go)
     participant Navidrome as Navidrome API\n(ping.view)
-    participant DB as PostgreSQL\n(Ent ORM)
+    participant DB as Database\n(Ent ORM)
 
     Browser->>Handler: POST /login {username, password}
     Handler->>Handler: Validate inputs (non-empty, max length)
@@ -185,7 +197,7 @@ sequenceDiagram
     participant SpotifyLogin as SpotifyLogin\n(spotify_auth.go)
     participant Spotify as Spotify API
     participant SpotifyCallback as SpotifyCallback\n(spotify_auth.go)
-    participant DB as PostgreSQL\n(Ent ORM)
+    participant DB as Database\n(Ent ORM)
     participant Bus as events.Bus
 
     Browser->>SpotifyLogin: GET /auth/spotify/login
@@ -299,11 +311,12 @@ And triggers a background sync
 - Login handler: `internal/handlers/auth.go` — `PostLogin()`, `authenticateNavidrome()`, `Login()`, `Logout()`
 - Spotify OAuth: `internal/handlers/spotify_auth.go` — `SpotifyLogin()`, `SpotifyCallback()`, `generateState()`
 - Last.fm OAuth: `internal/handlers/lastfm_auth.go` — `LastFMLogin()`, `LastFMCallback()`
-- Auth middleware: `cmd/server/main.go:360-389` — `AuthMiddleware()` function
+- Auth middleware: `cmd/server/main.go` — `AuthMiddleware()` function
+- Security headers: `internal/middleware/security.go` — `SecurityHeaders()` function
 - Handler base: `internal/handlers/handlers.go` — `GetUser()`, `UserContextKey`, `Handler` struct
 - Input validation: `internal/handlers/handlers.go` — `ValidateMaxLength()`, `ValidateRequired()`
 - Encryption: `internal/crypto/encryptor.go` — `Encryptor.EncryptInt()`, `Encryptor.DecryptInt()`
 - Spotify auth factory: `internal/providers/spotify/auth.go` — `NewAuthenticator()`
 - Last.fm auth factory: `internal/providers/lastfm/auth.go` — `NewAuthenticator()`
-- Route groups: `cmd/server/main.go:221-333` — public routes (login, callbacks) and protected routes (everything else)
+- Route groups: `cmd/server/main.go` — public routes (login, callbacks) and protected routes (everything else)
 - Governing comment: `// Governing: ADR-0005 (Navidrome auth), ADR-0006 (AES-256-GCM), ADR-0002 (Chi router), SPEC user-authentication`
