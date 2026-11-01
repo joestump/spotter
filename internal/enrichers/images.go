@@ -5,6 +5,7 @@
 package enrichers
 
 import (
+	"context"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/nfnt/resize"
 	_ "golang.org/x/image/webp"
@@ -24,13 +26,22 @@ import (
 const (
 	// MaxImageSize defines the maximum width or height for downloaded images.
 	MaxImageSize = 1024
+
+	// imageDownloadTimeout bounds how long a single image download may take.
+	// Governing: ADR-0020 (error handling and resilience), issue #333.
+	imageDownloadTimeout = 30 * time.Second
 )
+
+// imageDownloadClient replaces http.Get (whose DefaultClient has no timeout)
+// so one stalled image host cannot wedge an entire enrichment run.
+var imageDownloadClient = &http.Client{Timeout: imageDownloadTimeout}
 
 // DownloadAndSaveImage fetches an image from a URL, resizes it if necessary,
 // converts it to PNG format, and saves it to the specified local path.
 // It creates the destination directory if it doesn't exist.
+// The download honors ctx cancellation and is bounded by imageDownloadTimeout.
 // It returns the final path of the saved image or an error if any step fails.
-func DownloadAndSaveImage(url, localPath string, logger *slog.Logger) (string, error) {
+func DownloadAndSaveImage(ctx context.Context, url, localPath string, logger *slog.Logger) (string, error) {
 	if url == "" {
 		return "", fmt.Errorf("image URL cannot be empty")
 	}
@@ -46,8 +57,12 @@ func DownloadAndSaveImage(url, localPath string, logger *slog.Logger) (string, e
 
 	logger.Debug("Downloading image", "url", url)
 
-	// Fetch the image from the provided URL
-	resp, err := http.Get(url)
+	// Fetch the image from the provided URL with a bounded, cancellable request.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create image download request for %s: %w", url, err)
+	}
+	resp, err := imageDownloadClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to start image download from %s: %w", url, err)
 	}
