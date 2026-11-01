@@ -23,6 +23,24 @@ const (
 	rateLimitDelay = 1100 * time.Millisecond // MusicBrainz requires max 1 req/sec
 )
 
+// escapeLuceneValue renders a value as a quoted Lucene phrase for MusicBrainz
+// search queries. Raw interpolation (artist:%s) 400s on names with reserved
+// characters ("AC/DC") and binds only the first word of multi-word names, so
+// every value is wrapped in double quotes with backslashes and quotes escaped
+// (Governing: ADR-0020, issue #333).
+func escapeLuceneValue(value string) string {
+	var b strings.Builder
+	b.WriteRune('"')
+	for _, r := range value {
+		if r == '\\' || r == '"' {
+			b.WriteRune('\\')
+		}
+		b.WriteRune(r)
+	}
+	b.WriteRune('"')
+	return b.String()
+}
+
 // Enricher implements the MusicBrainz metadata enricher.
 type Enricher struct {
 	logger     *slog.Logger
@@ -189,7 +207,7 @@ func (e *Enricher) MatchArtist(ctx context.Context, name string) (string, float6
 	e.logger.Debug("matching artist in MusicBrainz", "name", name)
 
 	params := url.Values{}
-	params.Set("query", fmt.Sprintf("artist:%s", name))
+	params.Set("query", fmt.Sprintf("artist:%s", escapeLuceneValue(name)))
 	params.Set("limit", "5")
 
 	data, err := e.doRequest(ctx, "artist", params)
@@ -243,7 +261,7 @@ func (e *Enricher) MatchAlbum(ctx context.Context, albumName, artistName string)
 	e.logger.Debug("matching album in MusicBrainz", "album", albumName, "artist", artistName)
 
 	params := url.Values{}
-	query := fmt.Sprintf("releasegroup:%s AND artist:%s", albumName, artistName)
+	query := fmt.Sprintf("releasegroup:%s AND artist:%s", escapeLuceneValue(albumName), escapeLuceneValue(artistName))
 	params.Set("query", query)
 	params.Set("limit", "5")
 
@@ -299,12 +317,12 @@ func (e *Enricher) MatchTrack(ctx context.Context, trackName, artistName, albumN
 	e.logger.Debug("matching track in MusicBrainz", "track", trackName, "artist", artistName, "album", albumName)
 
 	params := url.Values{}
-	queryParts := []string{fmt.Sprintf("recording:%s", trackName)}
+	queryParts := []string{fmt.Sprintf("recording:%s", escapeLuceneValue(trackName))}
 	if artistName != "" {
-		queryParts = append(queryParts, fmt.Sprintf("artist:%s", artistName))
+		queryParts = append(queryParts, fmt.Sprintf("artist:%s", escapeLuceneValue(artistName)))
 	}
 	if albumName != "" {
-		queryParts = append(queryParts, fmt.Sprintf("release:%s", albumName))
+		queryParts = append(queryParts, fmt.Sprintf("release:%s", escapeLuceneValue(albumName)))
 	}
 	params.Set("query", strings.Join(queryParts, " AND "))
 	params.Set("limit", "5")
