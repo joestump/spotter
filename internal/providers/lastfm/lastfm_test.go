@@ -8,7 +8,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,10 +107,13 @@ func TestGetAuthURL(t *testing.T) {
 	factory := NewAuthenticator(nil, cfg)
 	auth := factory()
 
-	url := auth.GetAuthURL("random-state")
-	assert.Contains(t, url, "http://www.last.fm/api/auth/")
-	assert.Contains(t, url, "api_key=test-api-key")
-	assert.Contains(t, url, "cb=http://localhost:8080/callback")
+	raw := auth.GetAuthURL("random-state")
+	assert.Contains(t, raw, "www.last.fm/api/auth/")
+
+	parsed, err := url.Parse(raw)
+	require.NoError(t, err)
+	assert.Equal(t, "test-api-key", parsed.Query().Get("api_key"))
+	assert.Equal(t, "http://localhost:8080/callback", parsed.Query().Get("cb"))
 }
 
 func TestGetAuthURL_NoAPIKey(t *testing.T) {
@@ -121,6 +126,26 @@ func TestGetAuthURL_NoAPIKey(t *testing.T) {
 
 	url := auth.GetAuthURL("random-state")
 	assert.Equal(t, "", url)
+}
+
+func TestGetAuthURL_EscapesParams(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.LastFM.APIKey = "key&with=chars"
+	cfg.LastFM.RedirectURL = "https://example.com/cb?a=1&b=2"
+
+	factory := NewAuthenticator(nil, cfg)
+	auth := factory()
+
+	got := auth.GetAuthURL("state")
+
+	parsed, err := url.Parse(got)
+	require.NoError(t, err)
+	assert.Equal(t, "www.last.fm", parsed.Host)
+	assert.Equal(t, "/api/auth/", parsed.Path)
+	assert.Equal(t, "key&with=chars", parsed.Query().Get("api_key"))
+	assert.Equal(t, "https://example.com/cb?a=1&b=2", parsed.Query().Get("cb"))
+	// The raw query holds exactly one separator: neither value leaks a bare &.
+	assert.Equal(t, 1, strings.Count(parsed.RawQuery, "&"))
 }
 
 func TestExchangeCode_Success(t *testing.T) {
@@ -315,6 +340,83 @@ func TestGetRecentListens_Success(t *testing.T) {
 	assert.Equal(t, "Track 1", collectedTracks[0].Name)
 	assert.Equal(t, "Artist 1", collectedTracks[0].Artist)
 	assert.Equal(t, "Album 1", collectedTracks[0].Album)
+}
+
+func TestGetRecentListens_SingleItemResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Last.fm returns XML-derived JSON: a page with exactly one track
+		// carries "track" as a bare object, not a single-element array.
+		response := map[string]interface{}{
+			"recenttracks": map[string]interface{}{
+				"track": map[string]interface{}{
+					"name":   "Solo Track",
+					"artist": map[string]string{"#text": "Solo Artist"},
+					"album":  map[string]string{"#text": "Solo Album"},
+					"url":    "http://last.fm/solo",
+					"date":   map[string]string{"uts": "1609459200"},
+				},
+				"@attr": map[string]interface{}{"totalPages": "1"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{}
+	cfg.LastFM.APIKey = "test-api-key"
+	cfg.LastFM.SharedSecret = "test-secret"
+
+	user := &ent.User{
+		Username: "testuser",
+		Edges: ent.UserEdges{
+			LastfmAuth: &ent.LastFMAuth{
+				Username:   "test-user",
+				SessionKey: "session-key",
+			},
+		},
+	}
+
+	provider := createTestProvider(t, cfg, user, server.URL)
+
+	var collectedTracks []providers.Track
+	err := provider.GetRecentListens(context.Background(), time.Time{}, func(tracks []providers.Track) error {
+		collectedTracks = append(collectedTracks, tracks...)
+		return nil
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, len(collectedTracks))
+	assert.Equal(t, "Solo Track", collectedTracks[0].Name)
+	assert.Equal(t, "Solo Artist", collectedTracks[0].Artist)
+	assert.Equal(t, "Solo Album", collectedTracks[0].Album)
+}
+
+func TestTolerantTrackList(t *testing.T) {
+	t.Run("array shape", func(t *testing.T) {
+		var list tolerantTrackList
+		require.NoError(t, json.Unmarshal([]byte(`[{"name":"A"},{"name":"B"}]`), &list))
+		require.Equal(t, 2, len(list))
+		assert.Equal(t, "A", list[0].Name)
+	})
+
+	t.Run("bare object shape", func(t *testing.T) {
+		var list tolerantTrackList
+		require.NoError(t, json.Unmarshal([]byte(`{"name":"A"}`), &list))
+		require.Equal(t, 1, len(list))
+		assert.Equal(t, "A", list[0].Name)
+	})
+
+	t.Run("null shape", func(t *testing.T) {
+		var list tolerantTrackList
+		require.NoError(t, json.Unmarshal([]byte(`null`), &list))
+		assert.Empty(t, list)
+	})
+
+	t.Run("bad shape errors", func(t *testing.T) {
+		var list tolerantTrackList
+		assert.Error(t, json.Unmarshal([]byte(`"just a string"`), &list))
+	})
 }
 
 func TestGetRecentListens_SkipsNowPlaying(t *testing.T) {

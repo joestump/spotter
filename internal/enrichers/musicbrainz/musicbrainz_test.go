@@ -84,7 +84,6 @@ func TestMatchArtist_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
 		assert.Contains(t, r.URL.Path, "/artist")
-		assert.Contains(t, r.URL.RawQuery, "query=artist%3ARadiohead")
 		assert.Contains(t, r.URL.RawQuery, "fmt=json")
 		assert.NotEmpty(t, r.Header.Get("User-Agent"))
 
@@ -117,6 +116,82 @@ func TestMatchArtist_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "mbid-radiohead", mbid)
 	assert.Equal(t, 1.0, confidence)
+}
+
+func TestEscapeLuceneValue(t *testing.T) {
+	assert.Equal(t, `"AC/DC"`, escapeLuceneValue("AC/DC"))
+	assert.Equal(t, `"The Beatles"`, escapeLuceneValue("The Beatles"))
+	assert.Equal(t, `"Guns N' Roses"`, escapeLuceneValue("Guns N' Roses"))
+	assert.Equal(t, `"Buck 65:Reject"`, escapeLuceneValue("Buck 65:Reject"))
+	assert.Equal(t, `"Bill\"With\"Quotes"`, escapeLuceneValue(`Bill"With"Quotes`))
+	assert.Equal(t, `"back\\slash"`, escapeLuceneValue(`back\slash`))
+}
+
+func TestMatchArtist_SpecialCharactersAreEscaped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "/artist")
+		assert.Equal(t, `artist:"AC/DC"`, r.URL.Query().Get("query"))
+
+		response := artistSearchResponse{
+			Artists: []mbArtist{
+				{ID: "mbid-acdc", Name: "AC/DC", Score: 100},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	enricher := createTestEnricher(t, server.URL)
+	matcher := enricher.(enrichers.IDMatcher)
+	mbid, _, err := matcher.MatchArtist(context.Background(), "AC/DC")
+
+	require.NoError(t, err)
+	assert.Equal(t, "mbid-acdc", mbid)
+}
+
+func TestMatchArtist_MultiWordNameIsPhraseBound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, `artist:"The Beatles"`, r.URL.Query().Get("query"))
+
+		response := artistSearchResponse{
+			Artists: []mbArtist{
+				{ID: "mbid-beatles", Name: "The Beatles", Score: 100},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	enricher := createTestEnricher(t, server.URL)
+	matcher := enricher.(enrichers.IDMatcher)
+	mbid, _, err := matcher.MatchArtist(context.Background(), "The Beatles")
+
+	require.NoError(t, err)
+	assert.Equal(t, "mbid-beatles", mbid)
+}
+
+func TestMatchArtist_QuotedNameIsEscaped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, `artist:"We\"ird\" Al"`, r.URL.Query().Get("query"))
+
+		response := artistSearchResponse{
+			Artists: []mbArtist{
+				{ID: "mbid-weird-al", Name: `We"ird" Al`, Score: 100},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	enricher := createTestEnricher(t, server.URL)
+	matcher := enricher.(enrichers.IDMatcher)
+	mbid, _, err := matcher.MatchArtist(context.Background(), `We"ird" Al`)
+
+	require.NoError(t, err)
+	assert.Equal(t, "mbid-weird-al", mbid)
 }
 
 func TestMatchArtist_NotFound(t *testing.T) {
@@ -168,8 +243,7 @@ func TestMatchArtist_LowScore(t *testing.T) {
 func TestMatchAlbum_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.Path, "/release-group")
-		assert.Contains(t, r.URL.RawQuery, "releasegroup")
-		assert.Contains(t, r.URL.RawQuery, "artist")
+		assert.Equal(t, `releasegroup:"OK Computer" AND artist:"Radiohead"`, r.URL.Query().Get("query"))
 
 		response := releaseGroupSearchResponse{
 			ReleaseGroups: []mbReleaseGroup{

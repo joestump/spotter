@@ -1,6 +1,7 @@
 package enrichers
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/png"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -17,6 +19,7 @@ import (
 func TestDownloadAndSaveImage(t *testing.T) {
 	// Create a dummy logger that discards output
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	ctx := context.Background()
 
 	// Test Case 1: Successful download and save
 	t.Run("successful download and save", func(t *testing.T) {
@@ -29,7 +32,7 @@ func TestDownloadAndSaveImage(t *testing.T) {
 		tempDir := t.TempDir()
 		localPath := filepath.Join(tempDir, "test.png")
 
-		resultPath, err := DownloadAndSaveImage(server.URL, localPath, logger)
+		resultPath, err := DownloadAndSaveImage(ctx, server.URL, localPath, logger)
 		assert.NoError(t, err)
 		assert.Equal(t, localPath, resultPath)
 		assert.FileExists(t, localPath)
@@ -51,7 +54,7 @@ func TestDownloadAndSaveImage(t *testing.T) {
 		assert.NoError(t, err)
 		f.Close()
 
-		resultPath, err := DownloadAndSaveImage(server.URL, localPath, logger)
+		resultPath, err := DownloadAndSaveImage(ctx, server.URL, localPath, logger)
 		assert.NoError(t, err)
 		assert.Equal(t, localPath, resultPath)
 	})
@@ -66,7 +69,7 @@ func TestDownloadAndSaveImage(t *testing.T) {
 		tempDir := t.TempDir()
 		localPath := filepath.Join(tempDir, "notfound.png")
 
-		_, err := DownloadAndSaveImage(server.URL, localPath, logger)
+		_, err := DownloadAndSaveImage(ctx, server.URL, localPath, logger)
 		assert.Error(t, err)
 	})
 
@@ -80,7 +83,7 @@ func TestDownloadAndSaveImage(t *testing.T) {
 		tempDir := t.TempDir()
 		localPath := filepath.Join(tempDir, "bad.png")
 
-		_, err := DownloadAndSaveImage(server.URL, localPath, logger)
+		_, err := DownloadAndSaveImage(ctx, server.URL, localPath, logger)
 		assert.Error(t, err)
 	})
 
@@ -103,7 +106,7 @@ func TestDownloadAndSaveImage(t *testing.T) {
 
 		localPath := filepath.Join(readOnlyDir, "subdir", "image.png")
 
-		_, err = DownloadAndSaveImage(server.URL, localPath, logger)
+		_, err = DownloadAndSaveImage(ctx, server.URL, localPath, logger)
 		assert.Error(t, err)
 	})
 
@@ -118,7 +121,7 @@ func TestDownloadAndSaveImage(t *testing.T) {
 		tempDir := t.TempDir()
 		localPath := filepath.Join(tempDir, "resized.png")
 
-		_, err := DownloadAndSaveImage(server.URL, localPath, logger)
+		_, err := DownloadAndSaveImage(ctx, server.URL, localPath, logger)
 		assert.NoError(t, err)
 
 		f, err := os.Open(localPath)
@@ -128,5 +131,48 @@ func TestDownloadAndSaveImage(t *testing.T) {
 		img, _, err := image.DecodeConfig(f)
 		assert.NoError(t, err)
 		assert.Equal(t, MaxImageSize, img.Width)
+	})
+
+	// Test Case 7: A cancelled context aborts the download
+	t.Run("aborts on context cancellation", func(t *testing.T) {
+		release := make(chan struct{})
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			<-release
+			img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+			png.Encode(w, img)
+		}))
+		defer close(release)
+		defer server.Close()
+
+		tempDir := t.TempDir()
+		localPath := filepath.Join(tempDir, "cancelled.png")
+
+		canceledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := DownloadAndSaveImage(canceledCtx, server.URL, localPath, logger)
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.NoFileExists(t, localPath)
+	})
+
+	// Test Case 8: A stalled image host is cut off by the client timeout
+	t.Run("aborts on client timeout", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(2 * time.Second)
+			img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+			png.Encode(w, img)
+		}))
+		defer server.Close()
+
+		orig := imageDownloadClient
+		imageDownloadClient = &http.Client{Timeout: 50 * time.Millisecond}
+		defer func() { imageDownloadClient = orig }()
+
+		tempDir := t.TempDir()
+		localPath := filepath.Join(tempDir, "timeout.png")
+
+		_, err := DownloadAndSaveImage(context.Background(), server.URL, localPath, logger)
+		assert.Error(t, err)
+		assert.NoFileExists(t, localPath)
 	})
 }

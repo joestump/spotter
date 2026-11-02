@@ -322,7 +322,7 @@ func (e *Enricher) GetArtistImages(ctx context.Context, artist *ent.Artist) ([]e
 		width, height := imageSizeFromLastFM(img.Size)
 
 		localPath := fmt.Sprintf("data/images/artists/%d_lastfm_%s.png", artist.ID, img.Size)
-		_, err := enrichers.DownloadAndSaveImage(img.Text, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.Text, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download lastfm image", "url", img.Text, "error", err)
 			continue
@@ -460,7 +460,7 @@ func (e *Enricher) GetAlbumImages(ctx context.Context, album *ent.Album) ([]enri
 		width, height := imageSizeFromLastFM(img.Size)
 
 		localPath := fmt.Sprintf("data/images/albums/%d_lastfm_%s.png", album.ID, img.Size)
-		_, err := enrichers.DownloadAndSaveImage(img.Text, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.Text, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download lastfm image", "url", img.Text, "error", err)
 			continue

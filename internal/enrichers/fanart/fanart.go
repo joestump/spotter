@@ -177,7 +177,7 @@ func (e *Enricher) GetArtistImages(ctx context.Context, artist *ent.Artist) ([]e
 	for i, img := range response.HDMusicLogo {
 		likes := parseLikes(img.Likes)
 		localPath := fmt.Sprintf("data/images/artists/%d_fanart_%s.png", artist.ID, img.ID)
-		_, err := enrichers.DownloadAndSaveImage(img.URL, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.URL, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download fanart image", "url", img.URL, "error", err)
 			continue
@@ -196,7 +196,7 @@ func (e *Enricher) GetArtistImages(ctx context.Context, artist *ent.Artist) ([]e
 	for _, img := range response.MusicLogo {
 		likes := parseLikes(img.Likes)
 		localPath := fmt.Sprintf("data/images/artists/%d_fanart_%s.png", artist.ID, img.ID)
-		_, err := enrichers.DownloadAndSaveImage(img.URL, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.URL, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download fanart image", "url", img.URL, "error", err)
 			continue
@@ -215,7 +215,7 @@ func (e *Enricher) GetArtistImages(ctx context.Context, artist *ent.Artist) ([]e
 	for i, img := range response.ArtistBackground {
 		likes := parseLikes(img.Likes)
 		localPath := fmt.Sprintf("data/images/artists/%d_fanart_%s.png", artist.ID, img.ID)
-		_, err := enrichers.DownloadAndSaveImage(img.URL, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.URL, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download fanart image", "url", img.URL, "error", err)
 			continue
@@ -234,7 +234,7 @@ func (e *Enricher) GetArtistImages(ctx context.Context, artist *ent.Artist) ([]e
 	for i, img := range response.ArtistFanart {
 		likes := parseLikes(img.Likes)
 		localPath := fmt.Sprintf("data/images/artists/%d_fanart_%s.png", artist.ID, img.ID)
-		_, err := enrichers.DownloadAndSaveImage(img.URL, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.URL, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download fanart image", "url", img.URL, "error", err)
 			continue
@@ -253,7 +253,7 @@ func (e *Enricher) GetArtistImages(ctx context.Context, artist *ent.Artist) ([]e
 	for i, img := range response.ArtistThumb {
 		likes := parseLikes(img.Likes)
 		localPath := fmt.Sprintf("data/images/artists/%d_fanart_%s.png", artist.ID, img.ID)
-		_, err := enrichers.DownloadAndSaveImage(img.URL, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.URL, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download fanart image", "url", img.URL, "error", err)
 			continue
@@ -272,7 +272,7 @@ func (e *Enricher) GetArtistImages(ctx context.Context, artist *ent.Artist) ([]e
 	for i, img := range response.MusicBanner {
 		likes := parseLikes(img.Likes)
 		localPath := fmt.Sprintf("data/images/artists/%d_fanart_%s.png", artist.ID, img.ID)
-		_, err := enrichers.DownloadAndSaveImage(img.URL, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.URL, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download fanart image", "url", img.URL, "error", err)
 			continue
@@ -354,7 +354,7 @@ func (e *Enricher) GetAlbumImages(ctx context.Context, album *ent.Album) ([]enri
 	for i, img := range albumData.CDart {
 		likes := parseLikes(img.Likes)
 		localPath := fmt.Sprintf("data/images/albums/%d_fanart_%s.png", album.ID, img.ID)
-		_, err := enrichers.DownloadAndSaveImage(img.URL, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.URL, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download fanart image", "url", img.URL, "error", err)
 			continue
@@ -373,7 +373,7 @@ func (e *Enricher) GetAlbumImages(ctx context.Context, album *ent.Album) ([]enri
 	for i, img := range albumData.AlbumCover {
 		likes := parseLikes(img.Likes)
 		localPath := fmt.Sprintf("data/images/albums/%d_fanart_%s.png", album.ID, img.ID)
-		_, err := enrichers.DownloadAndSaveImage(img.URL, localPath, e.logger)
+		_, err := enrichers.DownloadAndSaveImage(ctx, img.URL, localPath, e.logger)
 		if err != nil {
 			e.logger.Warn("failed to download fanart image", "url", img.URL, "error", err)
 			continue

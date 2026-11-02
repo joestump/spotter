@@ -112,9 +112,12 @@ func (p *Provider) GetAuthURL(state string) string {
 	// Last.fm doesn't support state parameter natively in the same way OAuth2 does,
 	// but we can't easily pass it through. The controller needs to handle session management.
 	// We just return the standard auth URL.
-	return fmt.Sprintf("http://www.last.fm/api/auth/?api_key=%s&cb=%s",
-		p.config.LastFM.APIKey,
-		p.config.LastFM.RedirectURL)
+	// Params are escaped with url.Values so an api_key or callback URL with
+	// reserved characters cannot alter the query (issue #333).
+	q := url.Values{}
+	q.Set("api_key", p.config.LastFM.APIKey)
+	q.Set("cb", p.config.LastFM.RedirectURL)
+	return "https://www.last.fm/api/auth/?" + q.Encode()
 }
 
 // Governing: SPEC music-provider-integration REQ-PROV-041 (API key auth, session key stored as AccessToken)
@@ -171,6 +174,47 @@ func (p *Provider) Disconnect(ctx context.Context) error {
 	return nil
 }
 
+// recentTrack is one entry of a user.getRecentTracks response.
+type recentTrack struct {
+	Artist struct {
+		Name string `json:"#text"`
+	} `json:"artist"`
+	Name  string `json:"name"`
+	Album struct {
+		Name string `json:"#text"`
+	} `json:"album"`
+	URL  string `json:"url"`
+	Date struct {
+		Uts string `json:"uts"`
+	} `json:"date"`
+	Attr struct {
+		NowPlaying string `json:"nowplaying"`
+	} `json:"@attr"`
+}
+
+// tolerantTrackList accepts both shapes Last.fm returns for XML-derived JSON:
+// an array for multi-track pages, and a bare object when the page holds
+// exactly one track. Without the fallback a single-scrobble user's whole sync
+// fails to decode (issue #333).
+type tolerantTrackList []recentTrack
+
+func (l *tolerantTrackList) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
+	var tracks []recentTrack
+	if err := json.Unmarshal(data, &tracks); err == nil {
+		*l = tracks
+		return nil
+	}
+	var single recentTrack
+	if err := json.Unmarshal(data, &single); err != nil {
+		return fmt.Errorf("last.fm track list: expected an array or a single track object: %w", err)
+	}
+	*l = []recentTrack{single}
+	return nil
+}
+
 // Governing: SPEC music-provider-integration REQ-PROV-042 (user.getRecentTracks with from=since.Unix())
 // GetRecentListens retrieves tracks played after the given timestamp.
 func (p *Provider) GetRecentListens(ctx context.Context, since time.Time, callback func([]providers.Track) error) error {
@@ -197,23 +241,8 @@ func (p *Provider) GetRecentListens(ctx context.Context, since time.Time, callba
 
 		var result struct {
 			RecentTracks struct {
-				Track []struct {
-					Artist struct {
-						Name string `json:"#text"`
-					} `json:"artist"`
-					Name  string `json:"name"`
-					Album struct {
-						Name string `json:"#text"`
-					} `json:"album"`
-					URL  string `json:"url"`
-					Date struct {
-						Uts string `json:"uts"`
-					} `json:"date"`
-					Attr struct {
-						NowPlaying string `json:"nowplaying"`
-					} `json:"@attr"`
-				} `json:"track"`
-				Attr struct {
+				Track tolerantTrackList `json:"track"`
+				Attr  struct {
 					TotalPages string `json:"totalPages"`
 				} `json:"@attr"`
 			} `json:"recenttracks"`
