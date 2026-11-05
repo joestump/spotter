@@ -103,7 +103,7 @@ type Config struct {
 	} `mapstructure:"log"`
 	Security struct {
 		EncryptionKey string `mapstructure:"encryption_key"`  // 32-byte hex key for AES-256 encryption
-		SecureCookies bool   `mapstructure:"secure_cookies"`  // Set Secure flag on cookies (requires HTTPS)
+		SecureCookies bool   `mapstructure:"secure_cookies"`  // Set Secure flag on cookies (requires HTTPS; over plain HTTP a login is refused with a message naming this key, ADR-0034)
 		JWTSecret     string `mapstructure:"jwt_secret"`      // 32+ character secret for JWT signing
 		AuthRateLimit int    `mapstructure:"auth_rate_limit"` // Login attempts per minute per IP (default: 10)
 	} `mapstructure:"security"`
