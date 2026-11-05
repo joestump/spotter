@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -401,6 +402,9 @@ func TestPostLogin_SecureCookieFlag(t *testing.T) {
 			form.Add("password", "secret123")
 			req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(form.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			// Over TLS, so the config-to-flag mapping is what is under test: a plain-HTTP
+			// request with secure cookies on never gets a cookie at all (issue #375).
+			req.TLS = &tls.ConnectionState{}
 
 			w := httptest.NewRecorder()
 			h.PostLogin(w, req)
@@ -418,6 +422,110 @@ func TestPostLogin_SecureCookieFlag(t *testing.T) {
 			assert.Equal(t, tc.expectedSecure, sessionCookie.Secure, "Cookie Secure flag should match config")
 			assert.True(t, sessionCookie.HttpOnly, "Cookie should be HttpOnly")
 			assert.Equal(t, http.SameSiteLaxMode, sessionCookie.SameSite, "Session cookie should use SameSite=Lax for OAuth compatibility")
+		})
+	}
+}
+
+// Governing: SPEC user-authentication REQ "SESSION-004", ADR-0034
+// A login that authenticates but hands the browser a cookie it must discard is
+// the silent no-op reported in issue #375: the form clears and nothing explains.
+func TestPostLogin_PlainHTTPSecureCookieMismatch(t *testing.T) {
+	testCases := []struct {
+		name           string
+		secureCookies  bool
+		viaTLS         bool
+		forwardedProto string
+		hxRequest      bool
+		wantSticky     bool
+	}{
+		{name: "plain HTTP with secure cookies on", secureCookies: true, wantSticky: false},
+		{name: "plain HTTP with the documented opt-out", secureCookies: false, wantSticky: true},
+		{name: "proxied HTTPS with secure cookies on", secureCookies: true, forwardedProto: "https", wantSticky: true},
+		{name: "TLS terminated here with secure cookies on", secureCookies: true, viaTLS: true, wantSticky: true},
+		{name: "plain HTTP over HTMX with secure cookies on", secureCookies: true, hxRequest: true, wantSticky: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				response := map[string]interface{}{
+					"subsonic-response": map[string]interface{}{
+						"status":  "ok",
+						"version": "1.16.1",
+					},
+				}
+				if err := json.NewEncoder(w).Encode(response); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			}))
+			defer ts.Close()
+
+			client := setupTestDB(t)
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			cfg := &config.Config{}
+			cfg.Navidrome.BaseURL = ts.URL
+			cfg.Security.SecureCookies = tc.secureCookies
+
+			bus := events.NewBus()
+			syncer := services.NewSyncer(client, cfg, logger, bus, nil)
+			encryptor, err := crypto.NewEncryptor(make([]byte, 32))
+			require.NoError(t, err)
+			jwtManager := auth.NewJWTManager(testJWTSecret)
+			h := handlers.New(client, cfg, logger, encryptor, jwtManager, syncer, nil, nil, nil, nil, nil, bus, nil)
+
+			form := url.Values{}
+			form.Add("username", "testuser")
+			form.Add("password", "secret123")
+			req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if tc.viaTLS {
+				req.TLS = &tls.ConnectionState{}
+			}
+			if tc.forwardedProto != "" {
+				req.Header.Set("X-Forwarded-Proto", tc.forwardedProto)
+			}
+			if tc.hxRequest {
+				req.Header.Set("HX-Request", "true")
+			}
+
+			w := httptest.NewRecorder()
+			h.PostLogin(w, req)
+			result := w.Result()
+
+			var sessionCookie *http.Cookie
+			for _, c := range result.Cookies() {
+				if c.Name == handlers.CookieName {
+					sessionCookie = c
+					break
+				}
+			}
+
+			if tc.wantSticky {
+				require.NotNil(t, sessionCookie, "a secure connection must get a session cookie")
+				assert.Equal(t, tc.secureCookies, sessionCookie.Secure, "Secure flag must follow config, never the transport")
+				target := result.Header.Get("Location")
+				if tc.hxRequest {
+					target = result.Header.Get("HX-Redirect")
+				}
+				assert.Equal(t, "/", target, "a working login must land on the app")
+				return
+			}
+
+			assert.Nil(t, sessionCookie, "no cookie may be offered when the browser would discard it")
+			target := result.Header.Get("HX-Redirect")
+			if tc.hxRequest {
+				require.NotEmpty(t, target, "an HTMX login must be redirected through HX-Redirect")
+			} else {
+				require.Equal(t, http.StatusSeeOther, result.StatusCode, "a form login must redirect back to the login page")
+				target = result.Header.Get("Location")
+			}
+			parsed, err := url.Parse(target)
+			require.NoError(t, err)
+			assert.Equal(t, "/auth/login", parsed.Path, "the user lands back on the login page, not on a blank home page")
+			errorMsg := parsed.Query().Get("error")
+			assert.Contains(t, errorMsg, "security.secure_cookies", "the error must name the knob the operator has to turn")
+			assert.Contains(t, errorMsg, "plain HTTP", "the error must say why the session did not stick")
 		})
 	}
 }

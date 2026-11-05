@@ -139,6 +139,22 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 3. Refuse to hand out a cookie the browser will throw away: a Secure-flagged
+	// cookie over a plain-HTTP response is dropped without a word to the user, so
+	// a valid login looked like a no-op (issue #375). The Secure default stays on;
+	// the operator names plain HTTP in config instead of discovering it by silence.
+	// Governing: ADR-0034 (plain-HTTP cookie failures are surfaced, not silent)
+	if h.Config.Security.SecureCookies && !requestIsSecure(r) {
+		h.Logger.Warn("not setting session cookie: plain-HTTP request with secure cookies enabled",
+			"remediation", "serve over HTTPS, or set security.secure_cookies=false for local HTTP use")
+		if r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("HX-Redirect", insecureCookieLoginURL())
+			return
+		}
+		http.Redirect(w, r, insecureCookieLoginURL(), http.StatusSeeOther)
+		return
+	}
+
 	// Set JWT cookie
 	// Governing: ADR-0028 (CSRF protection: SameSite=Lax), ADR-0022 T3 (session cookie theft)
 	http.SetCookie(w, &http.Cookie{
