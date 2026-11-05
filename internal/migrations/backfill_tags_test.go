@@ -323,3 +323,72 @@ func TestBackfillTags_AllFieldMappings(t *testing.T) {
 		t.Errorf("Errors = %d, want 0", result.Errors)
 	}
 }
+
+// TestBackfillTags_SecondRunReportsUpToDate covers the rerun contract the
+// spotter-admin backfill-tags verb reports to operators: a second run migrates
+// nothing, says so, and leaves every row untouched.
+// Governing: SPEC-0018 REQ "Data Migration"
+func TestBackfillTags_SecondRunReportsUpToDate(t *testing.T) {
+	client, db := setupTestDB(t)
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	u := client.User.Create().SetUsername("rerunner").SetTheme("dark").SaveX(ctx)
+	client.Artist.Create().
+		SetName("Slowdive").
+		SetUser(u).
+		SetGenres([]string{"shoegaze"}).
+		SetTags([]string{"dream pop"}).
+		SaveX(ctx)
+	client.Artist.Create().
+		SetName("Nothing Legacy").
+		SetUser(u).
+		SaveX(ctx)
+
+	first, err := BackfillTags(ctx, client, db, logger)
+	if err != nil {
+		t.Fatalf("first BackfillTags failed: %v", err)
+	}
+	if first.EntitiesMigrated != 1 {
+		t.Errorf("first run EntitiesMigrated = %d, want 1", first.EntitiesMigrated)
+	}
+	if first.EntitiesUpToDate != 1 {
+		t.Errorf("first run EntitiesUpToDate = %d, want 1 (the artist with no legacy tags)", first.EntitiesUpToDate)
+	}
+	if first.Errors != 0 {
+		t.Errorf("first run Errors = %d, want 0", first.Errors)
+	}
+
+	tagCount := countRows(t, ctx, db, "tags")
+	entityTagCount := countRows(t, ctx, db, "entity_tags")
+
+	second, err := BackfillTags(ctx, client, db, logger)
+	if err != nil {
+		t.Fatalf("second BackfillTags failed: %v", err)
+	}
+	if second.EntitiesMigrated != 0 {
+		t.Errorf("second run EntitiesMigrated = %d, want 0", second.EntitiesMigrated)
+	}
+	if second.EntitiesUpToDate != 2 {
+		t.Errorf("second run EntitiesUpToDate = %d, want 2", second.EntitiesUpToDate)
+	}
+	if second.Errors != 0 {
+		t.Errorf("second run Errors = %d, want 0", second.Errors)
+	}
+
+	if got := countRows(t, ctx, db, "tags"); got != tagCount {
+		t.Errorf("tags after rerun = %d, want %d (no duplicates)", got, tagCount)
+	}
+	if got := countRows(t, ctx, db, "entity_tags"); got != entityTagCount {
+		t.Errorf("entity_tags after rerun = %d, want %d (no duplicates)", got, entityTagCount)
+	}
+}
+
+func countRows(t *testing.T, ctx context.Context, db *sql.DB, table string) int {
+	t.Helper()
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
+		t.Fatalf("count %s: %v", table, err)
+	}
+	return count
+}

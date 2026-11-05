@@ -1,14 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"spotter/internal/crypto"
+	"spotter/internal/database"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -565,5 +571,84 @@ func TestRunForceTreatsUnverifiedAsPlaintext(t *testing.T) {
 	}
 	if dec != plain {
 		t.Errorf("decrypted = %q, want %q", dec, plain)
+	}
+}
+
+func TestDispatch_HelpListsEveryVerb(t *testing.T) {
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	if err := dispatch([]string{"--help"}, stdout, stderr); err != nil {
+		t.Fatalf("dispatch --help error: %v", err)
+	}
+	for _, verb := range []string{"rotate-key", "backfill-tags"} {
+		if !strings.Contains(stdout.String(), verb) {
+			t.Errorf("usage does not list %q: %q", verb, stdout.String())
+		}
+	}
+}
+
+func TestDispatch_VerbHelpListsBackfillTags(t *testing.T) {
+	for _, args := range [][]string{{"backfill-tags", "--help"}, {"rotate-key", "--help"}} {
+		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+		if err := dispatch(args, stdout, stderr); err != nil {
+			t.Fatalf("dispatch %v error: %v", args, err)
+		}
+		if !strings.Contains(stdout.String(), "backfill-tags") {
+			t.Errorf("%v --help does not list backfill-tags: stdout=%q stderr=%q", args, stdout.String(), stderr.String())
+		}
+		// A verb's own flags stay reachable from its help, including the ones
+		// whose behaviour an operator has to read before reaching for them.
+		if !strings.Contains(stdout.String(), "-db") {
+			t.Errorf("%v --help does not list its own flags: %q", args, stdout.String())
+		}
+	}
+}
+
+func TestDispatch_UnknownCommandPrintsUsage(t *testing.T) {
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	err := dispatch([]string{"not-a-verb"}, stdout, stderr)
+	if !errors.Is(err, errUsage) {
+		t.Fatalf("dispatch unknown command error = %v, want errUsage", err)
+	}
+	if !strings.Contains(stderr.String(), "backfill-tags") {
+		t.Errorf("unknown-command output does not list the verbs: %q", stderr.String())
+	}
+}
+
+// TestRunBackfillTags_RerunSummary is the acceptance check for the verb: a
+// first run migrates the fixture, and the second says so in the summary the
+// operator judges it by.
+// Governing: SPEC-0018 REQ "Data Migration"
+func TestRunBackfillTags_RerunSummary(t *testing.T) {
+	ctx := context.Background()
+	dsn := "file:" + filepath.Join(t.TempDir(), "backfill.db") + "?_fk=1"
+
+	seed, err := database.NewClient(driverSQLite3, dsn, nil)
+	if err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	u := seed.User.Create().SetUsername("operator").SetTheme("dark").SaveX(ctx)
+	seed.Artist.Create().
+		SetName("Ride").
+		SetUser(u).
+		SetGenres([]string{"shoegaze"}).
+		SaveX(ctx)
+	if err := seed.Close(); err != nil {
+		t.Fatalf("close seed client: %v", err)
+	}
+
+	first := &bytes.Buffer{}
+	if err := runBackfillTags(ctx, driverSQLite3, dsn, first, io.Discard); err != nil {
+		t.Fatalf("first runBackfillTags error: %v", err)
+	}
+	if !strings.Contains(first.String(), "1 entities migrated") {
+		t.Errorf("first run summary = %q, want it to report 1 entity migrated", first.String())
+	}
+
+	second := &bytes.Buffer{}
+	if err := runBackfillTags(ctx, driverSQLite3, dsn, second, io.Discard); err != nil {
+		t.Fatalf("second runBackfillTags error: %v", err)
+	}
+	if !strings.Contains(second.String(), "0 entities migrated, 1 already up to date") {
+		t.Errorf("second run summary = %q, want \"0 entities migrated, 1 already up to date\"", second.String())
 	}
 }
