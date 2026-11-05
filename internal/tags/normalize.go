@@ -1,4 +1,4 @@
-// Governing: SPEC-0014 REQ "Tag Normalization"
+// Governing: SPEC-0018 REQ "Tag Normalization"
 package tags
 
 import (

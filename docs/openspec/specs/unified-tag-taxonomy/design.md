@@ -243,7 +243,7 @@ flowchart TD
 ### Phase 5: Migration
 
 12. Add a one-time backfill in `internal/migrations/` that reads legacy fields and calls `UpsertTagsForEntity` for each entity
-13. Mark legacy fields deprecated in schema comments: `// Deprecated: migrated to Tag entity (SPEC-0014)`
+13. Mark legacy fields deprecated in schema comments: `// Deprecated: migrated to Tag entity (SPEC-0018)`
 
 ### Rollback
 

@@ -15,8 +15,8 @@ import (
 // next enrichment cycle. It is idempotent, and safe to call concurrently for
 // the same tag.
 //
-// Governing: SPEC-0014 REQ "Enricher Integration",
-// SPEC-0014 REQ "Denormalized Entity Tags Table", ADR-0025, issue #349
+// Governing: SPEC-0018 REQ "Enricher Integration",
+// SPEC-0018 REQ "Denormalized Entity Tags Table", ADR-0025, issue #349
 func (s *MetadataService) PersistTypedTags(ctx context.Context, userID int, entityType string, entityID int, typed []tags.TypedTag) error {
 	if len(typed) == 0 {
 		return nil

@@ -8,7 +8,7 @@ decision-makers: pending maintainer decision (issue #349 asked a lane to impleme
 
 ## Context and Problem Statement
 
-[ADR-0025](./ADR-0025-unified-tag-taxonomy.md) and SPEC-0014 REQ "Denormalized Entity Tags Table" say that when a tag-entity association is created or removed through an Ent edge, the matching `entity_tags` row SHALL be created or deleted in the same transaction.
+[ADR-0025](./ADR-0025-unified-tag-taxonomy.md) and SPEC-0018 REQ "Denormalized Entity Tags Table" say that when a tag-entity association is created or removed through an Ent edge, the matching `entity_tags` row SHALL be created or deleted in the same transaction.
 
 Issue #349 confirmed the implementation does not do that: `internal/tags/upsert.go` writes the Ent edge through the generated client and the `entity_tags` row through a separate raw `database/sql` connection, so the two statements commit independently. A crash or a failed statement between them leaves the two stores out of step.
 
@@ -33,7 +33,7 @@ Doing it literally is not available with the tooling the repo has today:
 
 ## Decision Outcome
 
-Chosen option 3. The contract SPEC-0014 REQ "Denormalized Entity Tags Table" is amended to state in this PR is:
+Chosen option 3. The contract SPEC-0018 REQ "Denormalized Entity Tags Table" is amended to state in this PR is:
 
 1. The Ent edge write commits first and is authoritative.
 2. The `entity_tags` row is written immediately afterwards with `INSERT ... ON CONFLICT (tag_id, entity_type, entity_id) DO NOTHING`, so the projection converges on every write.

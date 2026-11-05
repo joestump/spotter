@@ -1,5 +1,5 @@
-// Governing: SPEC-0014 REQ "Enricher Integration", SPEC-0014 REQ "Denormalized Entity Tags Table",
-// SPEC-0014 REQ "Tag Normalization"
+// Governing: SPEC-0018 REQ "Enricher Integration", SPEC-0018 REQ "Denormalized Entity Tags Table",
+// SPEC-0018 REQ "Tag Normalization"
 package tags
 
 import (
@@ -14,7 +14,7 @@ import (
 )
 
 // TypedTag represents a tag with a specific type classification.
-// Governing: SPEC-0014 REQ "Enricher Integration"
+// Governing: SPEC-0018 REQ "Enricher Integration"
 type TypedTag struct {
 	Name string
 	Type string // "id3", "genre", "ai", "label", "source"
@@ -24,7 +24,7 @@ type TypedTag struct {
 // associates them with the specified entity via Ent edges, and maintains the
 // denormalized entity_tags table. Idempotent: safe to call multiple times, and
 // safe to call concurrently for the same tag.
-// Governing: SPEC-0014 REQ "Enricher Integration", SPEC-0014 REQ "Denormalized Entity Tags Table"
+// Governing: SPEC-0018 REQ "Enricher Integration", SPEC-0018 REQ "Denormalized Entity Tags Table"
 func UpsertTagsForEntity(ctx context.Context, client *ent.Client, db *sql.DB, userID int, entityType string, entityID int, typed []TypedTag) error {
 	for _, tt := range typed {
 		normalized := Normalize(tt.Name)
@@ -62,7 +62,7 @@ func UpsertTagsForEntity(ctx context.Context, client *ent.Client, db *sql.DB, us
 // loser treats the constraint violation as "someone else made this tag" and
 // re-reads the winning row; only a create failure that is not a constraint
 // violation, or a re-read that still finds nothing, fails the upsert.
-// Governing: SPEC-0014 REQ "Tag Entity Schema" (unique index), issue #349
+// Governing: SPEC-0018 REQ "Tag Entity Schema" (unique index), issue #349
 func findOrCreateTag(ctx context.Context, client *ent.Client, userID int, displayName, normalized string, tagType tag.TagType) (*ent.Tag, error) {
 	t, err := findTag(ctx, client, userID, normalized, tagType)
 	if err == nil {
@@ -76,7 +76,7 @@ func findOrCreateTag(ctx context.Context, client *ent.Client, userID int, displa
 		// The display name keeps its original casing but is trimmed, so
 		// "  shoegaze  " is stored as "shoegaze" and never as a second
 		// display variant of the tag Normalize already folded onto.
-		// Governing: SPEC-0014 REQ "Tag Normalization"
+		// Governing: SPEC-0018 REQ "Tag Normalization"
 		SetName(displayName).
 		SetNormalizedName(normalized).
 		SetTagType(tagType).

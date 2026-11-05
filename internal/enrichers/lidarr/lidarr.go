@@ -161,7 +161,7 @@ func (e *Enricher) EnrichArtist(ctx context.Context, artist *ent.Artist) (*enric
 		})
 	}
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tags.TypedTag
 	for _, g := range lArtist.Genres {
 		typedTags = append(typedTags, tags.TypedTag{Name: g, Type: "genre"})
@@ -239,7 +239,7 @@ func (e *Enricher) EnrichAlbum(ctx context.Context, album *ent.Album) (*enricher
 		})
 	}
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tags.TypedTag
 	for _, g := range lAlbum.Genres {
 		typedTags = append(typedTags, tags.TypedTag{Name: g, Type: "genre"})
