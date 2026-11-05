@@ -1,8 +1,10 @@
 # SPEC-0017: Lidarr Submission Queue with Backpressure
 
-**Status:** proposed
+**Status:** accepted
 **Version:** 0.1.0
-**Last Updated:** 2026-03-04
+**Last Updated:** 2026-11-05
+**Last Verified:** 2026-11-05
+**Verified Against:** 8786f73
 **Governing ADRs:** ADR-0029 (Lidarr submission rate limiting), ADR-0015 (pluggable enricher registry), ADR-0013 (goroutine ticker scheduling), ADR-0020 (error handling and resilience)
 
 ## Overview
