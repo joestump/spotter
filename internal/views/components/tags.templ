@@ -1,14 +1,14 @@
 package components
 
 // TagView represents a displayable tag with its type for UI rendering.
-// Governing: SPEC-0014 REQ "UI Tag Visual Differentiation"
+// Governing: SPEC-0018 REQ "UI Tag Visual Differentiation"
 type TagView struct {
 	Name    string
 	TagType string // "id3", "genre", "ai", "label", "source"
 }
 
 // TypedTagBadge renders a single tag with type-specific icon and DaisyUI badge color.
-// Governing: SPEC-0014 REQ "UI Tag Visual Differentiation", ADR-0011 (Tailwind + DaisyUI)
+// Governing: SPEC-0018 REQ "UI Tag Visual Differentiation", ADR-0011 (Tailwind + DaisyUI)
 templ TypedTagBadge(tag TagView) {
 	switch tag.TagType {
 		case "ai":
@@ -40,7 +40,7 @@ templ TypedTagBadge(tag TagView) {
 }
 
 // TypedTagGroup renders a labeled group of tags of the same type.
-// Governing: SPEC-0014 REQ "UI Tag Visual Differentiation"
+// Governing: SPEC-0018 REQ "UI Tag Visual Differentiation"
 templ TypedTagGroup(label string, tags []TagView) {
 	if len(tags) > 0 {
 		<div class="flex flex-wrap gap-1 items-center">

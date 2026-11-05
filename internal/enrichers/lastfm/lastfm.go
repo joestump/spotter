@@ -261,7 +261,7 @@ func (e *Enricher) EnrichArtist(ctx context.Context, artist *ent.Artist) (*enric
 		bio = cleanBio(response.Artist.Bio.Summary)
 	}
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tagsutil.TypedTag
 	for _, t := range tags {
 		typedTags = append(typedTags, tagsutil.TypedTag{Name: t, Type: "id3"})
@@ -393,7 +393,7 @@ func (e *Enricher) EnrichAlbum(ctx context.Context, album *ent.Album) (*enricher
 		}
 	}
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tagsutil.TypedTag
 	for _, t := range tags {
 		typedTags = append(typedTags, tagsutil.TypedTag{Name: t, Type: "id3"})
@@ -537,7 +537,7 @@ func (e *Enricher) EnrichTrack(ctx context.Context, track *ent.Track) (*enricher
 		e.logger.Debug("failed to parse track duration", "duration", response.Track.Duration, "error", err)
 	}
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tagsutil.TypedTag
 	for _, t := range tags {
 		typedTags = append(typedTags, tagsutil.TypedTag{Name: t, Type: "id3"})

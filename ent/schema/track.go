@@ -77,11 +77,11 @@ func (Track) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Popularity score (0-100)"),
-		// Deprecated: migrated to Tag entity (SPEC-0014, 2026-02-28)
+		// Deprecated: migrated to Tag entity (SPEC-0018, 2026-02-28)
 		field.JSON("tags", []string{}).
 			Optional().
 			Comment("Deprecated: migrated to Tag entity. Tags from various sources"),
-		// Deprecated: migrated to Tag entity (SPEC-0014, 2026-02-28)
+		// Deprecated: migrated to Tag entity (SPEC-0018, 2026-02-28)
 		field.JSON("genres", []string{}).
 			Optional().
 			Comment("Deprecated: migrated to Tag entity. Genres associated with this track"),
@@ -108,7 +108,7 @@ func (Track) Fields() []ent.Field {
 		field.Text("ai_summary").
 			Optional().
 			Comment("AI-generated summary of the track"),
-		// Deprecated: migrated to Tag entity (SPEC-0014, 2026-02-28)
+		// Deprecated: migrated to Tag entity (SPEC-0018, 2026-02-28)
 		field.JSON("ai_tags", []string{}).
 			Optional().
 			Comment("Deprecated: migrated to Tag entity. AI-generated tags for the track (max 5)"),

@@ -1,4 +1,4 @@
-// Governing: SPEC-0014 REQ "Denormalized Entity Tags Table", REQ "Driver Registration", ADR-0023
+// Governing: SPEC-0018 REQ "Denormalized Entity Tags Table", SPEC-0014 REQ "Driver Registration", ADR-0023
 package database
 
 import (
@@ -160,7 +160,7 @@ func dropEntityTagsTables(t *testing.T, db *sql.DB) {
 // FKs to users and tags, which Ent normally creates before this migration
 // runs — see NewClient in db.go), runs CreateEntityTagsTable twice to
 // prove idempotency, and round-trips an insert/select including the
-// unique-constraint check required by SPEC-0014.
+// unique-constraint check required by SPEC-0018.
 func runEntityTagsMatrix(t *testing.T, driver string, db *sql.DB, usersDDL, tagsDDL string) {
 	t.Helper()
 	ctx := context.Background()

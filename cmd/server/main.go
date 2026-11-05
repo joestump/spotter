@@ -100,7 +100,7 @@ func main() {
 	}()
 
 	// Open a persistent raw *sql.DB for operations outside the Ent client (e.g. entity_tags upserts).
-	// Governing: SPEC-0014 REQ "Denormalized Entity Tags Table"
+	// Governing: SPEC-0018 REQ "Denormalized Entity Tags Table"
 	rawDB, err := database.OpenRawDB(cfg.Database.Driver, cfg.Database.Source)
 	if err != nil {
 		logger.Error("failed to open raw database connection", "error", err)

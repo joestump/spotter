@@ -313,7 +313,7 @@ templ Show(album *ent.Album, tracks []TrackWithListens, stats *AlbumStats, djs [
 									{ album.Edges.Artist.Name }
 								</a>
 							}
-							// TODO(SPEC-0014): Replace with TypedTagBadge after Tag schema PR #255 merges
+							// TODO(SPEC-0018): Replace with TypedTagBadge after Tag schema PR #255 merges
 							<!-- All Tags -->
 							if allTags := collectAndSortAllTags(album, tracks); len(allTags) > 0 {
 								<div class="flex flex-wrap gap-1.5 mb-4">

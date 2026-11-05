@@ -484,7 +484,7 @@ func (e *Enricher) EnrichArtist(ctx context.Context, artist *ent.Artist) (*enric
 	existingTags := append(artist.Tags, artist.Genres...)
 	aiTags := deduplicateTags(aiResp.Tags, existingTags, 5)
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tags.TypedTag
 	for _, t := range aiTags {
 		typedTags = append(typedTags, tags.TypedTag{Name: t, Type: "ai"})
@@ -645,7 +645,7 @@ func (e *Enricher) EnrichAlbum(ctx context.Context, album *ent.Album) (*enricher
 		})
 	}
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tags.TypedTag
 	for _, t := range aiTags {
 		typedTags = append(typedTags, tags.TypedTag{Name: t, Type: "ai"})
@@ -780,7 +780,7 @@ func (e *Enricher) EnrichTrack(ctx context.Context, track *ent.Track) (*enricher
 	existingTags := append(track.Tags, track.Genres...)
 	aiTags := deduplicateTags(aiResp.Tags, existingTags, 5)
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tags.TypedTag
 	for _, t := range aiTags {
 		typedTags = append(typedTags, tags.TypedTag{Name: t, Type: "ai"})
