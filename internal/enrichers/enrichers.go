@@ -29,7 +29,7 @@ const (
 type Priority int
 
 // ArtistData contains enrichment data for an artist.
-// Governing: SPEC-0014 REQ "Enricher Integration"
+// Governing: SPEC-0018 REQ "Enricher Integration"
 type ArtistData struct {
 	MusicBrainzID string
 	SpotifyID     string
@@ -48,7 +48,7 @@ type ArtistData struct {
 	AIBiography string
 	AITags      []string
 	// Typed tags for unified tag taxonomy
-	// Governing: SPEC-0014 REQ "Enricher Integration"
+	// Governing: SPEC-0018 REQ "Enricher Integration"
 	TypedTags []tags.TypedTag
 }
 
@@ -63,7 +63,7 @@ type RecommendedAlbum struct {
 }
 
 // AlbumData contains enrichment data for an album.
-// Governing: SPEC-0014 REQ "Enricher Integration"
+// Governing: SPEC-0018 REQ "Enricher Integration"
 type AlbumData struct {
 	MusicBrainzID string
 	SpotifyID     string
@@ -84,12 +84,12 @@ type AlbumData struct {
 	CoverArtCommentary string
 	Recommendations    []RecommendedAlbum
 	// Typed tags for unified tag taxonomy
-	// Governing: SPEC-0014 REQ "Enricher Integration"
+	// Governing: SPEC-0018 REQ "Enricher Integration"
 	TypedTags []tags.TypedTag
 }
 
 // TrackData contains enrichment data for a track.
-// Governing: SPEC-0014 REQ "Enricher Integration"
+// Governing: SPEC-0018 REQ "Enricher Integration"
 type TrackData struct {
 	MusicBrainzID    string
 	SpotifyID        string
@@ -116,7 +116,7 @@ type TrackData struct {
 	AISummary string
 	AITags    []string
 	// Typed tags for unified tag taxonomy
-	// Governing: SPEC-0014 REQ "Enricher Integration"
+	// Governing: SPEC-0018 REQ "Enricher Integration"
 	TypedTags []tags.TypedTag
 }
 

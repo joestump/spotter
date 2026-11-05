@@ -504,7 +504,7 @@ func (e *Enricher) EnrichAlbum(ctx context.Context, album *ent.Album) (*enricher
 
 	alb := response.SubsonicResponse.Album
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tags.TypedTag
 	if alb.Genre != "" {
 		typedTags = append(typedTags, tags.TypedTag{Name: alb.Genre, Type: "genre"})
@@ -671,7 +671,7 @@ func (e *Enricher) EnrichTrack(ctx context.Context, track *ent.Track) (*enricher
 
 	song := response.SubsonicResponse.Song
 
-	// Governing: SPEC-0014 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
+	// Governing: SPEC-0018 REQ "Enricher Integration", ADR-0015 (Pluggable Enricher Registry)
 	var typedTags []tags.TypedTag
 	if song.Genre != "" {
 		typedTags = append(typedTags, tags.TypedTag{Name: song.Genre, Type: "genre"})

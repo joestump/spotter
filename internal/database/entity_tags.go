@@ -1,4 +1,4 @@
-// Governing: SPEC-0014 REQ "Denormalized Entity Tags Table", ADR-0023 (multi-database support), ADR-0004 (Ent ORM)
+// Governing: SPEC-0018 REQ "Denormalized Entity Tags Table", ADR-0023 (multi-database support), ADR-0004 (Ent ORM)
 package database
 
 import (
@@ -11,7 +11,7 @@ import (
 // if it does not already exist. This table lives outside the Ent schema
 // and is maintained via raw SQL for cross-entity filtered tag lookups.
 //
-// Governing: SPEC-0014 REQ "Denormalized Entity Tags Table" — DDL is
+// Governing: SPEC-0018 REQ "Denormalized Entity Tags Table" — DDL is
 // emitted per-dialect for all three supported drivers (sqlite3, postgres,
 // mysql) per ADR-0023.
 func CreateEntityTagsTable(ctx context.Context, driver string, db *sql.DB) error {
@@ -61,7 +61,7 @@ var entityTagsPostgres = []string{
 }
 
 // entityTagsMySQL is the MariaDB/MySQL dialect DDL. Differences from the
-// other dialects (Governing: ADR-0023, SPEC-0014 REQ "Denormalized Entity
+// other dialects (Governing: ADR-0023, SPEC-0018 REQ "Denormalized Entity
 // Tags Table"):
 //   - BIGINT AUTO_INCREMENT PRIMARY KEY (MySQL has no SERIAL/AUTOINCREMENT
 //     keyword in the SQLite/Postgres sense)

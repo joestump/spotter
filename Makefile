@@ -25,7 +25,7 @@ else
 endif
 LDFLAGS := -ldflags "-X spotter/internal/version.Version=$(VERSION)"
 
-.PHONY: all help deps ci-deps docker-deps generate css build build-binary build-admin run dev test test-coverage lint lint-docker lint-docs lint-go lint-md lint-templ lint-yaml clean docker-build docker-run docs-deps docs-build docs-serve docs-clean
+.PHONY: all help deps ci-deps docker-deps generate css build build-binary build-admin run dev test test-coverage lint lint-docker lint-docs lint-go lint-md lint-specs lint-templ lint-yaml clean docker-build docker-run docs-deps docs-build docs-serve docs-clean
 
 all: build
 
@@ -132,6 +132,9 @@ lint: ## Run all linters
 	@echo "→ Markdown files..."
 	@$(MAKE) lint-md
 	@echo ""
+	@echo "→ Spec IDs..."
+	@$(MAKE) lint-specs
+	@echo ""
 	@echo "→ Dockerfile..."
 	@$(MAKE) lint-docker
 	@echo ""
@@ -159,6 +162,10 @@ lint-md: ## Run markdownlint on Markdown files
 	@echo "Linting Markdown files..."
 	@npx markdownlint "**/*.md" --ignore node_modules --ignore "docs-site/node_modules"
 	@echo "✓ Markdown linting passed"
+
+lint-specs: ## Check OpenSpec spec IDs are unique
+	@bash scripts/check-spec-ids.sh
+	@echo "✓ Spec ID check passed"
 
 lint-docs: ## Build Docusaurus docs (checks for broken links)
 	@echo "Building documentation to check for broken links..."

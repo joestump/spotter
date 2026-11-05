@@ -1,5 +1,5 @@
-// Governing: SPEC-0014 REQ "Tag Entity Schema", SPEC-0014 REQ "Tag Type Taxonomy",
-// SPEC-0014 REQ "Tag-Entity Associations", SPEC-0014 REQ "Tag Relationships",
+// Governing: SPEC-0018 REQ "Tag Entity Schema", SPEC-0018 REQ "Tag Type Taxonomy",
+// SPEC-0018 REQ "Tag-Entity Associations", SPEC-0018 REQ "Tag Relationships",
 // ADR-0004 (Ent ORM), ADR-0025 (Unified Tag Taxonomy)
 package schema
 

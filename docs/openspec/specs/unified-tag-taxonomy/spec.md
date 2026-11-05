@@ -4,7 +4,7 @@ date: 2026-02-28
 decision-makers: joestump
 ---
 
-# SPEC-0014: Unified Tag Taxonomy
+# SPEC-0018: Unified Tag Taxonomy
 
 ## Overview
 

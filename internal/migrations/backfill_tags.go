@@ -1,4 +1,4 @@
-// Governing: SPEC-0014 REQ "Data Migration", ADR-0025 (Unified Tag Taxonomy), ADR-0023 (PostgreSQL)
+// Governing: SPEC-0018 REQ "Data Migration", ADR-0025 (Unified Tag Taxonomy), ADR-0023 (PostgreSQL)
 package migrations
 
 import (
@@ -24,7 +24,7 @@ type BackfillTagsResult struct {
 // BackfillTags reads all legacy JSON tag fields (tags, genres, ai_tags, genre, label)
 // from existing Artist, Album, and Track entities and populates the new Tag entity
 // and entity_tags denormalized table. Idempotent: safe to run multiple times.
-// Governing: SPEC-0014 REQ "Data Migration"
+// Governing: SPEC-0018 REQ "Data Migration"
 func BackfillTags(ctx context.Context, client *ent.Client, db *sql.DB, logger *slog.Logger) (*BackfillTagsResult, error) {
 	result := &BackfillTagsResult{}
 

@@ -733,7 +733,7 @@ func (s *MetadataService) enrichArtist(ctx context.Context, u *ent.User, art *en
 		allGenres = append(allGenres, data.Genres...)
 
 		// Collect typed tags from enricher
-		// Governing: SPEC-0014 REQ "Enricher Integration"
+		// Governing: SPEC-0018 REQ "Enricher Integration"
 		allTypedTags = append(allTypedTags, data.TypedTags...)
 
 		// Handle AI-specific fields
@@ -779,7 +779,7 @@ func (s *MetadataService) enrichArtist(ctx context.Context, u *ent.User, art *en
 	}
 
 	// Upsert typed tags for the artist entity through the shared tag write path
-	// Governing: SPEC-0014 REQ "Enricher Integration", SPEC-0014 REQ "Denormalized Entity Tags Table"
+	// Governing: SPEC-0018 REQ "Enricher Integration", SPEC-0018 REQ "Denormalized Entity Tags Table"
 	if err := s.PersistTypedTags(ctx, u.ID, "artist", art.ID, allTypedTags); err != nil {
 		s.logger.Warn("failed to upsert typed tags for artist", "artist", art.Name, "error", err)
 	}
@@ -1136,7 +1136,7 @@ func (s *MetadataService) enrichAlbum(ctx context.Context, u *ent.User, alb *ent
 		allTags = append(allTags, data.Tags...)
 
 		// Collect typed tags from enricher
-		// Governing: SPEC-0014 REQ "Enricher Integration"
+		// Governing: SPEC-0018 REQ "Enricher Integration"
 		allTypedTags = append(allTypedTags, data.TypedTags...)
 
 		// Handle AI-specific fields
@@ -1197,7 +1197,7 @@ func (s *MetadataService) enrichAlbum(ctx context.Context, u *ent.User, alb *ent
 	}
 
 	// Upsert typed tags for the album entity through the shared tag write path
-	// Governing: SPEC-0014 REQ "Enricher Integration", SPEC-0014 REQ "Denormalized Entity Tags Table"
+	// Governing: SPEC-0018 REQ "Enricher Integration", SPEC-0018 REQ "Denormalized Entity Tags Table"
 	if err := s.PersistTypedTags(ctx, u.ID, "album", alb.ID, allTypedTags); err != nil {
 		s.logger.Warn("failed to upsert typed tags for album", "album", alb.Name, "error", err)
 	}
@@ -1465,7 +1465,7 @@ func (s *MetadataService) enrichTrack(ctx context.Context, u *ent.User, t *ent.T
 		allGenres = append(allGenres, data.Genres...)
 
 		// Collect typed tags from enricher
-		// Governing: SPEC-0014 REQ "Enricher Integration"
+		// Governing: SPEC-0018 REQ "Enricher Integration"
 		allTypedTags = append(allTypedTags, data.TypedTags...)
 
 		// Handle AI-specific fields
@@ -1493,7 +1493,7 @@ func (s *MetadataService) enrichTrack(ctx context.Context, u *ent.User, t *ent.T
 	}
 
 	// Upsert typed tags for the track entity through the shared tag write path
-	// Governing: SPEC-0014 REQ "Enricher Integration", SPEC-0014 REQ "Denormalized Entity Tags Table"
+	// Governing: SPEC-0018 REQ "Enricher Integration", SPEC-0018 REQ "Denormalized Entity Tags Table"
 	if err := s.PersistTypedTags(ctx, u.ID, "track", t.ID, allTypedTags); err != nil {
 		s.logger.Warn("failed to upsert typed tags for track", "track", t.Name, "error", err)
 	}

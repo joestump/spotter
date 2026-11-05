@@ -294,7 +294,7 @@ templ Show(track *ent.Track, playlists []*ent.Playlist, stats *TrackStats, cfg *
 									@components.ExternalLinkBadge("MusicBrainz", fmt.Sprintf("https://musicbrainz.org/recording/%s", *track.MusicbrainzID), "icon-[heroicons--globe-alt]", "badge-warning")
 								}
 							</div>
-							// TODO(SPEC-0014): Replace with TypedTagBadge after Tag schema PR #255 merges
+							// TODO(SPEC-0018): Replace with TypedTagBadge after Tag schema PR #255 merges
 							<!-- All Tags (Genres, ID3, AI) -->
 							if len(track.Genres) > 0 || len(track.Tags) > 0 || len(track.AiTags) > 0 {
 								<div class="flex flex-wrap gap-1.5 mb-4">

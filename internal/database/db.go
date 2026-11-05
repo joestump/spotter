@@ -39,7 +39,7 @@ func NewClient(driver, source string, encryptor *crypto.Encryptor) (*ent.Client,
 		return nil, fmt.Errorf("failed creating schema resources: %v", err)
 	}
 
-	// Governing: SPEC-0014 REQ "Denormalized Entity Tags Table"
+	// Governing: SPEC-0018 REQ "Denormalized Entity Tags Table"
 	// Open a raw database connection for the entity_tags custom migration.
 	db, err := sql.Open(driverToStdlib(driver), source)
 	if err != nil {
