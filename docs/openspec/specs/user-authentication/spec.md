@@ -57,9 +57,9 @@ Out of scope: Navidrome Subsonic API internals, background sync behavior after l
 
 **REQ-AUTH-008** — On successful authentication, the handler MUST trigger a background sync by calling `h.Syncer.Sync()` in a new goroutine with `context.Background()`.
 
-**REQ-AUTH-009** — On successful authentication, the handler MUST set the `spotter_token` session cookie (see Session Management requirements).
+**REQ-AUTH-009** — On successful authentication, the handler MUST set the `spotter_token` session cookie (see Session Management requirements), unless REQ-SESSION-004 applies.
 
-**REQ-AUTH-010** — If the request includes the `HX-Request: true` header (HTMX request), the handler MUST respond with an `HX-Redirect: /` header. Otherwise, it MUST issue a standard HTTP 303 redirect to `/`.
+**REQ-AUTH-010** — If the request includes the `HX-Request: true` header (HTMX request), the handler MUST respond with an `HX-Redirect: /` header. Otherwise, it MUST issue a standard HTTP 303 redirect to `/`. When REQ-SESSION-004 applies, the redirect target is `/auth/login?error=` plus the URL-encoded message instead of `/`, in the same header or status the request type requires.
 
 ### Session Management
 
@@ -75,6 +75,8 @@ Out of scope: Navidrome Subsonic API internals, background sync behavior after l
 **REQ-SESSION-002** — The `Logout` handler MUST clear the session by setting the `spotter_token` cookie with an empty value and an expiry in the past, then redirect to `/auth/login`.
 
 **REQ-SESSION-003** — The logout cookie MUST preserve the same `Path`, `HttpOnly`, `Secure`, and `SameSite` settings as the login cookie to ensure proper cookie clearing.
+
+**REQ-SESSION-004** — WHEN `config.Security.SecureCookies` is `true` AND the login request arrived over plain HTTP THEN the handler SHALL set no session cookie and redirect to `/auth/login` carrying an error that names `security.secure_cookies`, because a browser discards a `Secure` cookie received over plain HTTP and the login would otherwise look like a no-op. A request counts as secure when `r.TLS` is set or `X-Forwarded-Proto` names `https` as its first protocol. The `Secure` flag on a cookie that IS set MUST still follow `config.Security.SecureCookies`, never the transport. Governing: ADR-0034.
 
 ### AuthMiddleware
 
