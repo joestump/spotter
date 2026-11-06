@@ -70,6 +70,25 @@ docker compose -f docker-compose.mariadb.yml up
 
 For the full configuration reference, see the **[documentation site](https://joestump.github.io/spotter/)**.
 
+## Upgrading
+
+A few upgrades need one step run by hand. Those steps are `spotter-admin` commands, and they read the same
+`SPOTTER_DATABASE_DRIVER` / `SPOTTER_DATABASE_SOURCE` configuration as the server (pass `--db=<dsn>` to point at
+another database). Build the tool with `make build-admin`, then run `./spotter-admin --help` to list the commands.
+
+### Unified tag taxonomy backfill
+
+Tags used to live in JSON array fields on artists, albums, and tracks. The typed `Tag` entity replaced them, and a
+database upgraded from before that change still has its tags only in the legacy fields until the backfill runs:
+
+```bash
+./spotter-admin backfill-tags
+```
+
+Run it once after upgrading. It applies the same schema migration the server runs at startup, so it works whether or
+not the new version has started yet, and it is safe to run again: already-migrated rows are skipped, and a second run
+exits 0 reporting `0 entities migrated, N already up to date`.
+
 ## Development
 
 ```bash

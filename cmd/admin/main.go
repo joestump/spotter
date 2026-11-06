@@ -2,15 +2,21 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"strings"
 
 	"spotter/internal/config"
 	"spotter/internal/crypto"
+	"spotter/internal/database"
+	"spotter/internal/migrations"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
@@ -44,20 +50,97 @@ var allEncryptedFields = []encryptedField{
 	{table: "last_fm_auths", column: "session_key"},
 }
 
+// adminUsage lists every verb. A verb's own --help prints it too, so an
+// operator who knows the task but not the verb finds it from either entry point.
+const adminUsage = `Usage: spotter-admin <command> [flags]
+
+Commands:
+  rotate-key      Re-encrypt stored credentials under a new encryption key
+                  (--old-key=<hex> --new-key=<hex> [--db=<dsn>] [--force])
+  backfill-tags   One-time backfill of legacy JSON tag fields into the typed
+                  Tag entity. Run it once, after upgrading to the unified tag
+                  taxonomy ([--db=<dsn>])
+
+Run "spotter-admin <command> --help" for a command's flags.
+`
+
+// errUsage marks a path that already printed the usage text: main turns it into
+// exit code 1 without printing a second, redundant error line.
+var errUsage = errors.New("spotter-admin: usage")
+
+// wasHelpRequested reports whether --help was asked for, checked before the
+// flagset parses, so the verb list and that verb's own flags go to stdout and
+// the run exits 0, while a genuine flag error still goes to stderr with exit 1.
+func wasHelpRequested(args []string) bool {
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			return true
+		}
+	}
+	return false
+}
+
+// printHelp lists every verb and, below them, the flags of the verb asked for,
+// so one --help answers both "what can this tool do" and "what does this verb take".
+func printHelp(w io.Writer, fs *flag.FlagSet) {
+	_, _ = fmt.Fprint(w, adminUsage)
+	_, _ = fmt.Fprintf(w, "%s flags:\n", fs.Name())
+	fs.PrintDefaults()
+}
+
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "rotate-key" {
-		fmt.Fprintln(os.Stderr, "Usage: spotter-admin rotate-key --old-key=<hex> --new-key=<hex> [--db=<dsn>] [--force]")
+	if err := dispatch(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+		if !errors.Is(err, errUsage) {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(1)
 	}
+}
 
-	// Parse flags after the subcommand.
-	fs := flag.NewFlagSet("rotate-key", flag.ExitOnError)
+// dispatch runs the subcommand named at the head of args. stdout and stderr are
+// passed in so the verb wiring is testable without exec'ing the binary.
+func dispatch(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 {
+		_, _ = fmt.Fprint(stderr, adminUsage)
+		return errUsage
+	}
+
+	switch args[0] {
+	case "rotate-key":
+		return dispatchRotateKey(args[1:], stdout, stderr)
+	case "backfill-tags":
+		return dispatchBackfillTags(args[1:], stdout, stderr)
+	case "help", "-h", "--help":
+		_, _ = fmt.Fprint(stdout, adminUsage)
+		return nil
+	default:
+		_, _ = fmt.Fprintf(stderr, "Unknown command: %s\n\n", args[0])
+		_, _ = fmt.Fprint(stderr, adminUsage)
+		return errUsage
+	}
+}
+
+// dispatchRotateKey parses the rotate-key flags and runs the rotation. The
+// flagset reports errors instead of exiting so the verbs stay testable in one
+// process; ErrHelp means --help was asked for and the usage is already printed.
+func dispatchRotateKey(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("rotate-key", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() { printHelp(stderr, fs) }
 	oldKeyHex := fs.String("old-key", "", "Current 64-char hex encryption key (required)")
 	newKeyHex := fs.String("new-key", "", "New 64-char hex encryption key (required)")
 	dbDSNFlag := fs.String("db", "", "Database DSN (overrides SPOTTER_DATABASE_SOURCE env var)")
 	force := fs.Bool("force", false, "Proceed even when no stored value verifies the old key (DANGEROUS: with a wrong old key this irrecoverably corrupts all credentials; only use when the stored values really are plaintext)")
-	if err := fs.Parse(os.Args[2:]); err != nil {
-		os.Exit(1)
+	if wasHelpRequested(args) {
+		fs.SetOutput(stdout)
+		printHelp(stdout, fs)
+		return nil
+	}
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil // flag already printed the usage
+		}
+		return err
 	}
 
 	// Governing: ADR-0023 (multi-database support), ADR-0009 (Viper configuration), SPEC key-rotation
@@ -69,8 +152,7 @@ func main() {
 	// The --db flag still overrides the configured DSN.
 	cfg, err := config.LoadDatabase()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to load database config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to load database config: %w", err)
 	}
 	driver := cfg.Database.Driver
 	dsn := cfg.Database.Source
@@ -78,10 +160,78 @@ func main() {
 		dsn = *dbDSNFlag
 	}
 
-	if err := run(*oldKeyHex, *newKeyHex, driver, dsn, *force); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+	return run(*oldKeyHex, *newKeyHex, driver, dsn, *force)
+}
+
+// dispatchBackfillTags is the operator-facing door for the one-time tag
+// backfill: the migration itself already existed, but nothing could run it.
+// Governing: SPEC-0018 REQ "Data Migration"
+func dispatchBackfillTags(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("backfill-tags", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() { printHelp(stderr, fs) }
+	dbDSNFlag := fs.String("db", "", "Database DSN (overrides SPOTTER_DATABASE_SOURCE env var)")
+	if wasHelpRequested(args) {
+		fs.SetOutput(stdout)
+		printHelp(stdout, fs)
+		return nil
 	}
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil // flag already printed the usage
+		}
+		return err
+	}
+
+	cfg, err := config.LoadDatabase()
+	if err != nil {
+		return fmt.Errorf("failed to load database config: %w", err)
+	}
+	driver := cfg.Database.Driver
+	dsn := cfg.Database.Source
+	if *dbDSNFlag != "" {
+		dsn = *dbDSNFlag
+	}
+
+	return runBackfillTags(context.Background(), driver, dsn, stdout, stderr)
+}
+
+// runBackfillTags runs the backfill against the given database and prints the
+// summary an operator judges the run by: how many entities this run migrated
+// and how many it found already up to date. A second run after a successful
+// migration reports "0 entities migrated, N already up to date" and exits 0;
+// entities that failed are counted and exit non-zero.
+// Governing: SPEC-0018 REQ "Data Migration"
+func runBackfillTags(ctx context.Context, driver, dbDSN string, stdout, stderr io.Writer) error {
+	// NewClient applies the same schema migration the server runs at startup,
+	// so the verb works right after an upgrade even if the server has not
+	// started yet, and the tag tables the backfill writes to exist.
+	client, err := database.NewClient(driver, dbDSN, nil)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	db, err := sql.Open(driver, dbDSN)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	logger := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	result, err := migrations.BackfillTags(ctx, client, db, logger)
+	if err != nil {
+		return fmt.Errorf("tag backfill failed: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(stdout, "%d entities migrated, %d already up to date\n", result.EntitiesMigrated, result.EntitiesUpToDate)
+	_, _ = fmt.Fprintf(stdout, "  entities scanned: %d artists, %d albums, %d tracks\n",
+		result.ArtistsProcessed, result.AlbumsProcessed, result.TracksProcessed)
+	if result.Errors > 0 {
+		return fmt.Errorf("%d entity tag backfills failed (see the errors above)", result.Errors)
+	}
+	return nil
 }
 
 func run(oldKeyHex, newKeyHex, driver, dbDSN string, force bool) error {
