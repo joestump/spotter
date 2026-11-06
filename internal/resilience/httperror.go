@@ -1,4 +1,4 @@
-// Governing: ADR-0020 (exponential backoff and circuit breaker), SPEC error-handling REQ-ERR-001 through REQ-ERR-004
+// Governing: ADR-0020 (exponential backoff with jitter), SPEC error-handling REQ-ERR-001 through REQ-ERR-004
 //
 // Package resilience holds typed errors shared by provider/enricher HTTP
 // clients and the services-layer error classifier. It lives below both

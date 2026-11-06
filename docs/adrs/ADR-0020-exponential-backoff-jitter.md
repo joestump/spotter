@@ -4,7 +4,7 @@ date: 2026-02-21
 decision-makers: joestump
 ---
 
-# ADR-0020: Exponential Backoff and Circuit Breaker for External Service Errors
+# ADR-0020: Exponential Backoff with Jitter for External Service Errors
 
 ## Context and Problem Statement
 
