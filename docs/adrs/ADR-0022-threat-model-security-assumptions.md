@@ -12,7 +12,7 @@ Spotter is a self-hosted, single-user companion application for Navidrome that i
 
 ## Decision Drivers
 
-* Security decisions are distributed across multiple ADRs ([ADR-0005](./ADR-0005-navidrome-primary-identity-provider.md), [ADR-0006](./ADR-0006-aes256-gcm-application-layer-encryption.md), [ADR-0020](./ADR-0020-error-handling-resilience.md), [ADR-0021](./ADR-0021-encryption-key-rotation.md)) — a unified threat model provides a single reference point
+* Security decisions are distributed across multiple ADRs ([ADR-0005](./ADR-0005-navidrome-primary-identity-provider.md), [ADR-0006](./ADR-0006-aes256-gcm-application-layer-encryption.md), [ADR-0020](./ADR-0020-exponential-backoff-with-jitter.md), [ADR-0021](./ADR-0021-encryption-key-rotation.md)) — a unified threat model provides a single reference point
 * Self-hosted personal software has a different threat profile than multi-tenant SaaS — assumptions about the trust boundary and deployment environment must be explicit
 * Contributors and future sessions need to understand what is defended, what is not, and why — prevents over-engineering defenses for out-of-scope threats and under-engineering for in-scope ones
 * The operator is both the administrator and the sole user — multi-tenant isolation is not applicable
@@ -225,7 +225,7 @@ The following assumptions underpin Spotter's security posture. If any assumption
 | [ADR-0008](./ADR-0008-openai-api-litellm-compatible-llm-backend.md) | OpenAI/LiteLLM backend — prompt injection risk via DJ personas |
 | [ADR-0013](./ADR-0013-goroutine-ticker-background-scheduling.md) | Background scheduling — goroutines run with full credential access |
 | [ADR-0016](./ADR-0016-pluggable-provider-factory-pattern.md) | Provider factory — each provider authenticates independently |
-| [ADR-0020](./ADR-0020-error-handling-resilience.md) | Error handling resilience — fatal errors surface credential failures to user |
+| [ADR-0020](./ADR-0020-exponential-backoff-with-jitter.md) | Error handling resilience — fatal errors surface credential failures to user |
 | [ADR-0021](./ADR-0021-encryption-key-rotation.md) | Key rotation — provides recovery path for compromised encryption key |
 
 ## More Information

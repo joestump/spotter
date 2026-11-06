@@ -1,4 +1,4 @@
-// Governing: ADR-0020 (exponential backoff and circuit breaker), ADR-0007 (event bus for notifications), SPEC error-handling
+// Governing: ADR-0020 (exponential backoff with jitter), ADR-0007 (event bus for notifications), SPEC error-handling
 package services
 
 import (

@@ -12,7 +12,7 @@ This design introduces a two-tier error classification system with exponential b
 errors and event bus notifications for permanent (fatal) errors, giving proportionate responses to
 both failure modes.
 
-Governing ADRs: [ADR-0020](../../adrs/ADR-0020-error-handling-resilience.md),
+Governing ADRs: [ADR-0020](../../adrs/ADR-0020-exponential-backoff-with-jitter.md),
 [ADR-0007](../../adrs/ADR-0007-in-memory-event-bus.md),
 [ADR-0016](../../adrs/ADR-0016-pluggable-provider-factory-pattern.md),
 [ADR-0013](../../adrs/ADR-0013-goroutine-ticker-background-scheduling.md).

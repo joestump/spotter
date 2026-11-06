@@ -31,7 +31,7 @@ type SyncNotifier interface {
 	SendTest(ctx context.Context, u *ent.User) error
 }
 
-// Governing: ADR-0020 (exponential backoff and circuit breaker), ADR-0007 (event bus for notifications), SPEC error-handling
+// Governing: ADR-0020 (exponential backoff with jitter), ADR-0007 (event bus for notifications), SPEC error-handling
 type Syncer struct {
 	client    *ent.Client
 	config    *config.Config

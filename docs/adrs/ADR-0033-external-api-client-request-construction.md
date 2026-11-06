@@ -16,7 +16,7 @@ downloads issued through `http.Get` on the default client. Each one is invisible
 on the happy path and breaks on real-world data ("AC/DC", a one-scrobble
 account, a stalled image host).
 
-The existing records cover the surrounding policy — [ADR-0020](./ADR-0020-error-handling-resilience.md)
+The existing records cover the surrounding policy — [ADR-0020](./ADR-0020-exponential-backoff-with-jitter.md)
 for error classification and backoff, [ADR-0027](./ADR-0027-image-storage-filesystem.md)
 for where images live, [ADR-0015](./ADR-0015-pluggable-enricher-registry-pattern.md)
 for the enricher shape — but none states how an outbound request must be

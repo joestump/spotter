@@ -3,7 +3,7 @@
 **Status:** accepted
 **Version:** 0.1.0
 **Last Updated:** 2026-02-21
-**Governing ADRs:** ADR-0020 (exponential backoff and circuit breaker), ADR-0007 (in-memory event bus), ADR-0016 (pluggable provider factory), ADR-0013 (goroutine ticker background scheduling)
+**Governing ADRs:** ADR-0020 (exponential backoff with jitter), ADR-0007 (in-memory event bus), ADR-0016 (pluggable provider factory), ADR-0013 (goroutine ticker background scheduling)
 
 ## Overview
 
@@ -171,4 +171,4 @@ And the Navidrome provider is retried immediately on the first sync tick
 - Integration point: `internal/services/sync.go` — check backoff before calling provider, update state after call
 - Event bus notification: `internal/events/bus.go` — `PublishNotification(userID, title, message, iconType)`
 - Provider factory: `internal/providers/providers.go` — no changes needed; error classification wraps provider return values
-- Governing comment: `// Governing: ADR-0020 (error handling resilience), ADR-0007 (event bus for notifications), SPEC error-handling`
+- Governing comment: `// Governing: ADR-0020 (exponential backoff with jitter), ADR-0007 (event bus for notifications), SPEC error-handling`

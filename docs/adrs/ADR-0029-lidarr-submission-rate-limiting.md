@@ -34,7 +34,7 @@ How should Spotter throttle Lidarr submissions to prevent queue flooding while g
 
 Chosen option: **Option 1 (DB-persisted submission queue with Lidarr queue backpressure)**, because it decouples Lidarr submission from the enrichment pipeline, uses actual Lidarr queue depth as the throttling signal (rather than an arbitrary fixed rate), persists pending submissions across restarts, and introduces a `queued` status that gives users visibility into what Spotter intends to submit before it reaches Lidarr.
 
-The enrichment pipeline will no longer call `addArtist()` / `addAlbum()` directly. Instead, it will insert a row into a `lidarr_queue` table (or Ent entity) with status `queued`. A dedicated background goroutine (`LidarrSubmitter`) wakes on a configurable interval (default: 3 minutes via `SPOTTER_LIDARR_SUBMIT_INTERVAL`), checks Lidarr's current queue depth via its API (e.g. `GET /api/v1/queue`), and only submits items if the queue is below the configured cap (`SPOTTER_LIDARR_QUEUE_MAX`, default: 50). When the Lidarr queue is at or above the cap, the submitter logs a backpressure event and sleeps until the next interval — no submissions are made until Lidarr has drained below the threshold. Failed submissions use exponential backoff (consistent with [ADR-0020](./ADR-0020-error-handling-resilience.md)) before retry.
+The enrichment pipeline will no longer call `addArtist()` / `addAlbum()` directly. Instead, it will insert a row into a `lidarr_queue` table (or Ent entity) with status `queued`. A dedicated background goroutine (`LidarrSubmitter`) wakes on a configurable interval (default: 3 minutes via `SPOTTER_LIDARR_SUBMIT_INTERVAL`), checks Lidarr's current queue depth via its API (e.g. `GET /api/v1/queue`), and only submits items if the queue is below the configured cap (`SPOTTER_LIDARR_QUEUE_MAX`, default: 50). When the Lidarr queue is at or above the cap, the submitter logs a backpressure event and sleeps until the next interval — no submissions are made until Lidarr has drained below the threshold. Failed submissions use exponential backoff (consistent with [ADR-0020](./ADR-0020-exponential-backoff-with-jitter.md)) before retry.
 
 ### Consequences
 
@@ -44,7 +44,7 @@ The enrichment pipeline will no longer call `addArtist()` / `addAlbum()` directl
 * Good, because the configurable wake interval (`SPOTTER_LIDARR_SUBMIT_INTERVAL`) controls how frequently the submitter checks Lidarr and attempts to drain
 * Good, because the persistent queue survives process restarts — no submissions are lost when the container updates
 * Good, because the new `queued` status lets the UI show "Waiting for Lidarr" with a distinct icon, giving users visibility into the backlog
-* Good, because backoff on submission failure ([ADR-0020](./ADR-0020-error-handling-resilience.md) pattern) prevents hammering Lidarr when it is unreachable
+* Good, because backoff on submission failure ([ADR-0020](./ADR-0020-exponential-backoff-with-jitter.md) pattern) prevents hammering Lidarr when it is unreachable
 * Bad, because it introduces a new Ent entity (`LidarrQueue`) and a background goroutine, adding operational complexity
 * Bad, because there is a delay between catalog discovery and Lidarr submission — users may need to wait minutes to hours for large backlogs to drain
 * Bad, because the queue table grows and needs periodic cleanup of completed/failed entries
@@ -134,7 +134,7 @@ flowchart TD
 
 ## More Information
 
-* **Related ADRs**: [ADR-0015](./ADR-0015-pluggable-enricher-registry-pattern.md) (enricher registry — Lidarr enricher registration), [ADR-0013](./ADR-0013-goroutine-ticker-background-scheduling.md) (goroutine ticker — background submitter follows same pattern), [ADR-0020](./ADR-0020-error-handling-resilience.md) (error handling — backoff strategy for failed submissions), [ADR-0023](./ADR-0023-multi-database-support-postgresql-mariadb.md) (multi-database — queue table supports PostgreSQL/SQLite/MariaDB)
+* **Related ADRs**: [ADR-0015](./ADR-0015-pluggable-enricher-registry-pattern.md) (enricher registry — Lidarr enricher registration), [ADR-0013](./ADR-0013-goroutine-ticker-background-scheduling.md) (goroutine ticker — background submitter follows same pattern), [ADR-0020](./ADR-0020-exponential-backoff-with-jitter.md) (error handling — backoff strategy for failed submissions), [ADR-0023](./ADR-0023-multi-database-support-postgresql-mariadb.md) (multi-database — queue table supports PostgreSQL/SQLite/MariaDB)
 * **Existing rate limiting reference**: `internal/enrichers/musicbrainz/musicbrainz.go` implements a mutex-protected 1100ms delay between API calls — Option 2 would mirror this pattern
 * **Configuration**:
   * `SPOTTER_LIDARR_QUEUE_MAX` (int, default `50`) — maximum Lidarr queue depth before backpressure pauses submissions
