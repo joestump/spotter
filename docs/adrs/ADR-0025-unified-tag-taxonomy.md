@@ -2,6 +2,7 @@
 status: accepted
 date: 2026-02-28
 decision-makers: joestump
+supersedes: ADR-0024
 ---
 
 # ADR-0025: Unified Tag Taxonomy with Typed Tags and Denormalized Query Table
@@ -331,6 +332,7 @@ This pattern is consistent with the existing tag rendering in `internal/views/ar
 
 ## More Information
 
+* Supersedes: [ADR-0024](./ADR-0024-tag-browsing-library.md) (tag query strategy; its tag browsing UI feature is deferred, not dropped)
 * Current tag storage: `ent/schema/artist.go:54` (`tags`), `ent/schema/artist.go:65` (`genres`), `ent/schema/artist.go:87` (`ai_tags`), `ent/schema/album.go:57` (`genre`), `ent/schema/album.go:60` (`tags`), `ent/schema/album.go:72` (`label`), `ent/schema/album.go:91` (`ai_tags`), `ent/schema/track.go:80` (`tags`), `ent/schema/track.go:83` (`genres`), `ent/schema/track.go:109` (`ai_tags`)
 * AI branding pattern: `internal/views/components/ui.templ:158-170` (`AISummaryCard` with sparkles + accent), `internal/views/artists/show.templ:269-274` (AI tags with sparkles + `badge-accent`)
 * Tag browsing (to be updated): [ADR-0024](./ADR-0024-tag-browsing-library.md)

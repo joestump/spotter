@@ -1,10 +1,17 @@
 ---
-status: accepted
+status: superseded
 date: 2026-02-28
 decision-makers: Joe Stump
+superseded-by: ADR-0025
 ---
 
 # ADR-0024: Tag Browsing Library Page with Dual Entity View and Stat HUD
+
+## Superseded
+
+This ADR is superseded by [ADR-0025](./ADR-0025-unified-tag-taxonomy.md) for its tag query strategy. Both decisions were made the same day (2026-02-28): ADR-0024 chose Option 1 (runtime JSONB queries over the `tags` and `ai_tags` JSON arrays), and ADR-0025 chose Option 2 (a first-class `Tag` entity with a denormalized `entity_tags` query table). The implementation went with ADR-0025, and the JSONB query strategy here was never built.
+
+The tag browsing UI itself (the `/library/tags` route, the stat HUD, and the sidebar entry) is **deferred, not dropped**. If it is ever picked up again, it must first be re-validated against current product priorities and re-specified on top of ADR-0025's denormalized schema; nothing in this record should be treated as a commitment to implement it as written.
 
 ## Context and Problem Statement
 
