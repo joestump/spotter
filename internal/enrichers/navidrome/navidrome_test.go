@@ -2,8 +2,6 @@ package navidrome
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"image"
 	"image/png"
@@ -70,19 +68,8 @@ func TestNew_WithAuth(t *testing.T) {
 	assert.True(t, enricher.IsAvailable())
 }
 
-func TestGenerateToken_Correct(t *testing.T) {
-	password := "mypassword"
-	salt := "abcd1234"
-
-	token := generateToken(password, salt)
-
-	// Verify it's MD5(password + salt)
-	expected := md5.Sum([]byte(password + salt))
-	expectedHex := hex.EncodeToString(expected[:])
-
-	assert.Equal(t, expectedHex, token)
-	assert.Len(t, token, 32) // MD5 produces 32-char hex string
-}
+// Token derivation now lives in internal/subsonic, shared with the Navidrome
+// provider; TestToken in that package covers it.
 
 func TestAuthParams_IncludesSaltAndToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@ package services_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -28,6 +29,17 @@ type mockProvider struct {
 	tracks       []providers.Track
 	playlists    []providers.Playlist
 	err          error
+	// setCursor makes the mock a providers.SyncCursor: a provider that writes its
+	// own sync cursor. Left nil, the mock reports it cannot persist one, which is
+	// what a provider registered without a cursor does.
+	setCursor func(ctx context.Context, client *ent.Client, at time.Time) error
+}
+
+func (m *mockProvider) SetSyncCursor(ctx context.Context, client *ent.Client, at time.Time) error {
+	if m.setCursor == nil {
+		return errors.New("this mock provider does not persist a sync cursor")
+	}
+	return m.setCursor(ctx, client, at)
 }
 
 func (m *mockProvider) Type() providers.Type {
@@ -108,6 +120,9 @@ func TestSyncer_UpdatesLastSyncedAt_Navidrome(t *testing.T) {
 				PlayedAt: time.Now(),
 			},
 		},
+		setCursor: func(ctx context.Context, client *ent.Client, at time.Time) error {
+			return client.NavidromeAuth.UpdateOneID(navidromeAuth.ID).SetLastSyncedAt(at).Exec(ctx)
+		},
 	}
 	syncer.Register(mockFactory(mockNavidrome))
 
@@ -149,6 +164,9 @@ func TestSyncer_UpdatesLastSyncedAt_Spotify(t *testing.T) {
 				PlayedAt: time.Now(),
 			},
 		},
+		setCursor: func(ctx context.Context, client *ent.Client, at time.Time) error {
+			return client.SpotifyAuth.UpdateOneID(spotifyAuth.ID).SetLastSyncedAt(at).Exec(ctx)
+		},
 	}
 	syncer.Register(mockFactory(mockSpotify))
 
@@ -189,6 +207,9 @@ func TestSyncer_UpdatesLastSyncedAt_LastFM(t *testing.T) {
 				PlayedAt: time.Now(),
 			},
 		},
+		setCursor: func(ctx context.Context, client *ent.Client, at time.Time) error {
+			return client.LastFMAuth.UpdateOneID(lastfmAuth.ID).SetLastSyncedAt(at).Exec(ctx)
+		},
 	}
 	syncer.Register(mockFactory(mockLastFM))
 
@@ -221,6 +242,9 @@ func TestSyncer_UpdatesLastSyncedAt_EvenWithNoNewTracks(t *testing.T) {
 	mockSpotify := &mockProvider{
 		providerType: providers.TypeSpotify,
 		tracks:       []providers.Track{}, // Empty - no new tracks
+		setCursor: func(ctx context.Context, client *ent.Client, at time.Time) error {
+			return client.SpotifyAuth.UpdateOneID(spotifyAuth.ID).SetLastSyncedAt(at).Exec(ctx)
+		},
 	}
 	syncer.Register(mockFactory(mockSpotify))
 
@@ -258,6 +282,9 @@ func TestSyncer_UpdatesLastSyncedAt_AfterPlaylistSync(t *testing.T) {
 				Name:        "My Playlist",
 				Description: "Test playlist",
 			},
+		},
+		setCursor: func(ctx context.Context, client *ent.Client, at time.Time) error {
+			return client.SpotifyAuth.UpdateOneID(spotifyAuth.ID).SetLastSyncedAt(at).Exec(ctx)
 		},
 	}
 	syncer.Register(mockFactory(mockSpotify))
@@ -297,10 +324,16 @@ func TestSyncer_MultipleProviders_UpdatesAllLastSyncedAt(t *testing.T) {
 	mockNavidrome := &mockProvider{
 		providerType: providers.TypeNavidrome,
 		tracks:       []providers.Track{},
+		setCursor: func(ctx context.Context, client *ent.Client, at time.Time) error {
+			return client.NavidromeAuth.UpdateOneID(navidromeAuth.ID).SetLastSyncedAt(at).Exec(ctx)
+		},
 	}
 	mockSpotify := &mockProvider{
 		providerType: providers.TypeSpotify,
 		tracks:       []providers.Track{},
+		setCursor: func(ctx context.Context, client *ent.Client, at time.Time) error {
+			return client.SpotifyAuth.UpdateOneID(spotifyAuth.ID).SetLastSyncedAt(at).Exec(ctx)
+		},
 	}
 	syncer.Register(mockFactory(mockNavidrome))
 	syncer.Register(mockFactory(mockSpotify))
@@ -337,6 +370,9 @@ func TestSyncer_SyncRecentListens_UpdatesLastSyncedAt(t *testing.T) {
 	mockSpotify := &mockProvider{
 		providerType: providers.TypeSpotify,
 		tracks:       []providers.Track{},
+		setCursor: func(ctx context.Context, client *ent.Client, at time.Time) error {
+			return client.SpotifyAuth.UpdateOneID(spotifyAuth.ID).SetLastSyncedAt(at).Exec(ctx)
+		},
 	}
 	syncer.Register(mockFactory(mockSpotify))
 
@@ -368,6 +404,9 @@ func TestSyncer_SyncPlaylists_UpdatesLastSyncedAt(t *testing.T) {
 	mockSpotify := &mockProvider{
 		providerType: providers.TypeSpotify,
 		playlists:    []providers.Playlist{},
+		setCursor: func(ctx context.Context, client *ent.Client, at time.Time) error {
+			return client.SpotifyAuth.UpdateOneID(spotifyAuth.ID).SetLastSyncedAt(at).Exec(ctx)
+		},
 	}
 	syncer.Register(mockFactory(mockSpotify))
 

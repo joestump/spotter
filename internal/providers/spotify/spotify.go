@@ -4,6 +4,7 @@ package spotify
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -39,6 +40,7 @@ type Provider struct {
 var _ providers.HistoryFetcher = (*Provider)(nil)
 var _ providers.PlaylistManager = (*Provider)(nil)
 var _ providers.Authenticator = (*Provider)(nil)
+var _ providers.SyncCursor = (*Provider)(nil)
 
 // Governing: ADR-0016 (pluggable provider factory), SPEC music-provider-integration REQ-PROV-011 (nil,nil if unconfigured),
 // REQ-PROV-012 (credentials from user.Edges.SpotifyAuth)
@@ -59,6 +61,25 @@ func New(logger *slog.Logger, cfg *config.Config) providers.Factory {
 			oauth:  newOAuthConfig(cfg),
 		}, nil
 	}
+}
+
+// Governing: ADR-0016 (pluggable provider factory), SPEC music-provider-integration REQ-PROV-012 (credentials from user.Edges.SpotifyAuth)
+// LoadAuth eager-loads the auth edge the factory returned by New reads, so the
+// service layer never has to name Spotify's auth edge itself.
+func LoadAuth(q *ent.UserQuery) *ent.UserQuery {
+	return q.WithSpotifyAuth()
+}
+
+// Governing: SPEC listen-playlist-sync REQ-SYNC-012 (sync cursor updated after each provider sync)
+// SetSyncCursor records the sync cursor on this user's Spotify auth row.
+func (p *Provider) SetSyncCursor(ctx context.Context, client *ent.Client, at time.Time) error {
+	if p.auth == nil {
+		return errors.New("spotify: provider has no auth row to carry the sync cursor")
+	}
+	if err := client.SpotifyAuth.UpdateOneID(p.auth.ID).SetLastSyncedAt(at).Exec(ctx); err != nil {
+		return fmt.Errorf("failed to update spotify last_synced_at: %w", err)
+	}
+	return nil
 }
 
 // NewAuthenticator returns an authenticator factory for Spotify.

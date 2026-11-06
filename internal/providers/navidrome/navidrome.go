@@ -4,10 +4,8 @@ package navidrome
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,6 +17,7 @@ import (
 	"spotter/internal/config"
 	"spotter/internal/providers"
 	"spotter/internal/resilience"
+	"spotter/internal/subsonic"
 )
 
 const (
@@ -41,6 +40,7 @@ var _ providers.HistoryFetcher = (*Provider)(nil)
 var _ providers.PlaylistManager = (*Provider)(nil)
 var _ providers.Authenticator = (*Provider)(nil)
 var _ providers.PlaylistSyncer = (*Provider)(nil)
+var _ providers.SyncCursor = (*Provider)(nil)
 
 // Governing: ADR-0016 (pluggable provider factory), SPEC music-provider-integration REQ-PROV-011 (nil,nil if unconfigured),
 // REQ-PROV-012 (credentials from user.Edges.NavidromeAuth)
@@ -62,8 +62,33 @@ func New(logger *slog.Logger, cfg *config.Config) providers.Factory {
 	}
 }
 
+// subsonicCreds are the Subsonic credentials of the user this provider was
+// created for. They are derived on use, so a provider built anywhere other than
+// the factory cannot end up with stale or missing credentials.
+func (p *Provider) subsonicCreds() subsonic.Credentials {
+	return subsonic.Credentials{Username: p.user.Username, Password: p.auth.Password}
+}
+
 func (p *Provider) Type() providers.Type {
 	return providers.TypeNavidrome
+}
+
+// Governing: ADR-0016 (pluggable provider factory), SPEC music-provider-integration REQ-PROV-012 (credentials from user.Edges.NavidromeAuth)
+// LoadAuth eager-loads the auth edge the factory returned by New reads.
+func LoadAuth(q *ent.UserQuery) *ent.UserQuery {
+	return q.WithNavidromeAuth()
+}
+
+// Governing: SPEC listen-playlist-sync REQ-SYNC-012 (sync cursor updated after each provider sync)
+// SetSyncCursor records the sync cursor on this user's Navidrome auth row.
+func (p *Provider) SetSyncCursor(ctx context.Context, client *ent.Client, at time.Time) error {
+	if p.auth == nil {
+		return errors.New("navidrome: provider has no auth row to carry the sync cursor")
+	}
+	if err := client.NavidromeAuth.UpdateOneID(p.auth.ID).SetLastSyncedAt(at).Exec(ctx); err != nil {
+		return fmt.Errorf("failed to update navidrome last_synced_at: %w", err)
+	}
+	return nil
 }
 
 // SupportsAuth returns false for Navidrome.
@@ -260,17 +285,7 @@ func (p *Provider) GetRecentListens(ctx context.Context, since time.Time, callba
 // Governing: SPEC music-provider-integration REQ-PROV-051 (Subsonic API protocol, random salt per request)
 // getNowPlayingFromSubsonic uses the Subsonic API to get currently playing tracks
 func (p *Provider) getNowPlayingFromSubsonic(ctx context.Context, since time.Time) ([]providers.Track, error) {
-	// Generate Auth Parameters
-	salt := generateSalt()
-	token := generateToken(p.auth.Password, salt)
-
-	params := url.Values{}
-	params.Set("u", p.user.Username)
-	params.Set("t", token)
-	params.Set("s", salt)
-	params.Set("v", "1.16.1") // Target Subsonic API version
-	params.Set("c", "spotter")
-	params.Set("f", "json")
+	params := p.subsonicCreds().AuthParams(nil)
 
 	// Construct URL
 	// Note: getNowPlaying returns what is currently playing or recently played by users.
@@ -374,17 +389,7 @@ func (p *Provider) getNowPlayingFromSubsonic(ctx context.Context, since time.Tim
 func (p *Provider) GetPlaylists(ctx context.Context) ([]providers.Playlist, error) {
 	p.logger.Info("fetching playlists from navidrome", "username", p.user.Username)
 
-	// Generate Auth Parameters
-	salt := generateSalt()
-	token := generateToken(p.auth.Password, salt)
-
-	params := url.Values{}
-	params.Set("u", p.user.Username)
-	params.Set("t", token)
-	params.Set("s", salt)
-	params.Set("v", "1.16.1")
-	params.Set("c", "spotter")
-	params.Set("f", "json")
+	params := p.subsonicCreds().AuthParams(nil)
 
 	baseURL := strings.TrimSuffix(p.config.Navidrome.BaseURL, "/")
 	apiURL := fmt.Sprintf("%s/rest/getPlaylists.view?%s", baseURL, params.Encode())
@@ -442,14 +447,7 @@ func (p *Provider) GetPlaylists(ctx context.Context) ([]providers.Playlist, erro
 	}
 
 	// Build auth params for cover art URLs
-	coverSalt := generateSalt()
-	coverToken := generateToken(p.auth.Password, coverSalt)
-	coverParams := url.Values{}
-	coverParams.Set("u", p.user.Username)
-	coverParams.Set("t", coverToken)
-	coverParams.Set("s", coverSalt)
-	coverParams.Set("v", "1.16.1")
-	coverParams.Set("c", "spotter")
+	coverParams := p.subsonicCreds().Params(subsonic.Salt(), nil)
 
 	var playlists []providers.Playlist
 	for _, pl := range result.SubsonicResponse.Playlists.Playlist {
@@ -497,17 +495,7 @@ func (p *Provider) GetPlaylists(ctx context.Context) ([]providers.Playlist, erro
 // unreadable playlist as an empty one, or a transient provider error becomes "remove nothing,
 // add everything" and the remote playlist grows on every retry.
 func (p *Provider) getPlaylistTracks(ctx context.Context, playlistID string) (tracks []providers.Track, uniqueArtists, uniqueAlbums int, err error) {
-	// Generate Auth Parameters
-	salt := generateSalt()
-	token := generateToken(p.auth.Password, salt)
-
-	params := url.Values{}
-	params.Set("u", p.user.Username)
-	params.Set("t", token)
-	params.Set("s", salt)
-	params.Set("v", "1.16.1")
-	params.Set("c", "spotter")
-	params.Set("f", "json")
+	params := p.subsonicCreds().AuthParams(nil)
 	params.Set("id", playlistID)
 
 	baseURL := strings.TrimSuffix(p.config.Navidrome.BaseURL, "/")
@@ -608,17 +596,7 @@ func (p *Provider) SyncPlaylist(ctx context.Context, playlist providers.SyncPlay
 		"name", playlist.Name,
 		"track_count", len(playlist.Tracks))
 
-	// Generate Auth Parameters
-	salt := generateSalt()
-	token := generateToken(p.auth.Password, salt)
-
-	params := url.Values{}
-	params.Set("u", p.user.Username)
-	params.Set("t", token)
-	params.Set("s", salt)
-	params.Set("v", "1.16.1")
-	params.Set("c", "spotter")
-	params.Set("f", "json")
+	params := p.subsonicCreds().AuthParams(nil)
 	params.Set("name", playlist.Name)
 
 	// Add track IDs (songId parameter can be repeated)
@@ -714,16 +692,7 @@ func (p *Provider) SyncPlaylist(ctx context.Context, playlist providers.SyncPlay
 
 // updatePlaylistMetadata updates the name and comment of an existing playlist.
 func (p *Provider) updatePlaylistMetadata(ctx context.Context, playlistID, name, comment string) error {
-	salt := generateSalt()
-	token := generateToken(p.auth.Password, salt)
-
-	params := url.Values{}
-	params.Set("u", p.user.Username)
-	params.Set("t", token)
-	params.Set("s", salt)
-	params.Set("v", "1.16.1")
-	params.Set("c", "spotter")
-	params.Set("f", "json")
+	params := p.subsonicCreds().AuthParams(nil)
 	params.Set("playlistId", playlistID)
 	params.Set("name", name)
 	params.Set("comment", comment)
@@ -778,16 +747,7 @@ func (p *Provider) DeletePlaylist(ctx context.Context, remotePlaylistID string) 
 		"username", p.user.Username,
 		"playlist_id", remotePlaylistID)
 
-	salt := generateSalt()
-	token := generateToken(p.auth.Password, salt)
-
-	params := url.Values{}
-	params.Set("u", p.user.Username)
-	params.Set("t", token)
-	params.Set("s", salt)
-	params.Set("v", "1.16.1")
-	params.Set("c", "spotter")
-	params.Set("f", "json")
+	params := p.subsonicCreds().AuthParams(nil)
 	params.Set("id", remotePlaylistID)
 
 	baseURL := strings.TrimSuffix(p.config.Navidrome.BaseURL, "/")
@@ -882,16 +842,7 @@ func (p *Provider) UpdatePlaylistTracks(ctx context.Context, remotePlaylistID st
 		"playlist_id", remotePlaylistID,
 		"current_track_count", len(currentTracks))
 
-	salt := generateSalt()
-	token := generateToken(p.auth.Password, salt)
-
-	params := url.Values{}
-	params.Set("u", p.user.Username)
-	params.Set("t", token)
-	params.Set("s", salt)
-	params.Set("v", "1.16.1")
-	params.Set("c", "spotter")
-	params.Set("f", "json")
+	params := p.subsonicCreds().AuthParams(nil)
 	params.Set("playlistId", remotePlaylistID)
 
 	// Remove existing tracks by index (0-based, remove from end to start to avoid index shifting)
@@ -976,20 +927,4 @@ func (p *Provider) UpdatePlaylistTracks(ctx context.Context, remotePlaylistID st
 		"old_track_count", len(currentTracks),
 		"new_track_count", len(newTrackIDs))
 	return nil
-}
-
-// Governing: SPEC music-provider-integration REQ-PROV-051 (salt MUST be randomly generated per request)
-func generateSalt() string {
-	b := make([]byte, 6)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback if random fails, though unlikely
-		return fmt.Sprintf("%d", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(b)
-}
-
-func generateToken(password, salt string) string {
-	hash := md5.New()
-	hash.Write([]byte(password + salt))
-	return hex.EncodeToString(hash.Sum(nil))
 }
