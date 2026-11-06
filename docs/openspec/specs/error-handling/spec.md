@@ -3,7 +3,7 @@
 **Status:** accepted
 **Version:** 0.1.0
 **Last Updated:** 2026-02-21
-**Governing ADRs:** ADR-0020 (exponential backoff and circuit breaker), ADR-0007 (in-memory event bus), ADR-0016 (pluggable provider factory), ADR-0013 (goroutine ticker background scheduling)
+**Governing ADRs:** ADR-0020 (exponential backoff with jitter), ADR-0007 (in-memory event bus), ADR-0016 (pluggable provider factory), ADR-0013 (goroutine ticker background scheduling)
 
 ## Overview
 
