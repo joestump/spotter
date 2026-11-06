@@ -136,3 +136,24 @@ type Factory func(ctx context.Context, user *ent.User) (Provider, error)
 // AuthenticatorFactory defines the function signature for creating an authenticator instance.
 // Unlike Factory, this doesn't require a user since it's used to initiate the auth flow.
 type AuthenticatorFactory func() Authenticator
+
+// Governing: ADR-0016 (pluggable provider factory), SPEC listen-playlist-sync REQ-SYNC-012 (per-provider sync cursor)
+// SyncCursor is implemented by providers that persist their sync cursor on the
+// per-user auth record they were created from. Registering the provider is then
+// enough for cursor persistence: the service layer asks the provider to write
+// its own cursor instead of switching on concrete provider types, so a provider
+// that cannot persist one yields an error rather than a silent no-op.
+type SyncCursor interface {
+	Provider
+	// SetSyncCursor records the sync cursor for the user this provider was
+	// created for. The caller passes its own Ent client, because providers are
+	// not constructed with one.
+	SetSyncCursor(ctx context.Context, client *ent.Client, at time.Time) error
+}
+
+// Governing: ADR-0016 (pluggable provider factory), SPEC music-provider-integration REQ-PROV-012 (credentials read from DB edges, not params)
+// AuthLoader adds the eager-load steps a Factory needs on the user query so it
+// can read its credentials from the user's auth edges. A provider contributes
+// its own loader when it is registered, which keeps the service layer from
+// naming auth edges it does not own.
+type AuthLoader func(q *ent.UserQuery) *ent.UserQuery

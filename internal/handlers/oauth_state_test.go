@@ -137,10 +137,11 @@ func TestSpotifyCallback_RejectsStateWithoutColon(t *testing.T) {
 	assert.Contains(t, w.Result().Header.Get("Location"), "error=invalid_state")
 }
 
-// Last.fm reads the same "<csrf>:<encryptedUserID>" shape out of its cookie. It
-// never failed visibly, because Decrypt accepts the marker-stripped ciphertext
-// as legacy input -- so assert it now recovers the marked value intact, and
-// stops depending on that fallback.
+// Last.fm used to read the same "<csrf>:<encryptedUserID>" shape out of its
+// cookie, even though nothing ever compared the CSRF half -- Last.fm does not
+// echo state at all. Decrypt accepts the marker-stripped ciphertext as legacy
+// input, so the unused half stayed invisible. The cookie now carries just the
+// marked ciphertext; this pins the shape both halves of that change rely on.
 func TestLastfmCallback_RecoversMarkedEncryptedUserID(t *testing.T) {
 	_, encryptor := newOAuthTestHandler(t)
 
