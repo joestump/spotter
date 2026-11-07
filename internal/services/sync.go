@@ -33,13 +33,14 @@ type SyncNotifier interface {
 
 // Governing: ADR-0020 (exponential backoff with jitter), ADR-0007 (event bus for notifications), SPEC error-handling
 type Syncer struct {
-	client    *ent.Client
-	config    *config.Config
-	logger    *slog.Logger
-	bus       *events.Bus
-	factories []providers.Factory
-	backoff   *BackoffManager
-	notifier  SyncNotifier
+	client      *ent.Client
+	config      *config.Config
+	logger      *slog.Logger
+	bus         *events.Bus
+	factories   []providers.Factory
+	authLoaders []providers.AuthLoader
+	backoff     *BackoffManager
+	notifier    SyncNotifier
 }
 
 func NewSyncer(client *ent.Client, cfg *config.Config, logger *slog.Logger, bus *events.Bus, notifier SyncNotifier) *Syncer {
@@ -55,9 +56,13 @@ func NewSyncer(client *ent.Client, cfg *config.Config, logger *slog.Logger, bus 
 }
 
 // Governing: ADR-0016 (pluggable provider factory), SPEC listen-playlist-sync REQ-SYNC-001
-// Register adds a new provider factory to the syncer.
-func (s *Syncer) Register(factory providers.Factory) {
+// Register adds a new provider factory to the syncer, together with the auth
+// loaders that provider needs in order to read its own credentials from the
+// user. Loaders are contributions, not requirements: a factory that needs no
+// auth edge registers alone.
+func (s *Syncer) Register(factory providers.Factory, loaders ...providers.AuthLoader) {
 	s.factories = append(s.factories, factory)
+	s.authLoaders = append(s.authLoaders, loaders...)
 }
 
 // providerSyncOutcome accumulates per-provider results across the history and
@@ -224,16 +229,20 @@ func (s *Syncer) SyncPlaylists(ctx context.Context, u *ent.User) error {
 }
 
 // Governing: SPEC listen-playlist-sync REQ-SYNC-002 (nil factories silently skipped), REQ-SYNC-003 (factory errors logged and skipped)
-// getActiveProviders returns the refreshed user with all auth edges loaded and a list of active providers.
+// ADR-0016 (pluggable provider factory), SPEC music-provider-integration REQ-PROV-012 (credentials from DB edges)
+// getActiveProviders returns the refreshed user with the auth edges the
+// registered providers asked for, and a list of active providers. Which edges
+// to load comes from the providers themselves, so registering a provider adds
+// its auth edge to the query without touching this file.
 func (s *Syncer) getActiveProviders(ctx context.Context, u *ent.User) (*ent.User, []providers.Provider, error) {
-	// Refresh user to ensure we have all auth edges loaded so factories can check configuration.
-	// We need these so the factories can decide if they can create a provider.
-	refreshedUser, err := s.client.User.Query().
-		Where(user.ID(u.ID)).
-		WithSpotifyAuth().
-		WithNavidromeAuth().
-		WithLastfmAuth().
-		Only(ctx)
+	// Refresh user so every factory reads the auth edges it was written against.
+	query := s.client.User.Query().Where(user.ID(u.ID))
+	for _, load := range s.authLoaders {
+		if load != nil {
+			query = load(query)
+		}
+	}
+	refreshedUser, err := query.Only(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to refresh user data: %w", err)
 	}
@@ -435,7 +444,7 @@ func (s *Syncer) syncHistory(ctx context.Context, u *ent.User, activeProviders [
 		}
 
 		// Update last_synced_at after sync attempt
-		if err := s.updateLastSyncedAt(ctx, u, provider.Type()); err != nil {
+		if err := s.updateLastSyncedAt(ctx, provider, time.Now()); err != nil {
 			s.logger.Warn("failed to update last_synced_at", "provider", provider.Type(), "error", err)
 		}
 
@@ -582,7 +591,7 @@ func (s *Syncer) syncPlaylists(ctx context.Context, u *ent.User, activeProviders
 		}
 
 		// Update last_synced_at after sync attempt
-		if err := s.updateLastSyncedAt(ctx, u, provider.Type()); err != nil {
+		if err := s.updateLastSyncedAt(ctx, provider, time.Now()); err != nil {
 			s.logger.Warn("failed to update last_synced_at", "provider", provider.Type(), "error", err)
 		}
 
@@ -749,23 +758,17 @@ func (s *Syncer) isDuplicateListen(ctx context.Context, u *ent.User, source prov
 }
 
 // Governing: SPEC listen-playlist-sync REQ-SYNC-012 (sync cursor updated after each provider sync)
-func (s *Syncer) updateLastSyncedAt(ctx context.Context, u *ent.User, providerType providers.Type) error {
-	now := time.Now()
-	switch providerType {
-	case providers.TypeNavidrome:
-		if u.Edges.NavidromeAuth != nil {
-			return s.client.NavidromeAuth.UpdateOneID(u.Edges.NavidromeAuth.ID).SetLastSyncedAt(now).Exec(ctx)
-		}
-	case providers.TypeSpotify:
-		if u.Edges.SpotifyAuth != nil {
-			return s.client.SpotifyAuth.UpdateOneID(u.Edges.SpotifyAuth.ID).SetLastSyncedAt(now).Exec(ctx)
-		}
-	case providers.TypeLastFM:
-		if u.Edges.LastfmAuth != nil {
-			return s.client.LastFMAuth.UpdateOneID(u.Edges.LastfmAuth.ID).SetLastSyncedAt(now).Exec(ctx)
-		}
+// ADR-0016 (pluggable provider factory)
+// updateLastSyncedAt asks the provider to persist its own sync cursor. There is
+// no fallback here: a provider that does not implement providers.SyncCursor
+// returns an error instead of being skipped, so a provider registered without a
+// cursor fails loudly instead of silently syncing from the beginning of time.
+func (s *Syncer) updateLastSyncedAt(ctx context.Context, provider providers.Provider, now time.Time) error {
+	cursor, ok := provider.(providers.SyncCursor)
+	if !ok {
+		return fmt.Errorf("provider %q does not implement providers.SyncCursor: sync cursor not persisted", provider.Type())
 	}
-	return nil
+	return cursor.SetSyncCursor(ctx, s.client, now)
 }
 
 // Governing: SPEC listen-playlist-sync REQ-SYNC-031 (upsert Playlist by source+remoteID)

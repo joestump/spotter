@@ -93,7 +93,7 @@ func (s *PlaylistSyncService) syncPlaylistToNavidrome(ctx context.Context, playl
 	}
 
 	// Ensure playlist is not from Navidrome
-	if pl.Source == "navidrome" {
+	if pl.Source == string(providers.TypeNavidrome) {
 		s.logger.Warn("attempted to sync Navidrome playlist to Navidrome",
 			"playlist_id", playlistID,
 			"playlist_name", pl.Name)
@@ -128,7 +128,7 @@ func (s *PlaylistSyncService) syncPlaylistToNavidrome(ctx context.Context, playl
 	}
 
 	// Log sync started event
-	s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncStarted, "navidrome",
+	s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncStarted, string(providers.TypeNavidrome),
 		fmt.Sprintf("Starting sync of playlist '%s' to Navidrome", pl.Name),
 		map[string]interface{}{
 			"playlist_id":   pl.ID,
@@ -314,7 +314,7 @@ func (s *PlaylistSyncService) syncPlaylistToNavidrome(ctx context.Context, playl
 	duration := time.Since(startTime)
 
 	// Log sync completed event
-	s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncCompleted, "navidrome",
+	s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncCompleted, string(providers.TypeNavidrome),
 		fmt.Sprintf("Synced playlist '%s' to Navidrome (%d/%d tracks matched)", pl.Name, matchedCount, len(sourceTracks)),
 		map[string]interface{}{
 			"playlist_id":           pl.ID,
@@ -409,7 +409,7 @@ func (s *PlaylistSyncService) SyncAllEnabledPlaylists(ctx context.Context, userI
 		Where(
 			playlist.HasUserWith(user.ID(userID)),
 			playlist.SyncToNavidrome(true),
-			playlist.SourceNEQ("navidrome"),
+			playlist.SourceNEQ(string(providers.TypeNavidrome)),
 		).
 		All(ctx)
 	if err != nil {
@@ -568,7 +568,7 @@ func (s *PlaylistSyncService) RemovePlaylistFromNavidrome(ctx context.Context, p
 	}
 
 	// Log removal event
-	s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncRemoved, "navidrome",
+	s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncRemoved, string(providers.TypeNavidrome),
 		fmt.Sprintf("Removed playlist '%s' from Navidrome", pl.Name),
 		map[string]interface{}{
 			"playlist_id":           pl.ID,
@@ -618,7 +618,7 @@ func (s *PlaylistSyncService) RebuildPlaylistSync(ctx context.Context, playlistI
 	}
 
 	// Ensure playlist is not from Navidrome
-	if pl.Source == "navidrome" {
+	if pl.Source == string(providers.TypeNavidrome) {
 		s.logger.Warn("attempted to rebuild Navidrome playlist",
 			"playlist_id", playlistID,
 			"playlist_name", pl.Name)
@@ -641,7 +641,7 @@ func (s *PlaylistSyncService) RebuildPlaylistSync(ctx context.Context, playlistI
 		"navidrome_playlist_id", pl.NavidromePlaylistID)
 
 	// Log rebuild started event
-	s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncStarted, "navidrome",
+	s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncStarted, string(providers.TypeNavidrome),
 		fmt.Sprintf("Rebuilding sync of playlist '%s' to Navidrome", pl.Name),
 		map[string]interface{}{
 			"playlist_id":           pl.ID,
@@ -745,7 +745,7 @@ func (s *PlaylistSyncService) handleSyncError(ctx context.Context, pl *ent.Playl
 
 	// Log sync failed event
 	if u != nil {
-		s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncFailed, "navidrome",
+		s.logEvent(ctx, u, syncevent.EventTypePlaylistSyncFailed, string(providers.TypeNavidrome),
 			fmt.Sprintf("Failed to sync playlist '%s': %s", pl.Name, err.Error()),
 			map[string]interface{}{
 				"playlist_id":   pl.ID,

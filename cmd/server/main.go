@@ -138,11 +138,12 @@ func main() {
 	}
 
 	// Governing: ADR-0016 (pluggable provider factory), SPEC listen-playlist-sync REQ-SYNC-001 (factory registration at startup)
-	// Initialize Sync Service (for playlists and listens)
+	// Each provider contributes the auth loader its factory reads, so registering
+	// a provider here is the only edit a new one needs.
 	syncer := services.NewSyncer(client, cfg, logger, bus, notifier)
-	syncer.Register(navidrome.New(logger, cfg))
-	syncer.Register(spotify.New(logger, cfg))
-	syncer.Register(lastfm.New(logger, cfg))
+	syncer.Register(navidrome.New(logger, cfg), navidrome.LoadAuth)
+	syncer.Register(spotify.New(logger, cfg), spotify.LoadAuth)
+	syncer.Register(lastfm.New(logger, cfg), lastfm.LoadAuth)
 
 	// Initialize Playlist Sync Service (for syncing playlists to Navidrome)
 	playlistSyncSvc := services.NewPlaylistSyncService(client, cfg, logger, bus)

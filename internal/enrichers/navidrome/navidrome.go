@@ -2,9 +2,6 @@ package navidrome
 
 import (
 	"context"
-	"crypto/md5"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -16,12 +13,13 @@ import (
 	"spotter/internal/config"
 	"spotter/internal/enrichers"
 	"spotter/internal/resilience"
+	"spotter/internal/subsonic"
 	"spotter/internal/tags"
 )
 
-const (
-	staticSalt = "static"
-)
+// staticSalt keeps the cover-art URL stable across enrichments, so the downloaded
+// image path and the URL that produced it do not change on every run.
+const staticSalt = "static"
 
 // Enricher implements the Navidrome metadata enricher.
 // It uses the Subsonic API to fetch ID3 tags and local metadata.
@@ -64,6 +62,13 @@ func New(logger *slog.Logger, cfg *config.Config) enrichers.Factory {
 	}
 }
 
+// subsonicCreds are the Subsonic credentials of the user this enricher runs for.
+// They are derived on use, so an enricher built outside the factory cannot end up
+// with stale or missing credentials.
+func (e *Enricher) subsonicCreds() subsonic.Credentials {
+	return subsonic.Credentials{Username: e.user.Username, Password: e.auth.Password}
+}
+
 func (e *Enricher) Type() enrichers.Type {
 	return enrichers.TypeNavidrome
 }
@@ -76,38 +81,12 @@ func (e *Enricher) IsAvailable() bool {
 	return e.config.Navidrome.BaseURL != "" && e.auth != nil
 }
 
-// generateToken creates a Subsonic API token from salt and password.
-func generateToken(password, salt string) string {
-	hash := md5.Sum([]byte(password + salt))
-	return hex.EncodeToString(hash[:])
-}
-
-// generateSalt creates a random salt for Subsonic API authentication.
-func generateSalt() string {
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback to a less random salt if crypto/rand fails
-		return fmt.Sprintf("%x", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(b)
-}
-
 // doRequest performs an authenticated request to the Subsonic API.
 func (e *Enricher) doRequest(ctx context.Context, method string, params url.Values) ([]byte, error) {
-	if params == nil {
-		params = url.Values{}
-	}
-
-	// Subsonic API authentication - use user.Username from User entity
-	salt := generateSalt()
-	token := generateToken(e.auth.Password, salt)
-
-	params.Set("u", e.user.Username)
-	params.Set("t", token)
-	params.Set("s", salt)
-	params.Set("c", "spotter")
-	params.Set("v", "1.16.1")
-	params.Set("f", "json")
+	// Subsonic API authentication: same helper the Navidrome provider uses, so a
+	// request from either side derives its token identically.
+	// Governing: SPEC music-provider-integration REQ-PROV-051 (random salt per request)
+	params = e.subsonicCreds().AuthParams(params)
 
 	reqURL := fmt.Sprintf("%s/rest/%s?%s", e.config.Navidrome.BaseURL, method, params.Encode())
 
@@ -560,14 +539,12 @@ func (e *Enricher) GetAlbumImages(ctx context.Context, album *ent.Album) ([]enri
 	var images []enrichers.ImageData
 
 	if coverArt := response.SubsonicResponse.Album.CoverArt; coverArt != "" {
-		// Build URL to fetch cover art - use user.Username from User entity
-		salt := staticSalt
-		coverURL := fmt.Sprintf("%s/rest/getCoverArt?id=%s&u=%s&t=%s&s=%s&c=spotter&v=1.16.1",
+		// The cover-art endpoint returns image bytes, so no response format is
+		// requested, and the salt is fixed to keep this URL stable.
+		coverURL := fmt.Sprintf("%s/rest/getCoverArt?id=%s&%s",
 			e.config.Navidrome.BaseURL,
 			coverArt,
-			e.user.Username,
-			generateToken(e.auth.Password, salt),
-			salt,
+			e.subsonicCreds().Params(staticSalt, nil).Encode(),
 		)
 
 		localPath := fmt.Sprintf("data/images/albums/%d_navidrome.png", album.ID)
