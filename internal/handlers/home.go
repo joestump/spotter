@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"net/http"
 	"sort"
-	"time"
 
 	"spotter/ent"
 	"spotter/ent/album"
@@ -57,44 +56,97 @@ func (h *Handler) getHomeStats(ctx context.Context, u *ent.User) (*home.HomeStat
 		Providers:    make([]home.ProviderStats, 0, 3),
 	}
 
-	// Get all listens for this user
-	listens, err := h.Client.Listen.Query().
+	// Counts are computed by COUNT/GROUP BY in the database. Materializing the
+	// user's entire history to count it made the render cost scale with listen
+	// rows, and a scrobble is one row per play.
+	// Governing: ADR-0004 (Ent ORM), ADR-0019 (structured metrics)
+	totalListens, err := h.Client.Listen.Query().
 		Where(listen.HasUserWith(user.ID(u.ID))).
-		All(ctx)
+		Count(ctx)
 	if err != nil {
-		h.Logger.Error("failed to get listens", "error", err)
-		listens = []*ent.Listen{}
+		h.Logger.Error("failed to count listens", "error", err)
+		totalListens = 0
 	}
 
-	stats.TotalListens = len(listens)
+	stats.TotalListens = totalListens
 
-	// Process listens for various stats
 	artistSet := make(map[string]bool)
 	albumSet := make(map[string]bool)
 	trackSet := make(map[string]bool)
 	artistCounts := make(map[string]int)
 
-	for _, l := range listens {
-		artistSet[l.ArtistName] = true
-		albumSet[l.AlbumName] = true
-		trackSet[l.TrackName+"||"+l.ArtistName] = true
-		artistCounts[l.ArtistName]++
+	// One grouped query answers both the unique-artist count and the top-artist
+	// counts that used to come out of the materialized history.
+	var artistRows []struct {
+		ArtistName string `json:"artist_name"`
+		Count      int    `json:"count"`
+	}
+	err = h.Client.Listen.Query().
+		Where(listen.HasUserWith(user.ID(u.ID))).
+		GroupBy(listen.FieldArtistName).
+		Aggregate(ent.Count()).
+		Scan(ctx, &artistRows)
+	if err != nil {
+		h.Logger.Error("failed to group listens by artist", "error", err)
+	}
+	for _, r := range artistRows {
+		artistSet[r.ArtistName] = true
+		artistCounts[r.ArtistName] = r.Count
+	}
+
+	var albumRows []struct {
+		AlbumName string `json:"album_name"`
+	}
+	err = h.Client.Listen.Query().
+		Where(listen.HasUserWith(user.ID(u.ID))).
+		GroupBy(listen.FieldAlbumName).
+		Scan(ctx, &albumRows)
+	if err != nil {
+		h.Logger.Error("failed to group listens by album", "error", err)
+	}
+	for _, r := range albumRows {
+		albumSet[r.AlbumName] = true
+	}
+
+	var trackRows []struct {
+		TrackName  string `json:"track_name"`
+		ArtistName string `json:"artist_name"`
+	}
+	err = h.Client.Listen.Query().
+		Where(listen.HasUserWith(user.ID(u.ID))).
+		GroupBy(listen.FieldTrackName, listen.FieldArtistName).
+		Scan(ctx, &trackRows)
+	if err != nil {
+		h.Logger.Error("failed to group listens by track", "error", err)
+	}
+	for _, r := range trackRows {
+		trackSet[r.TrackName+"||"+r.ArtistName] = true
 	}
 
 	// Supplement global stats with playlist track data so users who have
-	// playlists but few listening history records see meaningful numbers.
-	playlistTracks, ptErr := h.Client.PlaylistTrack.Query().
+	// playlists but few listening history records see meaningful numbers. Only
+	// the name columns are read, grouped in the database.
+	var ptRows []struct {
+		ArtistName string `json:"artist_name"`
+		AlbumName  string `json:"album_name"`
+		TrackName  string `json:"track_name"`
+	}
+	ptErr := h.Client.PlaylistTrack.Query().
 		Where(
 			playlisttrack.HasPlaylistWith(
 				playlist.HasUserWith(user.ID(u.ID)),
 			),
 		).
-		All(ctx)
+		GroupBy(
+			playlisttrack.FieldArtistName,
+			playlisttrack.FieldAlbumName,
+			playlisttrack.FieldTrackName,
+		).
+		Scan(ctx, &ptRows)
 	if ptErr != nil {
-		h.Logger.Warn("failed to get playlist tracks for home stats", "error", ptErr)
-		playlistTracks = nil
+		h.Logger.Warn("failed to group playlist tracks for home stats", "error", ptErr)
 	}
-	for _, pt := range playlistTracks {
+	for _, pt := range ptRows {
 		if pt.ArtistName != "" {
 			artistSet[pt.ArtistName] = true
 			// Only count toward top artists if not already in listens
@@ -191,7 +243,7 @@ func (h *Handler) getHomeStats(ctx context.Context, u *ent.User) (*home.HomeStat
 		navidromeStats.Username = u.Username
 		navidromeStats.LastSyncedAt = u.Edges.NavidromeAuth.LastSyncedAt
 		navidromeStats.ServerURL = h.Config.Navidrome.BaseURL
-		navidromeStats.ServerOnline = h.checkNavidromeOnline(u.Username, u.Edges.NavidromeAuth.Password)
+		navidromeStats.ServerOnline = h.navidromeOnline(u.ID, u.Username, u.Edges.NavidromeAuth.Password)
 		navidromeStats.TotalListens, err = h.Client.Listen.Query().
 			Where(
 				listen.HasUserWith(user.ID(u.ID)),
@@ -287,14 +339,16 @@ func (h *Handler) countUniqueAlbums(ctx context.Context, userID int, source stri
 	return len(results)
 }
 
-// checkNavidromeOnline pings the Navidrome server to check if it's reachable
-func (h *Handler) checkNavidromeOnline(username, password string) bool {
+// checkNavidromeOnline pings the Navidrome server to check if it's reachable.
+// It runs on the health cache's runner, not the request path, so ctx is the only
+// thing that bounds how long a stale result is reported.
+func (h *Handler) checkNavidromeOnline(ctx context.Context, username, password string) bool {
 	if h.Config.Navidrome.BaseURL == "" {
 		return false
 	}
 
 	// Use a short timeout for the ping
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: navidromePingTimeout}
 
 	// Build ping URL with auth - generate random salt
 	saltBytes := make([]byte, 16)
@@ -310,7 +364,13 @@ func (h *Handler) checkNavidromeOnline(username, password string) bool {
 
 	url := h.Config.Navidrome.BaseURL + "/rest/ping.view?u=" + username + "&t=" + token + "&s=" + salt + "&v=1.16.1&c=spotter&f=json"
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		h.Logger.Debug("failed to build navidrome ping request", "error", err)
+		return false
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		h.Logger.Debug("navidrome ping failed", "error", err)
 		return false
