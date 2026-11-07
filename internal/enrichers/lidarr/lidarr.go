@@ -18,7 +18,6 @@ import (
 	"spotter/internal/resilience"
 	"spotter/internal/tags"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -29,6 +28,11 @@ const (
 	retryBaseBackoff = 500 * time.Millisecond
 )
 
+// retryBackoff is the in-request backoff for a Lidarr server error: 500ms, 1s,
+// 2s. No jitter — this is one local Lidarr instance, not a fleet of providers
+// that would otherwise wake together.
+var retryBackoff = resilience.BackoffPolicy{Base: retryBaseBackoff, Max: 2 * time.Second}
+
 type Enricher struct {
 	logger *slog.Logger
 	config *config.Config
@@ -37,8 +41,7 @@ type Enricher struct {
 	user   *ent.User
 
 	// Governing: ADR-0020 (error handling and resilience) — rate limiting
-	mu          sync.Mutex
-	lastRequest time.Time
+	throttle resilience.Throttle
 
 	// Governing: ADR-0020 (error handling and resilience) — result caching to avoid redundant API calls
 	artistCache   map[int]*lidarrArtist
@@ -398,23 +401,8 @@ func (e *Enricher) logEvent(ctx context.Context, eventType string, message strin
 	}
 }
 
-// rateLimit ensures we don't overwhelm the local Lidarr instance.
-// Governing: ADR-0020 (error handling and resilience)
-func (e *Enricher) rateLimit() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	elapsed := time.Since(e.lastRequest)
-	if elapsed < rateLimitDelay {
-		time.Sleep(rateLimitDelay - elapsed)
-	}
-	e.lastRequest = time.Now()
-}
-
 // Governing: ADR-0020 (error handling and resilience) — retry on 500 with exponential backoff
 func (e *Enricher) doRequest(ctx context.Context, method, endpoint string, body interface{}, result interface{}) error {
-	e.rateLimit()
-
 	u, err := url.Parse(e.config.Lidarr.BaseURL)
 	if err != nil {
 		return err
@@ -441,23 +429,23 @@ func (e *Enricher) doRequest(ctx context.Context, method, endpoint string, body 
 		}
 	}
 
-	var lastErr error
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if attempt > 0 {
-			backoff := time.Duration(1<<(attempt-1)) * retryBaseBackoff // 500ms, 1s, 2s
+	return resilience.Retry(ctx, resilience.RetryConfig{
+		Attempts: maxRetries + 1,
+		Backoff:  retryBackoff,
+		OnRetry: func(attempt int, wait time.Duration) {
 			e.logger.Debug("retrying lidarr request after server error",
 				"attempt", attempt,
-				"backoff", backoff,
+				"backoff", wait,
 				"endpoint", endpoint,
 			)
-			select {
-			case <-time.After(backoff):
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-			e.rateLimit()
+		},
+	}, func(ctx context.Context, attempt int) (resilience.Outcome, error) {
+		if err := e.throttle.Wait(ctx, rateLimitDelay); err != nil {
+			return resilience.Outcome{}, err
 		}
 
+		// A fresh reader per attempt: the body is consumed by the send, so
+		// reusing it would retry with an empty payload.
 		var bodyReader io.Reader
 		if bodyBytes != nil {
 			bodyReader = bytes.NewReader(bodyBytes)
@@ -465,7 +453,7 @@ func (e *Enricher) doRequest(ctx context.Context, method, endpoint string, body 
 
 		req, err := http.NewRequestWithContext(ctx, method, u.String(), bodyReader)
 		if err != nil {
-			return err
+			return resilience.Outcome{}, err
 		}
 
 		req.Header.Set("X-Api-Key", e.config.Lidarr.APIKey)
@@ -473,35 +461,30 @@ func (e *Enricher) doRequest(ctx context.Context, method, endpoint string, body 
 
 		resp, err := e.client.Do(req)
 		if err != nil {
-			return err
+			return resilience.Outcome{}, err
 		}
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode == http.StatusInternalServerError {
 			b, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
 			// Governing: ADR-0020, SPEC error-handling REQ-ERR-002 (5xx retriable)
-			lastErr = resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b)))
-			continue
+			return resilience.Outcome{Retry: attempt < maxRetries},
+				resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b)))
 		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			b, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
 			// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
-			return resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b)))
+			return resilience.Outcome{}, resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b)))
 		}
 
 		if result != nil {
 			if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-				resp.Body.Close()
-				return err
+				return resilience.Outcome{}, err
 			}
 		}
-		resp.Body.Close()
-		return nil
-	}
-
-	return lastErr
+		return resilience.Outcome{}, nil
+	})
 }
 
 // Governing: ADR-0020 (error handling and resilience) — cache findArtist results to avoid redundant API calls

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
-	"math"
-	"math/rand/v2"
 	"net"
 	"net/http"
 	"regexp"
@@ -247,6 +245,14 @@ const (
 	backoffMaxDelay  = 30 * time.Minute
 )
 
+// syncBackoff is ADR-0020's policy for the sync loops: 30s doubling to a 30m
+// cap, jittered ±25% so providers that fail together do not retry together.
+var syncBackoff = resilience.BackoffPolicy{
+	Base:                 backoffBaseDelay,
+	Max:                  backoffMaxDelay,
+	MultiplicativeJitter: 0.25,
+}
+
 // CalculateBackoff computes the retry delay after the Nth consecutive failure.
 // delay = min(30s * 2^(consecutiveFailures-1), 30m) * jitter[0.75, 1.25]
 //
@@ -256,17 +262,7 @@ const (
 // Scenarios 1-2 and ADR-0020 ("30s, 60s, 120s, ... up to 30 minutes").
 // Governing: SPEC error-handling REQ-BACK-001, REQ-BACK-002, REQ-BACK-003
 func CalculateBackoff(consecutiveFailures int) time.Duration {
-	exponent := consecutiveFailures - 1
-	if exponent < 0 {
-		exponent = 0
-	}
-	delay := float64(backoffBaseDelay) * math.Pow(2, float64(exponent))
-	if delay > float64(backoffMaxDelay) {
-		delay = float64(backoffMaxDelay)
-	}
-	// Apply jitter: random value in [0.75, 1.25]
-	jitter := 0.75 + rand.Float64()*0.5
-	return time.Duration(delay * jitter)
+	return syncBackoff.Delay(consecutiveFailures)
 }
 
 // RecordFailure updates backoff state for a provider failure.

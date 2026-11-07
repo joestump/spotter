@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -137,7 +138,7 @@ func TestSubmitItem_ForeignArtistFailsClosed(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected ownership mismatch to fail, submitted lidarr id %d", lidarrID)
 	}
-	if !isPermanentLidarrError(err.Error()) {
+	if !isPermanentLidarrError(err) {
 		t.Errorf("expected permanent classification for %q", err.Error())
 	}
 	if lidarrID != 0 {
@@ -184,7 +185,7 @@ func TestSubmitItem_ForeignAlbumFailsClosed(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected ownership mismatch to fail, submitted lidarr id %d", lidarrID)
 	}
-	if !isPermanentLidarrError(err.Error()) {
+	if !isPermanentLidarrError(err) {
 		t.Errorf("expected permanent classification for %q", err.Error())
 	}
 	if got := atomic.LoadInt64(&stub.albumPosts); got != 0 {
@@ -376,7 +377,7 @@ func TestIsPermanentLidarrError_Ownership(t *testing.T) {
 		{"context deadline exceeded", false},
 	}
 	for _, tc := range cases {
-		if got := isPermanentLidarrError(tc.msg); got != tc.want {
+		if got := isPermanentLidarrError(errors.New(tc.msg)); got != tc.want {
 			t.Errorf("isPermanentLidarrError(%q) = %v, want %v", tc.msg, got, tc.want)
 		}
 	}

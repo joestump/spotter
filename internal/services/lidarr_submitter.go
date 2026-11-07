@@ -6,11 +6,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"spotter/ent/syncevent"
 	"spotter/ent/user"
 	"spotter/internal/config"
+	"spotter/internal/resilience"
 
 	"entgo.io/ent/dialect/sql"
 )
@@ -53,6 +53,16 @@ type LidarrSubmitter struct {
 	config     *config.Config
 	logger     *slog.Logger
 	httpClient *http.Client
+}
+
+// submitBackoff is SPEC-0017's queue retry policy: 1m doubling to a 1h cap,
+// plus a random extra pause under 1m so a burst of failed rows does not come
+// back in lockstep. Same implementation the sync loops use, with this spec's
+// numbers.
+var submitBackoff = resilience.BackoffPolicy{
+	Base:           baseBackoff,
+	Max:            maxBackoff,
+	AdditiveJitter: maxJitter,
 }
 
 // NewLidarrSubmitter creates a new LidarrSubmitter.
@@ -252,7 +262,7 @@ func (s *LidarrSubmitter) tick(ctx context.Context) {
 
 			// Detect permanently-failed submissions that will never succeed on retry.
 			// These are set to maxAttempts so they won't be retried.
-			permanent := isPermanentLidarrError(errMsg)
+			permanent := isPermanentLidarrError(submitErr)
 			if permanent {
 				newAttempts = maxAttempts
 			}
@@ -671,8 +681,29 @@ func (s *LidarrSubmitter) logSubmissionEvent(ctx context.Context, item *ent.Lida
 	}
 }
 
-// isPermanentLidarrError returns true for errors that will never succeed on retry.
-func isPermanentLidarrError(errMsg string) bool {
+// isPermanentLidarrError returns true for errors that will never succeed on
+// retry. A status Lidarr actually returned is read first: it is Lidarr's own
+// statement about the request, so reworded prose cannot put a rejected
+// submission back into the retry loop. Prose stays as the fallback for the
+// refusals that carry no status — what Lidarr reports inside a 2xx response,
+// and Spotter's own rejections (a queue row naming an entity its owner does
+// not own, an entity missing from a lookup).
+func isPermanentLidarrError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var statusErr *resilience.HTTPStatusError
+	if errors.As(err, &statusErr) && classifyHTTPStatus(statusErr.StatusCode) == ErrorClassFatal {
+		return true
+	}
+
+	return isPermanentLidarrMessage(err.Error())
+}
+
+// isPermanentLidarrMessage matches the permanent refusals that arrive without
+// a status code to classify.
+func isPermanentLidarrMessage(errMsg string) bool {
 	return strings.Contains(errMsg, "artist lookup returned empty name") ||
 		strings.Contains(errMsg, "ArtistPathValidator") ||
 		strings.Contains(errMsg, "already configured for an existing artist") ||
@@ -686,18 +717,9 @@ func isPermanentLidarrError(errMsg string) bool {
 
 // ComputeBackoff calculates the retry time using exponential backoff with jitter.
 // delay = min(1m * 2^(attempts-1) + jitter, 1h) where jitter is random in [0, 1m)
-// Governing: SPEC-0017 REQ "Backoff Strategy"
+// Governing: SPEC-0017 REQ "Backoff Strategy", ADR-0020
 func ComputeBackoff(attempts int) time.Time {
-	delay := baseBackoff * time.Duration(math.Pow(2, float64(attempts-1)))
-	if delay > maxBackoff {
-		delay = maxBackoff
-	}
-	jitter := time.Duration(rand.Int63n(int64(maxJitter)))
-	delay += jitter
-	if delay > maxBackoff {
-		delay = maxBackoff
-	}
-	return time.Now().Add(delay)
+	return time.Now().Add(submitBackoff.Delay(attempts))
 }
 
 // doRequest performs an HTTP request to the Lidarr API.
@@ -749,7 +771,9 @@ func (s *LidarrSubmitter) doRequest(ctx context.Context, method, endpoint string
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b))
+		// Governing: ADR-0020, SPEC error-handling REQ-ERR-004 (typed status
+		// errors, so the permanent/transient split does not read prose)
+		return resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("lidarr api error: %d - %s", resp.StatusCode, string(b)))
 	}
 
 	if result != nil {

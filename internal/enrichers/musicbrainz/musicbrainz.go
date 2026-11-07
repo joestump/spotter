@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"spotter/ent"
@@ -49,9 +48,8 @@ type Enricher struct {
 	userAgent  string
 	baseURL    string
 
-	// Rate limiting
-	mu       sync.Mutex
-	lastCall time.Time
+	// Rate limiting — Governing: ADR-0020 (error handling and resilience)
+	throttle resilience.Throttle
 }
 
 // Ensure Enricher implements interfaces
@@ -106,21 +104,12 @@ func (e *Enricher) IsAvailable() bool {
 	return true
 }
 
-// rateLimit ensures we don't exceed MusicBrainz API rate limits.
-func (e *Enricher) rateLimit() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	elapsed := time.Since(e.lastCall)
-	if elapsed < rateLimitDelay {
-		time.Sleep(rateLimitDelay - elapsed)
-	}
-	e.lastCall = time.Now()
-}
-
 // doRequest performs an HTTP request with rate limiting and proper headers.
 func (e *Enricher) doRequest(ctx context.Context, endpoint string, params url.Values) ([]byte, error) {
-	e.rateLimit()
+	// Governing: ADR-0020 (error handling and resilience)
+	if err := e.throttle.Wait(ctx, rateLimitDelay); err != nil {
+		return nil, err
+	}
 
 	params.Set("fmt", "json")
 	reqURL := fmt.Sprintf("%s/%s?%s", e.baseURL, endpoint, params.Encode())
@@ -490,7 +479,10 @@ func (e *Enricher) GetAlbumImages(ctx context.Context, album *ent.Album) ([]enri
 		return nil, nil
 	}
 
-	e.rateLimit()
+	// Governing: ADR-0020 (error handling and resilience)
+	if err := e.throttle.Wait(ctx, rateLimitDelay); err != nil {
+		return nil, err
+	}
 
 	// Cover Art Archive uses release group ID
 	caaURL := fmt.Sprintf("https://coverartarchive.org/release-group/%s", mbid)
