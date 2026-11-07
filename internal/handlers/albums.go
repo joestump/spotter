@@ -547,6 +547,8 @@ func (h *Handler) AlbumCreateMixtape(w http.ResponseWriter, r *http.Request) {
 	// Generate the mixtape in background
 	if h.MixtapeGenerator != nil {
 		go func() {
+			defer h.recoverMixtapeGeneration(u.ID, m.ID, m.Name)
+
 			ctx := context.Background()
 
 			// Publish generating event
