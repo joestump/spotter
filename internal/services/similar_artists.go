@@ -292,6 +292,11 @@ func (s *SimilarArtistsService) callOpenAI(ctx context.Context, prompt string) (
 		return "", 0, err
 	}
 
+	// A 200 with no choices (content filter, proxy passthrough) must error, not panic
+	if len(resp.Choices) == 0 {
+		return "", 0, fmt.Errorf("no response from AI")
+	}
+
 	// Governing: SPEC observability REQ-LLM-002 — extract token counts when available
 	tokensUsed := 0
 	if resp.Usage != nil {
@@ -336,7 +341,7 @@ func parseJSONFromResponse(response string, v interface{}) error {
 	return nil
 }
 
-// Governing: SPEC similar-artists-discovery REQ-SIM-040 (idempotent: delete existing then insert),
+// Governing: SPEC similar-artists-discovery REQ-SIM-040 (idempotent: resolve matches, then replace in one transaction),
 // REQ-SIM-041 (ID lookup with name fallback), REQ-SIM-042 (entity fields: source, similar, user, provider, confidence, rank, reason)
 // storeSimilarArtists stores the similar artist relationships in the database.
 func (s *SimilarArtistsService) storeSimilarArtists(ctx context.Context, userID int, sourceArtistID int, similarArtists []struct {
@@ -363,19 +368,17 @@ func (s *SimilarArtistsService) storeSimilarArtists(ctx context.Context, userID 
 		return fmt.Errorf("failed to get source artist: %w", err)
 	}
 
-	// Delete existing similar artist entries for this source artist and provider
-	_, err = s.client.SimilarArtist.Delete().
-		Where(
-			similarartist.SourceArtistID(sourceArtistID),
-			similarartist.Provider(ProviderOpenAI),
-			similarartist.HasUserWith(user.ID(userID)),
-		).
-		Exec(ctx)
-	if err != nil {
-		s.logger.Warn("failed to delete existing similar artists", "error", err)
+	type resolvedSimilarArtist struct {
+		artist     *ent.Artist
+		confidence float64
+		rank       int
+		reason     string
 	}
 
-	// Create new entries
+	// Resolve every candidate before touching stored rows: an AI response whose
+	// artists match nothing must leave the previous results intact.
+	matches := make([]resolvedSimilarArtist, 0, len(similarArtists))
+	seen := make(map[int]bool, len(similarArtists))
 	for rank, sa := range similarArtists {
 		// Verify the similar artist exists and belongs to the user
 		similarArtistEntity, err := s.client.Artist.Query().
@@ -401,23 +404,57 @@ func (s *SimilarArtistsService) storeSimilarArtists(ctx context.Context, userID 
 			}
 		}
 
-		// Create the similar artist relationship
-		_, err = s.client.SimilarArtist.Create().
-			SetSourceArtist(sourceArtist).
-			SetSimilarArtist(similarArtistEntity).
-			SetUser(u).
-			SetProvider(ProviderOpenAI).
-			SetConfidence(sa.Confidence).
-			SetRank(rank + 1).
-			SetReason(sa.Reason).
-			Save(ctx)
-		if err != nil {
-			s.logger.Warn("failed to create similar artist entry",
-				"source_artist", sourceArtistID,
-				"similar_artist", similarArtistEntity.ID,
-				"error", err)
+		// The same artist can come back twice in one response; the unique
+		// constraint would fail the whole replace, so keep the first mention.
+		if seen[similarArtistEntity.ID] {
 			continue
 		}
+		seen[similarArtistEntity.ID] = true
+
+		matches = append(matches, resolvedSimilarArtist{
+			artist:     similarArtistEntity,
+			confidence: sa.Confidence,
+			rank:       rank + 1,
+			reason:     sa.Reason,
+		})
+	}
+
+	if len(similarArtists) > 0 && len(matches) == 0 {
+		return fmt.Errorf("no similar artists in the AI response matched this library")
+	}
+
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.SimilarArtist.Delete().
+		Where(
+			similarartist.SourceArtistID(sourceArtistID),
+			similarartist.Provider(ProviderOpenAI),
+			similarartist.HasUserWith(user.ID(userID)),
+		).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("failed to delete existing similar artists: %w", err)
+	}
+
+	for _, match := range matches {
+		if _, err := tx.SimilarArtist.Create().
+			SetSourceArtist(sourceArtist).
+			SetSimilarArtist(match.artist).
+			SetUser(u).
+			SetProvider(ProviderOpenAI).
+			SetConfidence(match.confidence).
+			SetRank(match.rank).
+			SetReason(match.reason).
+			Save(ctx); err != nil {
+			return fmt.Errorf("failed to create similar artist entry: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit similar artists: %w", err)
 	}
 
 	return nil

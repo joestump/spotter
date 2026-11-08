@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -227,6 +228,31 @@ func (h *Handler) DeleteDJ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Mixtapes point at their DJ with a NO ACTION foreign key, so deleting a DJ
+	// that still owns any would fail the constraint and surface as a 500.
+	// The DJ list already refuses in the UI; this is the same refusal, so a
+	// stale page or a direct request gets a message instead of a crash.
+	mixtapeCount, err := h.Client.Mixtape.Query().
+		Where(
+			mixtape.HasDjWith(dj.ID(djID)),
+			mixtape.HasUserWith(user.ID(u.ID)),
+		).
+		Count(r.Context())
+	if err != nil {
+		h.Logger.Error("failed to count DJ mixtapes", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if mixtapeCount > 0 {
+		message := fmt.Sprintf("Delete or reassign their %d mixtape(s) first", mixtapeCount)
+		h.Logger.Info("refused to delete DJ with mixtapes", "dj_id", djID, "mixtape_count", mixtapeCount, "user_id", u.ID)
+		if h.Bus != nil {
+			h.Bus.PublishNotification(u.ID, "DJ not deleted", message, "error")
+		}
+		http.Error(w, message, http.StatusConflict)
+		return
+	}
+
 	err = h.Client.DJ.DeleteOneID(djID).Exec(r.Context())
 	if err != nil {
 		h.Logger.Error("failed to delete DJ", "error", err)
@@ -295,6 +321,26 @@ func (h *Handler) MixtapesIndex(w http.ResponseWriter, r *http.Request) {
 	h.Render(w, r, vibesViews.MixtapesIndex(mixtapes, djs, pg.Page, pg.TotalPages, h.Config))
 }
 
+// mixtapeScheduleValues lists the schedule values the mixtape schema accepts.
+var mixtapeScheduleValues = []string{
+	string(mixtape.ScheduleNone),
+	string(mixtape.ScheduleDaily),
+	string(mixtape.ScheduleWeekly),
+	string(mixtape.ScheduleMonthly),
+}
+
+// validateMixtapeSchedule rejects an unknown schedule before it reaches ent, so
+// a bad form value answers with 400 instead of an enum validation error and a 500.
+func validateMixtapeSchedule(schedule string) *ValidationError {
+	if mixtape.ScheduleValidator(mixtape.Schedule(schedule)) == nil {
+		return nil
+	}
+	return &ValidationError{
+		Field:   "schedule",
+		Message: "must be one of: " + strings.Join(mixtapeScheduleValues, ", "),
+	}
+}
+
 // CreateMixtape creates a new Mixtape
 func (h *Handler) CreateMixtape(w http.ResponseWriter, r *http.Request) {
 	u := h.RequireUser(w, r)
@@ -325,7 +371,11 @@ func (h *Handler) CreateMixtape(w http.ResponseWriter, r *http.Request) {
 
 	schedule := r.FormValue("schedule")
 	if schedule == "" {
-		schedule = "none"
+		schedule = string(mixtape.ScheduleNone)
+	}
+	if err := validateMixtapeSchedule(schedule); err != nil {
+		h.BadRequest(w, err)
+		return
 	}
 
 	djID, err := strconv.Atoi(r.FormValue("dj_id"))
@@ -418,7 +468,11 @@ func (h *Handler) UpdateMixtape(w http.ResponseWriter, r *http.Request) {
 
 	schedule := r.FormValue("schedule")
 	if schedule == "" {
-		schedule = "none"
+		schedule = string(mixtape.ScheduleNone)
+	}
+	if err := validateMixtapeSchedule(schedule); err != nil {
+		h.BadRequest(w, err)
+		return
 	}
 
 	djID, err := strconv.Atoi(r.FormValue("dj_id"))
@@ -676,6 +730,8 @@ func (h *Handler) GenerateMixtape(w http.ResponseWriter, r *http.Request) {
 
 	// Run generation (this can take a while, so we do it in a goroutine for async UX)
 	go func() {
+		defer h.recoverMixtapeGeneration(userID, mixtapeID, mixtapeName)
+
 		ctx := context.Background()
 
 		// Publish generating event

@@ -383,13 +383,18 @@ func (e *PlaylistEnhancer) getListeningHistory(ctx context.Context, userID int) 
 			continue
 		}
 		t := l.Edges.Track
-		key := fmt.Sprintf("%s-%s", t.Name, t.Edges.Artist.Name)
+		// Governing: Track.artist is an optional edge, so a listen can reference a track with no artist
+		artistName := ""
+		if t.Edges.Artist != nil {
+			artistName = t.Edges.Artist.Name
+		}
+		key := fmt.Sprintf("%s-%s", t.Name, artistName)
 		if entry, ok := trackCounts[key]; ok {
 			entry.PlayCount++
 		} else {
 			entry := &HistoryEntry{
 				TrackName:  t.Name,
-				ArtistName: t.Edges.Artist.Name,
+				ArtistName: artistName,
 				PlayCount:  1,
 			}
 			if t.Edges.Album != nil {

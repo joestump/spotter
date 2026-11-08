@@ -653,6 +653,12 @@ func (g *MixtapeGenerator) callOpenAI(ctx context.Context, prompt string) (strin
 		return "", 0, fmt.Errorf("request failed: %w", err)
 	}
 
+	// Governing: SPEC vibes-ai-mixtape-engine — a 200 with no choices (content filter, proxy passthrough) must error, not panic
+	if len(resp.Choices) == 0 {
+		g.logger.Error("OpenAI returned no choices", "model", model)
+		return "", 0, fmt.Errorf("no response from AI")
+	}
+
 	tokensUsed := 0
 	if resp.Usage != nil {
 		tokensUsed = resp.Usage.TotalTokens

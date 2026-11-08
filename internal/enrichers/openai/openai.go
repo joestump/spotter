@@ -291,6 +291,12 @@ func (e *Enricher) callOpenAI(ctx context.Context, prompt string, images []strin
 		return "", fmt.Errorf("request failed: %w", err)
 	}
 
+	// A 200 with no choices (content filter, proxy passthrough) must error, not panic
+	if len(resp.Choices) == 0 {
+		e.logger.Error("OpenAI returned no choices")
+		return "", fmt.Errorf("no response from AI")
+	}
+
 	return resp.Choices[0].Message.Content, nil
 }
 
@@ -578,6 +584,19 @@ func (e *Enricher) EnrichAlbum(ctx context.Context, album *ent.Album) (*enricher
 		}
 	}
 
+	// Collect album images before rendering: the template's {{.HasCoverArt}}
+	// branches have to see the flag, and it was set after rendering
+	var images []string
+	if album.Edges.Images != nil {
+		for _, img := range album.Edges.Images {
+			if img.LocalPath != "" {
+				images = append(images, img.LocalPath)
+			}
+		}
+	}
+
+	data.HasCoverArt = len(images) > 0
+
 	// Generate prompt
 	var prompt string
 	if tmpl, ok := e.templates["album"]; ok {
@@ -590,20 +609,6 @@ func (e *Enricher) EnrichAlbum(ctx context.Context, album *ent.Album) (*enricher
 		}
 	} else {
 		prompt = e.fallbackAlbumPrompt(data)
-	}
-
-	// Collect album images
-	var images []string
-	if album.Edges.Images != nil {
-		for _, img := range album.Edges.Images {
-			if img.LocalPath != "" {
-				images = append(images, img.LocalPath)
-			}
-		}
-	}
-
-	if len(images) > 0 {
-		data.HasCoverArt = true
 	}
 
 	// Call OpenAI
