@@ -49,10 +49,13 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 	if err := controller.SetReadDeadline(time.Time{}); err != nil {
 		h.Logger.Debug("could not clear SSE read deadline", "error", err)
 	}
-	flusher.Flush()
-
+	// Subscribe before flushing headers so a client that publishes as soon as
+	// the response headers arrive cannot race the subscription registration:
+	// the Bus keeps no replay buffer, so events published before the
+	// subscriber exists are dropped (REQ-BUS-005).
 	eventChan, cancel := h.Bus.Subscribe(u.ID)
 	defer cancel()
+	flusher.Flush()
 
 	ctx := r.Context()
 
