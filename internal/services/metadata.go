@@ -237,74 +237,63 @@ func (s *MetadataService) SyncAll(ctx context.Context, u *ent.User) error {
 func (s *MetadataService) BuildCatalog(ctx context.Context, u *ent.User) error {
 	s.logger.Info("building catalog from listens and playlists", "username", u.Username)
 
-	// Get all listens for the user
-	listens, err := s.client.Listen.Query().
+	totalListens, err := s.client.Listen.Query().
 		Where(listen.HasUserWith(user.ID(u.ID))).
-		All(ctx)
+		Count(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to query listens: %w", err)
+		return fmt.Errorf("failed to count listens: %w", err)
 	}
 
-	s.logger.Debug("processing listens", "count", len(listens))
+	listenTriples, err := s.distinctListenTriples(ctx, u.ID)
+	if err != nil {
+		return err
+	}
 
-	artistsAdded := 0
-	albumsAdded := 0
-	tracksAdded := 0
+	s.logger.Debug("processing distinct listen triples",
+		"triples", len(listenTriples),
+		"listens", totalListens)
 
-	// Process listens
-	for _, l := range listens {
-		added, err := s.processListenEntry(ctx, u, l.ArtistName, l.AlbumName, l.TrackName)
+	memo := newCatalogMemo()
+	additions := catalogAdditions{}
+
+	for _, t := range listenTriples {
+		added, err := s.processListenEntry(ctx, u, t.ArtistName, t.AlbumName, t.TrackName, memo)
 		if err != nil {
 			s.logger.Warn("failed to process listen entry",
-				"artist", l.ArtistName,
-				"album", l.AlbumName,
-				"track", l.TrackName,
+				"artist", t.ArtistName,
+				"album", t.AlbumName,
+				"track", t.TrackName,
 				"error", err)
 		}
-		if added != nil {
-			if added["artist"] {
-				artistsAdded++
-			}
-			if added["album"] {
-				albumsAdded++
-			}
-			if added["track"] {
-				tracksAdded++
-			}
-		}
+		additions.add(added)
 	}
 
-	// Get all playlist tracks for the user
-	playlistTracks, err := s.client.PlaylistTrack.Query().
+	totalPlaylistTracks, err := s.client.PlaylistTrack.Query().
 		Where(playlisttrack.HasPlaylistWith(playlist.HasUserWith(user.ID(u.ID)))).
-		All(ctx)
+		Count(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to query playlist tracks: %w", err)
+		return fmt.Errorf("failed to count playlist tracks: %w", err)
 	}
 
-	s.logger.Debug("processing playlist tracks", "count", len(playlistTracks))
+	playlistTriples, err := s.distinctPlaylistTriples(ctx, u.ID)
+	if err != nil {
+		return err
+	}
 
-	// Process playlist tracks (similar to listens)
-	for _, pt := range playlistTracks {
-		added, err := s.processListenEntry(ctx, u, pt.ArtistName, pt.AlbumName, pt.TrackName)
+	s.logger.Debug("processing distinct playlist track triples",
+		"triples", len(playlistTriples),
+		"playlist_tracks", totalPlaylistTracks)
+
+	for _, t := range playlistTriples {
+		added, err := s.processListenEntry(ctx, u, t.ArtistName, t.AlbumName, t.TrackName, memo)
 		if err != nil {
 			s.logger.Warn("failed to process playlist track entry",
-				"artist", pt.ArtistName,
-				"album", pt.AlbumName,
-				"track", pt.TrackName,
+				"artist", t.ArtistName,
+				"album", t.AlbumName,
+				"track", t.TrackName,
 				"error", err)
 		}
-		if added != nil {
-			if added["artist"] {
-				artistsAdded++
-			}
-			if added["album"] {
-				albumsAdded++
-			}
-			if added["track"] {
-				tracksAdded++
-			}
-		}
+		additions.add(added)
 	}
 
 	// Link playlist tracks to catalog entries
@@ -317,67 +306,275 @@ func (s *MetadataService) BuildCatalog(ctx context.Context, u *ent.User) error {
 
 	// Log catalog build event
 	s.logEvent(ctx, u, syncevent.EventTypeCatalogBuilt, "metadata",
-		fmt.Sprintf("Built catalog: %d artists, %d albums, %d tracks added", artistsAdded, albumsAdded, tracksAdded),
+		fmt.Sprintf("Built catalog: %d artists, %d albums, %d tracks added", additions.artists, additions.albums, additions.tracks),
 		map[string]interface{}{
-			"artists_added":             artistsAdded,
-			"albums_added":              albumsAdded,
-			"tracks_added":              tracksAdded,
-			"listens_processed":         len(listens),
-			"playlist_tracks_processed": len(playlistTracks),
+			"artists_added":             additions.artists,
+			"albums_added":              additions.albums,
+			"tracks_added":              additions.tracks,
+			"listens_processed":         totalListens,
+			"playlist_tracks_processed": totalPlaylistTracks,
+			"catalog_triples":           len(listenTriples) + len(playlistTriples),
 			"playlist_tracks_linked":    linkedCount,
 		})
 
 	s.logger.Info("catalog building completed",
 		"username", u.Username,
-		"listens_processed", len(listens),
-		"playlist_tracks_processed", len(playlistTracks),
+		"listens_processed", totalListens,
+		"playlist_tracks_processed", totalPlaylistTracks,
+		"catalog_triples", len(listenTriples)+len(playlistTriples),
 		"playlist_tracks_linked", linkedCount,
-		"artists_added", artistsAdded,
-		"albums_added", albumsAdded,
-		"tracks_added", tracksAdded)
+		"artists_added", additions.artists,
+		"albums_added", additions.albums,
+		"tracks_added", additions.tracks)
 
 	return nil
 }
 
+// catalogTriple is one distinct (artist, album, track) name combination read from
+// listens or playlist tracks. Catalog work is scoped to distinct combinations
+// because a repeated scrobble of the same track stores the same triple once per
+// listen, so iterating rows made a steady-state tick cost O(listens) queries.
+type catalogTriple struct {
+	ArtistName string `json:"artist_name"`
+	AlbumName  string `json:"album_name"`
+	TrackName  string `json:"track_name"`
+}
+
+// distinctListenTriples returns the distinct name combinations in the user's
+// listens. Grouping happens in SQL, so the run reads one row per combination
+// instead of materializing the user's entire history.
+func (s *MetadataService) distinctListenTriples(ctx context.Context, userID int) ([]catalogTriple, error) {
+	var triples []catalogTriple
+	err := s.client.Listen.Query().
+		Where(listen.HasUserWith(user.ID(userID))).
+		GroupBy(listen.FieldArtistName, listen.FieldAlbumName, listen.FieldTrackName).
+		Scan(ctx, &triples)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query distinct listen triples: %w", err)
+	}
+	return triples, nil
+}
+
+// distinctPlaylistTriples returns the distinct name combinations across the
+// user's playlist tracks, grouped in SQL for the same reason.
+func (s *MetadataService) distinctPlaylistTriples(ctx context.Context, userID int) ([]catalogTriple, error) {
+	var triples []catalogTriple
+	err := s.client.PlaylistTrack.Query().
+		Where(playlisttrack.HasPlaylistWith(playlist.HasUserWith(user.ID(userID)))).
+		GroupBy(
+			playlisttrack.FieldArtistName,
+			playlisttrack.FieldAlbumName,
+			playlisttrack.FieldTrackName,
+		).
+		Scan(ctx, &triples)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query distinct playlist track triples: %w", err)
+	}
+	return triples, nil
+}
+
+// catalogAlbumKey identifies an album by the artist it belongs to, matching the
+// lookup in getOrCreateAlbum.
+type catalogAlbumKey struct {
+	artistID int
+	name     string
+}
+
+// catalogTrackKey identifies a track by (artist, name), the unique identity
+// defined by ent/schema/track.go, so an album difference never duplicates it.
+type catalogTrackKey struct {
+	artistID int
+	name     string
+}
+
+// catalogMemo holds the entities one BuildCatalog run has already resolved. It
+// belongs to a single user for the life of that run, so its keys carry no user
+// id; never share one across users.
+// Governing: ADR-0031 (owner-scoped background entity lookups), ADR-0004 (Ent)
+type catalogMemo struct {
+	artists map[string]*ent.Artist
+	albums  map[catalogAlbumKey]*ent.Album
+	tracks  map[catalogTrackKey]*ent.Track
+}
+
+func newCatalogMemo() *catalogMemo {
+	return &catalogMemo{
+		artists: make(map[string]*ent.Artist),
+		albums:  make(map[catalogAlbumKey]*ent.Album),
+		tracks:  make(map[catalogTrackKey]*ent.Track),
+	}
+}
+
+// The accessors tolerate a nil memo, which is what a caller resolving a single
+// entry passes: without one, every lookup still reaches the database.
+func (m *catalogMemo) artist(name string) (*ent.Artist, bool) {
+	if m == nil {
+		return nil, false
+	}
+	a, ok := m.artists[name]
+	return a, ok
+}
+
+func (m *catalogMemo) rememberArtist(name string, a *ent.Artist) {
+	if m == nil {
+		return
+	}
+	if m.artists == nil {
+		m.artists = make(map[string]*ent.Artist)
+	}
+	m.artists[name] = a
+}
+
+func (m *catalogMemo) album(key catalogAlbumKey) (*ent.Album, bool) {
+	if m == nil {
+		return nil, false
+	}
+	alb, ok := m.albums[key]
+	return alb, ok
+}
+
+func (m *catalogMemo) rememberAlbum(key catalogAlbumKey, alb *ent.Album) {
+	if m == nil {
+		return
+	}
+	if m.albums == nil {
+		m.albums = make(map[catalogAlbumKey]*ent.Album)
+	}
+	m.albums[key] = alb
+}
+
+func (m *catalogMemo) track(key catalogTrackKey) (*ent.Track, bool) {
+	if m == nil {
+		return nil, false
+	}
+	t, ok := m.tracks[key]
+	return t, ok
+}
+
+func (m *catalogMemo) rememberTrack(key catalogTrackKey, t *ent.Track) {
+	if m == nil {
+		return
+	}
+	if m.tracks == nil {
+		m.tracks = make(map[catalogTrackKey]*ent.Track)
+	}
+	m.tracks[key] = t
+}
+
+// catalogAdditions counts catalog entities created during a run.
+type catalogAdditions struct {
+	artists int
+	albums  int
+	tracks  int
+}
+
+func (a *catalogAdditions) add(added map[string]bool) {
+	if added == nil {
+		return
+	}
+	if added["artist"] {
+		a.artists++
+	}
+	if added["album"] {
+		a.albums++
+	}
+	if added["track"] {
+		a.tracks++
+	}
+}
+
 // processListenEntry ensures artist, album, and track entries exist in the catalog.
-// Returns a map indicating what was newly added.
-func (s *MetadataService) processListenEntry(ctx context.Context, u *ent.User, artistName, albumName, trackName string) (map[string]bool, error) {
+// Returns a map indicating what was newly added. Results already resolved by this
+// run are read back from memo without touching the database, so repeated
+// references to the same entity cost one lookup instead of one per listen.
+func (s *MetadataService) processListenEntry(ctx context.Context, u *ent.User, artistName, albumName, trackName string, memo *catalogMemo) (map[string]bool, error) {
 	if artistName == "" {
 		return nil, nil
 	}
 
 	added := map[string]bool{"artist": false, "album": false, "track": false}
 
-	// Get or create artist
-	art, isNew, err := s.getOrCreateArtist(ctx, u, artistName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get/create artist: %w", err)
+	art, resolved := memo.artist(artistName)
+	if !resolved {
+		var isNew bool
+		var err error
+		art, isNew, err = s.getOrCreateArtist(ctx, u, artistName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get/create artist: %w", err)
+		}
+		memo.rememberArtist(artistName, art)
+		added["artist"] = isNew
 	}
-	added["artist"] = isNew
 
-	// Get or create album (if we have one)
 	var alb *ent.Album
 	if albumName != "" {
-		alb, isNew, err = s.getOrCreateAlbum(ctx, u, art, albumName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get/create album: %w", err)
+		key := catalogAlbumKey{artistID: art.ID, name: albumName}
+		alb, resolved = memo.album(key)
+		if !resolved {
+			var isNew bool
+			var err error
+			alb, isNew, err = s.getOrCreateAlbum(ctx, u, art, albumName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get/create album: %w", err)
+			}
+			memo.rememberAlbum(key, alb)
+			added["album"] = isNew
 		}
-		added["album"] = isNew
 	}
 
-	// Get or create track
 	if trackName != "" {
-		_, isNew, err = s.getOrCreateTrack(ctx, u, art, alb, trackName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get/create track: %w", err)
+		key := catalogTrackKey{artistID: art.ID, name: trackName}
+		if _, resolved := memo.track(key); !resolved {
+			trk, isNew, err := s.getOrCreateTrack(ctx, u, art, alb, trackName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get/create track: %w", err)
+			}
+			memo.rememberTrack(key, trk)
+			added["track"] = isNew
 		}
-		added["track"] = isNew
 	}
 
 	return added, nil
 }
 
+// catalogLinkKey is the name pair linkPlaylistTracks matches on: a track's name
+// inside an artist the user owns, which is what the per-track three-way join
+// used to ask the database for.
+type catalogLinkKey struct {
+	artistName string
+	trackName  string
+}
+
+// loadCatalogIndex reads the user's catalog once and keys it by (artist, track)
+// name, so linking playlist tracks costs one catalog read per run instead of one
+// three-way join per unlinked track on every scheduler tick.
+func (s *MetadataService) loadCatalogIndex(ctx context.Context, u *ent.User) (map[catalogLinkKey]*ent.Track, error) {
+	tracks, err := s.client.Track.Query().
+		Where(track.HasArtistWith(artist.HasUserWith(user.ID(u.ID)))).
+		WithArtist().
+		WithAlbum().
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load catalog tracks: %w", err)
+	}
+
+	index := make(map[catalogLinkKey]*ent.Track, len(tracks))
+	for _, t := range tracks {
+		if t.Edges.Artist == nil {
+			continue
+		}
+		key := catalogLinkKey{artistName: t.Edges.Artist.Name, trackName: t.Name}
+		if _, exists := index[key]; exists {
+			continue
+		}
+		index[key] = t
+	}
+	return index, nil
+}
+
 // linkPlaylistTracks links playlist tracks to their corresponding catalog entries.
+// Matching happens in memory against one catalog read: a playlist track that has
+// no catalog counterpart used to issue a join per track on every tick, forever.
 func (s *MetadataService) linkPlaylistTracks(ctx context.Context, u *ent.User) (int, error) {
 	// Get all unlinked playlist tracks for user's playlists
 	playlistTracks, err := s.client.PlaylistTrack.Query().
@@ -389,22 +586,19 @@ func (s *MetadataService) linkPlaylistTracks(ctx context.Context, u *ent.User) (
 	if err != nil {
 		return 0, fmt.Errorf("failed to query unlinked playlist tracks: %w", err)
 	}
+	if len(playlistTracks) == 0 {
+		return 0, nil
+	}
+
+	catalog, err := s.loadCatalogIndex(ctx, u)
+	if err != nil {
+		return 0, err
+	}
 
 	linkedCount := 0
 	for _, pt := range playlistTracks {
-		// Try to find matching track in catalog
-		t, err := s.client.Track.Query().
-			Where(
-				track.Name(pt.TrackName),
-				track.HasArtistWith(
-					artist.HasUserWith(user.ID(u.ID)),
-					artist.Name(pt.ArtistName),
-				),
-			).
-			WithArtist().
-			WithAlbum().
-			First(ctx)
-		if err != nil {
+		t, ok := catalog[catalogLinkKey{artistName: pt.ArtistName, trackName: pt.TrackName}]
+		if !ok {
 			continue // Track not in catalog yet
 		}
 
@@ -1763,7 +1957,7 @@ func (s *MetadataService) EnrichNewListens(ctx context.Context, u *ent.User, art
 	}
 
 	// Process the listen entry to ensure catalog entries exist
-	added, err := s.processListenEntry(ctx, u, artistName, albumName, trackName)
+	added, err := s.processListenEntry(ctx, u, artistName, albumName, trackName, nil)
 	if err != nil {
 		s.logger.Warn("failed to process listen entry for enrichment",
 			"artist", artistName,

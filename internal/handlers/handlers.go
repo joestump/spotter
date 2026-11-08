@@ -57,6 +57,10 @@ type Handler struct {
 	// SSEHeartbeatInterval is how often a keep-alive comment frame is written to
 	// an open SSE stream; zero uses defaultSSEHeartbeatInterval.
 	// Governing: SPEC event-bus-sse REQ-SSE-006
+	// navidromeHealth caches Navidrome reachability per user so a home render
+	// reports the last known result instead of waiting for the probe.
+	// Governing: ADR-0036, ADR-0018, issue #344
+	navidromeHealth      navidromeHealthCache
 	SSEHeartbeatInterval time.Duration
 	// Governing: SPEC-0015 REQ "Cooldown Reset on Recovery", ADR-0026
 	Notifier services.SyncNotifier
