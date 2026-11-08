@@ -59,7 +59,7 @@ type Handler struct {
 	// Governing: SPEC event-bus-sse REQ-SSE-006
 	// navidromeHealth caches Navidrome reachability per user so a home render
 	// reports the last known result instead of waiting for the probe.
-	// Governing: ADR-0035, ADR-0018, issue #344
+	// Governing: ADR-0036, ADR-0018, issue #344
 	navidromeHealth      navidromeHealthCache
 	SSEHeartbeatInterval time.Duration
 	// Governing: SPEC-0015 REQ "Cooldown Reset on Recovery", ADR-0026

@@ -1,4 +1,4 @@
-// Governing: ADR-0035 (reachability reported from cache), ADR-0018 (graceful shutdown), issue #344
+// Governing: ADR-0036 (reachability reported from cache), ADR-0018 (graceful shutdown), issue #344
 package handlers
 
 import (

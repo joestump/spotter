@@ -4,7 +4,7 @@ date: 2026-11-07
 decision-makers: joestump-agent (proposed; issue #344 leaves cached vs async open)
 ---
 
-# ADR-0035: Provider Reachability Is Reported From A Cache, Refreshed Off The Render Path
+# ADR-0036: Provider Reachability Is Reported From A Cache, Refreshed Off The Render Path
 
 ## Context and Problem Statement
 
