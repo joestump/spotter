@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"spotter/ent"
 	"spotter/internal/config"
@@ -28,8 +27,6 @@ func createTestEnricher(t *testing.T, serverURL string) enrichers.Enricher {
 
 	e := enricher.(*Enricher)
 	e.WithBaseURL(serverURL)
-	// Reset rate limiting for tests
-	e.lastCall = time.Time{}
 	return enricher
 }
 

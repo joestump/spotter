@@ -25,7 +25,15 @@ import (
 
 const (
 	defaultAPIBaseURL = "http://ws.audioscrobbler.com/2.0/"
+
+	// maxRetries bounds one API call including its first try.
+	// Governing: ADR-0020 (error handling and resilience)
+	maxRetries = 3
 )
+
+// retryBackoff is the in-request backoff for a Last.fm server error: 1s, then
+// 2s. No jitter — the loop stops before the cap binds.
+var retryBackoff = resilience.BackoffPolicy{Base: 1 * time.Second, Max: 2 * time.Second}
 
 type Provider struct {
 	logger     *slog.Logger
@@ -345,45 +353,33 @@ func (p *Provider) signParams(params map[string]string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
+// doRequest sends one Last.fm API call, retrying transport failures and 5xx
+// responses within the attempt budget.
+// Governing: ADR-0020 (error handling and resilience), SPEC error-handling REQ-ERR-002
 func (p *Provider) doRequest(ctx context.Context, method string, params map[string]string, result interface{}) error {
 	data := url.Values{}
 	for k, v := range params {
 		data.Set(k, v)
 	}
+	encoded := data.Encode()
 
-	var req *http.Request
-	var err error
-
-	if method == "POST" {
-		req, err = http.NewRequestWithContext(ctx, "POST", p.baseURL, strings.NewReader(data.Encode()))
+	return resilience.Retry(ctx, resilience.RetryConfig{
+		Attempts: maxRetries,
+		Backoff:  retryBackoff,
+		OnRetry: func(attempt int, wait time.Duration) {
+			p.logger.Info("retrying last.fm request", "attempt", attempt+1, "backoff", wait)
+		},
+	}, func(ctx context.Context, attempt int) (resilience.Outcome, error) {
+		// The request is built per attempt: a POST body reader is consumed by
+		// the first send, so reusing one would retry with an empty form.
+		req, err := p.newAPIRequest(ctx, method, encoded)
 		if err != nil {
-			return err
-		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	} else {
-		// GET
-		reqURL := p.baseURL + "?" + data.Encode()
-		req, err = http.NewRequestWithContext(ctx, "GET", reqURL, nil)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Retry logic for 500 errors
-	maxRetries := 3
-	var lastErr error
-
-	for i := 0; i < maxRetries; i++ {
-		if i > 0 {
-			// Exponential backoff: 1s, 2s, 4s
-			time.Sleep(time.Duration(1<<uint(i-1)) * time.Second)
-			p.logger.Info("retrying last.fm request", "attempt", i+1)
+			return resilience.Outcome{}, err
 		}
 
 		resp, err := p.httpClient.Do(req)
 		if err != nil {
-			lastErr = err
-			continue
+			return resilience.Outcome{Retry: attempt < maxRetries-1}, err
 		}
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -394,22 +390,31 @@ func (p *Provider) doRequest(ctx context.Context, method string, params map[stri
 		if resp.StatusCode == http.StatusOK {
 			if result != nil {
 				if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-					return err
+					return resilience.Outcome{}, err
 				}
 			}
-			return nil
+			return resilience.Outcome{}, nil
 		}
 
 		// Try to read body for error details
 		body, _ := io.ReadAll(resp.Body)
 		// Governing: ADR-0020, SPEC error-handling REQ-ERR-002/REQ-ERR-003
-		lastErr = resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("last.fm api returned status %d: %s", resp.StatusCode, string(body)))
+		statusErr := resilience.NewHTTPStatusError(resp.StatusCode, fmt.Errorf("last.fm api returned status %d: %s", resp.StatusCode, string(body)))
+		return resilience.Outcome{Retry: resp.StatusCode >= http.StatusInternalServerError && attempt < maxRetries-1}, statusErr
+	})
+}
 
-		// If not a 500 error, don't retry
-		if resp.StatusCode < 500 {
-			return lastErr
+// newAPIRequest builds one API request: a POST carries the encoded form in its
+// body, a GET puts it in the query string.
+func (p *Provider) newAPIRequest(ctx context.Context, method, encodedForm string) (*http.Request, error) {
+	if method == "POST" {
+		req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL, strings.NewReader(encodedForm))
+		if err != nil {
+			return nil, err
 		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return req, nil
 	}
 
-	return lastErr
+	return http.NewRequestWithContext(ctx, "GET", p.baseURL+"?"+encodedForm, nil)
 }

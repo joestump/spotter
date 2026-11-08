@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -766,6 +767,81 @@ func TestInterfaceImplementation(t *testing.T) {
 	var _ providers.Provider = (*Provider)(nil)
 	var _ providers.HistoryFetcher = (*Provider)(nil)
 	var _ providers.Authenticator = (*Provider)(nil)
+}
+
+// TestDoRequest_PostBodyResentOnRetry holds the retry loop to the rule that a
+// retried POST must carry its form again: a body reader is consumed by the
+// first send, so reusing one sends an empty form on every retry.
+func TestDoRequest_PostBodyResentOnRetry(t *testing.T) {
+	var mu sync.Mutex
+	var bodies []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, string(body))
+		first := len(bodies) == 1
+		mu.Unlock()
+
+		if first {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Server error"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{}
+	cfg.LastFM.APIKey = "test-api-key"
+	cfg.LastFM.SharedSecret = "test-secret"
+
+	p := createTestAuthenticator(t, cfg, server.URL)
+
+	var result struct {
+		Status string `json:"status"`
+	}
+	err := p.doRequest(context.Background(), "POST", map[string]string{
+		"method": "track.scrobble",
+		"track":  "A Night at the Opera",
+	}, &result)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", result.Status)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, bodies, 2, "expected one retry after the 500")
+	assert.NotEmpty(t, bodies[1], "the retry must not send an empty form")
+	assert.Equal(t, bodies[0], bodies[1], "the retry must send the same form")
+	assert.Contains(t, bodies[1], "track=A+Night+at+the+Opera")
+}
+
+// TestDoRequest_Retry500HonoursContextCancel proves the retry wait is
+// cancellable: cancelling during the backoff returns at once instead of
+// sitting out the remaining sleep.
+func TestDoRequest_Retry500HonoursContextCancel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Server error"))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{}
+	cfg.LastFM.APIKey = "test-api-key"
+	cfg.LastFM.SharedSecret = "test-secret"
+
+	p := createTestAuthenticator(t, cfg, server.URL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	err := p.doRequest(ctx, "GET", map[string]string{"method": "user.getInfo"}, nil)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Less(t, time.Since(start), 900*time.Millisecond, "cancel should cut the retry wait short")
 }
 
 func TestGetRecentListens_WithSinceParameter(t *testing.T) {
