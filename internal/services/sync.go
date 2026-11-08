@@ -261,9 +261,26 @@ func (s *Syncer) getActiveProviders(ctx context.Context, u *ent.User) (*ent.User
 	return refreshedUser, active, nil
 }
 
-// logEvent persists a sync event to the database.
-func (s *Syncer) logEvent(ctx context.Context, u *ent.User, eventType syncevent.EventType, provider string, message string, metadata map[string]interface{}) {
-	builder := s.client.SyncEvent.Create().
+// Sync writes are batched. SQLite is the default backend and every autocommit
+// statement there is an fsync (ADR-0023), so the sync paths pre-fetch what they
+// need per batch and write a batch inside one transaction: O(batches) commits
+// and round-trips instead of O(rows).
+// Governing: ADR-0023, ADR-0004
+const (
+	// listenBatchSize bounds the rows, and therefore the bound parameters, one
+	// listen batch puts into its pre-fetch and bulk-insert statements.
+	listenBatchSize = 200
+
+	// listenDedupWindow is the cross-provider window a batch pre-fetches in one
+	// query; it is the same window isDuplicateListen used to check per track.
+	listenDedupWindow = 2 * time.Minute
+)
+
+// buildSyncEvent assembles a SyncEvent create without running it, so a batch can
+// write its events in one bulk statement inside the transaction that writes the
+// rows those events describe.
+func buildSyncEvent(client *ent.SyncEventClient, u *ent.User, eventType syncevent.EventType, provider string, message string, metadata map[string]interface{}) *ent.SyncEventCreate {
+	builder := client.Create().
 		SetUser(u).
 		SetEventType(eventType).
 		SetProvider(provider).
@@ -275,9 +292,34 @@ func (s *Syncer) logEvent(ctx context.Context, u *ent.User, eventType syncevent.
 		}
 	}
 
-	if _, err := builder.Save(ctx); err != nil {
+	return builder
+}
+
+// logEvent persists a sync event to the database.
+func (s *Syncer) logEvent(ctx context.Context, u *ent.User, eventType syncevent.EventType, provider string, message string, metadata map[string]interface{}) {
+	_, err := buildSyncEvent(s.client.SyncEvent, u, eventType, provider, message, metadata).Save(ctx)
+	if err != nil {
 		s.logger.Warn("failed to log sync event", "event_type", eventType, "provider", provider, "error", err)
 	}
+}
+
+// inTx runs fn inside a single transaction and commits it, so the statements of
+// one batch pay for one commit instead of one each, and a batch that fails part
+// way leaves no half-written rows behind (ADR-0023).
+func (s *Syncer) inTx(ctx context.Context, fn func(tx *ent.Tx) error) error {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
 }
 
 // Governing: SPEC listen-playlist-sync REQ-SYNC-020 (since timestamp from last listen)
@@ -626,135 +668,325 @@ func (s *Syncer) publishFatalNotification(userID int, key BackoffKey, providerNa
 }
 
 // Governing: SPEC listen-playlist-sync REQ-SYNC-021 (upsert Listen with dedup by provider+track+played_at)
+// persistListens persists one page of provider listens in batches of
+// listenBatchSize. Each batch pre-fetches its de-duplication answers in three
+// queries and writes the listens that survive, plus their sync events, inside one
+// transaction: a first sync of 10k listens pays O(batches) commits and round
+// trips instead of the four or five autocommit statements per listen it used to
+// issue, each of which is an fsync on the default SQLite backend (ADR-0023).
 func (s *Syncer) persistListens(ctx context.Context, u *ent.User, source providers.Type, tracks []providers.Track) (int, int, error) {
 	savedCount := 0
 	skippedCount := 0
-	providerName := string(source)
 
-	for _, track := range tracks {
-		// Basic validation
-		if track.Name == "" || track.Artist == "" {
-			skippedCount++
-			s.logEvent(ctx, u, syncevent.EventTypeTrackSkipped, providerName,
-				"Skipped track with missing name or artist",
-				map[string]interface{}{"reason": "missing_name_or_artist"})
-			continue
-		}
-
-		// Cross-provider de-duplication: check if a similar listen exists within a time window
-		// This prevents duplicate entries when the same song is reported by multiple providers
-		if s.isDuplicateListen(ctx, u, source, track) {
-			s.logger.Debug("skipping duplicate listen (cross-provider)", "track", track.Name, "artist", track.Artist, "played_at", track.PlayedAt)
-			skippedCount++
-			s.logEvent(ctx, u, syncevent.EventTypeTrackSkipped, providerName,
-				fmt.Sprintf("Skipped duplicate: %s by %s", track.Name, track.Artist),
-				map[string]interface{}{"track": track.Name, "artist": track.Artist, "reason": "cross_provider_duplicate"})
-			continue
-		}
-
-		// Governing: SPEC graceful-shutdown REQ-REC-001 (idempotent sync), REQ-REC-003 (existence check before insert)
-		// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (dedup by provider+provider_track_id+played_at
-		// when the provider supplies a track ID; fall back to provider+track_name+artist_name+played_at)
-		// Check if it exists to avoid unique constraint violations.
-		existsQuery := s.client.Listen.Query().
-			Where(
-				listen.HasUserWith(user.ID(u.ID)),
-				listen.Source(string(source)),
-				listen.PlayedAt(track.PlayedAt),
-			)
-		if track.ID != "" {
-			existsQuery = existsQuery.Where(listen.ProviderTrackID(track.ID))
-		} else {
-			existsQuery = existsQuery.Where(
-				listen.TrackName(track.Name),
-				listen.ArtistName(track.Artist),
-			)
-		}
-		exists, err := existsQuery.Exist(ctx)
-
+	for start := 0; start < len(tracks); start += listenBatchSize {
+		end := min(start+listenBatchSize, len(tracks))
+		saved, skipped, err := s.persistListenBatch(ctx, u, source, tracks[start:end])
+		savedCount += saved
+		skippedCount += skipped
 		if err != nil {
-			s.logger.Warn("failed to check existence of listen", "error", err)
-			continue
-		}
-
-		if exists {
-			s.logger.Debug("skipping duplicate listen", "track", track.Name, "artist", track.Artist, "played_at", track.PlayedAt)
-			skippedCount++
-			s.logEvent(ctx, u, syncevent.EventTypeTrackSkipped, providerName,
-				fmt.Sprintf("Skipped existing: %s by %s", track.Name, track.Artist),
-				map[string]interface{}{"track": track.Name, "artist": track.Artist, "reason": "already_exists"})
-			continue
-		}
-
-		builder := s.client.Listen.Create().
-			SetUser(u).
-			SetTrackName(track.Name).
-			SetArtistName(track.Artist).
-			SetAlbumName(track.Album).
-			SetSource(string(source)).
-			SetPlayedAt(track.PlayedAt)
-
-		if track.URL != "" {
-			builder.SetURL(track.URL)
-		}
-		// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (store provider track ID for de-duplication)
-		if track.ID != "" {
-			builder.SetProviderTrackID(track.ID)
-		}
-
-		l, err := builder.Save(ctx)
-		if err != nil {
-			s.logger.Warn("failed to save listen",
-				"track", track.Name,
-				"provider", source,
-				"error", err,
-			)
-		} else {
-			savedCount++
-			s.logger.Debug("saved listen", "track", track.Name, "artist", track.Artist, "provider", source)
-
-			// Log track added event
-			s.logEvent(ctx, u, syncevent.EventTypeTrackAdded, providerName,
-				fmt.Sprintf("Added: %s by %s", track.Name, track.Artist),
-				map[string]interface{}{"track": track.Name, "artist": track.Artist, "album": track.Album})
-
-			s.bus.PublishRecentListen(u.ID, l)
+			// The batch rolled back whole, so it left no half-written listens
+			// behind. The page is abandoned rather than retried row by row: the
+			// caller records the failure and the next sync picks up where this one
+			// stopped.
+			s.logger.Error("failed to persist listens batch",
+				"provider", source, "start", start, "size", end-start, "error", err)
+			return savedCount, skippedCount, err
 		}
 	}
+
 	return savedCount, skippedCount, nil
 }
 
-// isDuplicateListen checks if a similar listen already exists from another
-// provider within the window. It uses a time window to account for slight
-// timing differences between providers, and excludes the listen's own source:
-// the window absorbs cross-provider echoes only, so a genuine repeat play of a
-// short track from the same provider is never swallowed (that source's own
-// duplicates are handled by the exact source+played_at+track-ID check in
-// persistListens).
-func (s *Syncer) isDuplicateListen(ctx context.Context, u *ent.User, source providers.Type, track providers.Track) bool {
-	// Use a 2-minute window to catch duplicates from different providers
-	// that might have slightly different timestamps for the same play
-	timeWindow := 2 * time.Minute
-	startTime := track.PlayedAt.Add(-timeWindow)
-	endTime := track.PlayedAt.Add(timeWindow)
+// syncEventDraft is a sync event described while a batch is planned and written
+// with the batch's rows, so a batch of N rows logs N events in one statement
+// instead of one statement each.
+type syncEventDraft struct {
+	eventType syncevent.EventType
+	message   string
+	metadata  map[string]interface{}
+}
 
-	exists, err := s.client.Listen.Query().
-		Where(
-			listen.HasUserWith(user.ID(u.ID)),
-			listen.TrackName(track.Name),
-			listen.ArtistName(track.Artist),
-			listen.PlayedAtGTE(startTime),
-			listen.PlayedAtLTE(endTime),
-			listen.SourceNEQ(string(source)),
-		).
-		Exist(ctx)
+// listenKeys holds the de-duplication answers a listen batch pre-fetches instead
+// of asking the database per track:
+//   - byTrack is every existing listen keyed the way the listen unique index is
+//     unique (user, source, played_at, track, artist). It is also the de-dup key
+//     for a track the provider gave no ID for (REQ-SYNC-021).
+//   - byProviderID is every existing listen keyed by provider track ID and
+//     played_at, the de-dup key when the provider does supply an ID.
+//   - window holds, per track and artist, the times another provider reported the
+//     same play inside the de-dup window.
+type listenKeys struct {
+	byTrack      map[string]bool
+	byProviderID map[string]bool
+	window       map[string][]time.Time
+}
 
-	if err != nil {
-		s.logger.Warn("failed to check for duplicate listen", "error", err)
-		return false
+func listenTrackKey(playedAt time.Time, trackName, artistName string) string {
+	return fmt.Sprintf("%s|%s|%d", trackName, artistName, playedAt.UTC().UnixNano())
+}
+
+func listenProviderKey(providerTrackID string, playedAt time.Time) string {
+	return fmt.Sprintf("%s|%d", providerTrackID, playedAt.UTC().UnixNano())
+}
+
+func listenArtistTrackKey(trackName, artistName string) string {
+	return trackName + "|" + artistName
+}
+
+// inWindow reports whether another provider already reported this play inside the
+// de-dup window. The window absorbs cross-provider echoes only: a source's own
+// repeats are handled by the exact source+played_at+track key, so genuinely
+// replaying a short track from one provider is never swallowed.
+func (k *listenKeys) inWindow(track providers.Track) bool {
+	playedAt := track.PlayedAt
+	for _, existing := range k.window[listenArtistTrackKey(track.Name, track.Artist)] {
+		if !existing.Before(playedAt.Add(-listenDedupWindow)) && !existing.After(playedAt.Add(listenDedupWindow)) {
+			return true
+		}
+	}
+	return false
+}
+
+// prefetchListenKeys answers, in three queries for the whole batch, what the
+// per-track path used to ask in two queries per track.
+func (s *Syncer) prefetchListenKeys(ctx context.Context, u *ent.User, source providers.Type, candidates []providers.Track) (*listenKeys, error) {
+	keys := &listenKeys{
+		byTrack:      make(map[string]bool),
+		byProviderID: make(map[string]bool),
+		window:       make(map[string][]time.Time),
+	}
+	if len(candidates) == 0 {
+		return keys, nil
 	}
 
-	return exists
+	names := make([]string, 0, len(candidates))
+	artists := make([]string, 0, len(candidates))
+	playedAts := make([]time.Time, 0, len(candidates))
+	providerTrackIDs := make([]string, 0, len(candidates))
+	earliest := candidates[0].PlayedAt
+	latest := candidates[0].PlayedAt
+	for _, track := range candidates {
+		names = append(names, track.Name)
+		artists = append(artists, track.Artist)
+		playedAts = append(playedAts, track.PlayedAt)
+		if track.ID != "" {
+			providerTrackIDs = append(providerTrackIDs, track.ID)
+		}
+		if track.PlayedAt.Before(earliest) {
+			earliest = track.PlayedAt
+		}
+		if track.PlayedAt.After(latest) {
+			latest = track.PlayedAt
+		}
+	}
+
+	// One query answers both the unique index and the name/artist de-dup key,
+	// which are the same columns.
+	trackRows, err := s.client.Listen.Query().
+		Where(
+			listen.HasUserWith(user.ID(u.ID)),
+			listen.TrackNameIn(names...),
+			listen.ArtistNameIn(artists...),
+			listen.PlayedAtIn(playedAts...),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pre-fetch existing listens: %w", err)
+	}
+	for _, l := range trackRows {
+		if l.Source != string(source) {
+			continue
+		}
+		keys.byTrack[listenTrackKey(l.PlayedAt, l.TrackName, l.ArtistName)] = true
+	}
+
+	if len(providerTrackIDs) > 0 {
+		idRows, err := s.client.Listen.Query().
+			Where(
+				listen.HasUserWith(user.ID(u.ID)),
+				listen.Source(string(source)),
+				listen.ProviderTrackIDIn(providerTrackIDs...),
+				listen.PlayedAtIn(playedAts...),
+			).
+			All(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to pre-fetch existing listens by provider track ID: %w", err)
+		}
+		for _, l := range idRows {
+			if l.ProviderTrackID == "" {
+				continue
+			}
+			keys.byProviderID[listenProviderKey(l.ProviderTrackID, l.PlayedAt)] = true
+		}
+	}
+
+	windowRows, err := s.client.Listen.Query().
+		Where(
+			listen.HasUserWith(user.ID(u.ID)),
+			listen.SourceNEQ(string(source)),
+			listen.TrackNameIn(names...),
+			listen.ArtistNameIn(artists...),
+			listen.PlayedAtGTE(earliest.Add(-listenDedupWindow)),
+			listen.PlayedAtLTE(latest.Add(listenDedupWindow)),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pre-fetch the cross-provider de-dup window: %w", err)
+	}
+	for _, l := range windowRows {
+		key := listenArtistTrackKey(l.TrackName, l.ArtistName)
+		keys.window[key] = append(keys.window[key], l.PlayedAt)
+	}
+
+	return keys, nil
+}
+
+// persistListenBatch plans one batch of listens against pre-fetched de-dup
+// answers and writes it in a single transaction.
+func (s *Syncer) persistListenBatch(ctx context.Context, u *ent.User, source providers.Type, batch []providers.Track) (int, int, error) {
+	providerName := string(source)
+	candidates := make([]providers.Track, 0, len(batch))
+	drafts := make([]syncEventDraft, 0, len(batch))
+	skippedCount := 0
+
+	for _, track := range batch {
+		if track.Name == "" || track.Artist == "" {
+			skippedCount++
+			drafts = append(drafts, syncEventDraft{
+				eventType: syncevent.EventTypeTrackSkipped,
+				message:   "Skipped track with missing name or artist",
+				metadata:  map[string]interface{}{"reason": "missing_name_or_artist"},
+			})
+			continue
+		}
+		candidates = append(candidates, track)
+	}
+
+	keys, err := s.prefetchListenKeys(ctx, u, source, candidates)
+	if err != nil {
+		return 0, skippedCount, err
+	}
+
+	pending := make([]providers.Track, 0, len(candidates))
+	batchTrackKeys := make(map[string]bool, len(candidates))
+	batchProviderKeys := make(map[string]bool, len(candidates))
+
+	for _, track := range candidates {
+		trackKey := listenTrackKey(track.PlayedAt, track.Name, track.Artist)
+		var providerKey string
+		if track.ID != "" {
+			providerKey = listenProviderKey(track.ID, track.PlayedAt)
+		}
+
+		// Cross-provider de-duplication: a similar play another provider already
+		// reported within the window is not stored twice.
+		if keys.inWindow(track) {
+			s.logger.Debug("skipping duplicate listen (cross-provider)", "track", track.Name, "artist", track.Artist, "played_at", track.PlayedAt)
+			skippedCount++
+			drafts = append(drafts, syncEventDraft{
+				eventType: syncevent.EventTypeTrackSkipped,
+				message:   fmt.Sprintf("Skipped duplicate: %s by %s", track.Name, track.Artist),
+				metadata:  map[string]interface{}{"track": track.Name, "artist": track.Artist, "reason": "cross_provider_duplicate"},
+			})
+			continue
+		}
+
+		// Governing: SPEC graceful-shutdown REQ-REC-001 (idempotent sync), REQ-REC-003
+		// (existence check before insert), SPEC listen-playlist-sync REQ-SYNC-021
+		// (de-dup by provider track ID when present, else track and artist).
+		duplicate := keys.byTrack[trackKey] || batchTrackKeys[trackKey]
+		if providerKey != "" {
+			duplicate = keys.byProviderID[providerKey] || batchProviderKeys[providerKey]
+		}
+		if duplicate {
+			s.logger.Debug("skipping duplicate listen", "track", track.Name, "artist", track.Artist, "played_at", track.PlayedAt)
+			skippedCount++
+			drafts = append(drafts, syncEventDraft{
+				eventType: syncevent.EventTypeTrackSkipped,
+				message:   fmt.Sprintf("Skipped existing: %s by %s", track.Name, track.Artist),
+				metadata:  map[string]interface{}{"track": track.Name, "artist": track.Artist, "reason": "already_exists"},
+			})
+			continue
+		}
+
+		// The de-dup key says this play is new, but the unique index on
+		// user+source+played_at+track+artist already holds it, so the insert would
+		// fail. That is the row the per-row path used to warn about and drop: it is
+		// neither saved nor skipped, and it does not hold up the rest of the batch.
+		if keys.byTrack[trackKey] || batchTrackKeys[trackKey] {
+			s.logger.Warn("listen conflicts with the listen unique index and was not stored",
+				"track", track.Name, "artist", track.Artist, "provider", providerName)
+			continue
+		}
+
+		batchTrackKeys[trackKey] = true
+		if providerKey != "" {
+			batchProviderKeys[providerKey] = true
+		}
+		pending = append(pending, track)
+		drafts = append(drafts, syncEventDraft{
+			eventType: syncevent.EventTypeTrackAdded,
+			message:   fmt.Sprintf("Added: %s by %s", track.Name, track.Artist),
+			metadata:  map[string]interface{}{"track": track.Name, "artist": track.Artist, "album": track.Album},
+		})
+	}
+
+	if len(pending) == 0 && len(drafts) == 0 {
+		return 0, skippedCount, nil
+	}
+
+	saved := make([]*ent.Listen, 0, len(pending))
+	err = s.inTx(ctx, func(tx *ent.Tx) error {
+		if len(pending) > 0 {
+			creates := make([]*ent.ListenCreate, 0, len(pending))
+			for _, track := range pending {
+				builder := tx.Listen.Create().
+					SetUser(u).
+					SetTrackName(track.Name).
+					SetArtistName(track.Artist).
+					SetAlbumName(track.Album).
+					SetSource(providerName).
+					SetPlayedAt(track.PlayedAt)
+
+				if track.URL != "" {
+					builder.SetURL(track.URL)
+				}
+				// Governing: SPEC listen-playlist-sync REQ-SYNC-021 (store provider track ID for de-duplication)
+				if track.ID != "" {
+					builder.SetProviderTrackID(track.ID)
+				}
+				creates = append(creates, builder)
+			}
+
+			created, err := tx.Listen.CreateBulk(creates...).Save(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to insert %d listens: %w", len(pending), err)
+			}
+			saved = created
+		}
+
+		if len(drafts) > 0 {
+			eventCreates := make([]*ent.SyncEventCreate, 0, len(drafts))
+			for _, draft := range drafts {
+				eventCreates = append(eventCreates, buildSyncEvent(tx.SyncEvent, u, draft.eventType, providerName, draft.message, draft.metadata))
+			}
+			if _, err := tx.SyncEvent.CreateBulk(eventCreates...).Save(ctx); err != nil {
+				return fmt.Errorf("failed to insert %d sync events: %w", len(drafts), err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return 0, skippedCount, err
+	}
+
+	for _, l := range saved {
+		s.bus.PublishRecentListen(u.ID, l)
+	}
+	s.logger.Debug("persisted listen batch", "provider", providerName, "saved", len(saved), "skipped", skippedCount)
+
+	return len(saved), skippedCount, nil
 }
 
 // Governing: SPEC listen-playlist-sync REQ-SYNC-012 (sync cursor updated after each provider sync)
@@ -931,7 +1163,12 @@ func (s *Syncer) markMissingPlaylistsInactive(ctx context.Context, u *ent.User, 
 }
 
 // Governing: SPEC listen-playlist-sync REQ-SYNC-031 (upsert PlaylistTrack with position), REQ-SYNC-032 (removed tracks deleted)
-// persistPlaylistTracks saves tracks for a playlist, upserting to preserve catalog links
+// persistPlaylistTracks saves tracks for a playlist, upserting to preserve catalog links.
+// Reconciliation is decided in memory first: rows that already say what the provider says
+// are left alone, so re-syncing an unchanged playlist costs two reads and no write at all,
+// and a playlist that did change is written inside one transaction whose parking step is a
+// single bulk UPDATE. On SQLite's default backend every autocommit is an fsync (ADR-0023),
+// so that is one commit per changed playlist instead of one per track.
 func (s *Syncer) persistPlaylistTracks(ctx context.Context, playlistID int, tracks []providers.Track) error {
 	// Get the playlist to access user and provider info
 	pl, err := s.client.Playlist.Query().
@@ -977,22 +1214,10 @@ func (s *Syncer) persistPlaylistTracks(ctx context.Context, playlistID int, trac
 		existingByNameArtist[key] = append(existingByNameArtist[key], pt)
 	}
 
-	// First, move all existing tracks to negative positions to avoid unique constraint conflicts
-	// when updating positions
-	for i, pt := range existingTracks {
-		if err := s.client.PlaylistTrack.UpdateOneID(pt.ID).SetPosition(-(i + 1)).Exec(ctx); err != nil {
-			s.logger.Warn("failed to temporarily reposition playlist track", "error", err, "id", pt.ID)
-		}
-	}
-
-	// Track which existing tracks we've seen (to delete removed ones)
-	seenIDs := make(map[int]bool)
-	addedCount := 0
-	updatedCount := 0
-
 	// takeExisting consumes the next unconsumed row stored under key, so repeated tracks in
 	// the incoming list claim separate rows instead of rewriting one row twice and deleting
 	// its twin as unseen.
+	seenIDs := make(map[int]bool)
 	takeExisting := func(candidates map[string][]*ent.PlaylistTrack, key string) *ent.PlaylistTrack {
 		for len(candidates[key]) > 0 {
 			candidate := candidates[key][0]
@@ -1003,6 +1228,11 @@ func (s *Syncer) persistPlaylistTracks(ctx context.Context, playlistID int, trac
 		}
 		return nil
 	}
+
+	// Decide the whole reconciliation before writing anything: which rows the
+	// provider's list matches, which tracks are new, and which rows disappeared.
+	matched := make([]playlistTrackPlan, 0, len(tracks))
+	added := make([]playlistTrackPlan, 0, len(tracks))
 
 	for i, track := range tracks {
 		if track.Name == "" || track.Artist == "" {
@@ -1019,98 +1249,205 @@ func (s *Syncer) persistPlaylistTracks(ctx context.Context, playlistID int, trac
 			existing = takeExisting(existingByNameArtist, key)
 		}
 
-		if existing != nil {
-			// Update existing track, preserving catalog links
-			seenIDs[existing.ID] = true
-			update := s.client.PlaylistTrack.UpdateOneID(existing.ID).
-				SetTrackName(track.Name).
-				SetArtistName(track.Artist).
-				SetPosition(i)
-
-			if track.ID != "" {
-				update.SetRemoteID(track.ID)
-			}
-			if track.Album != "" {
-				update.SetAlbumName(track.Album)
-			}
-			if track.DurationMs > 0 {
-				update.SetDurationMs(track.DurationMs)
-			}
-			if track.URL != "" {
-				update.SetURL(track.URL)
-			}
-
-			if err := update.Exec(ctx); err != nil {
-				s.logger.Warn("failed to update playlist track", "error", err, "track", track.Name)
-				continue
-			}
-			updatedCount++
-		} else {
-			// Create new track
-			builder := s.client.PlaylistTrack.Create().
-				SetPlaylistID(playlistID).
-				SetTrackName(track.Name).
-				SetArtistName(track.Artist).
-				SetPosition(i)
-
-			if track.ID != "" {
-				builder.SetRemoteID(track.ID)
-			}
-			if track.Album != "" {
-				builder.SetAlbumName(track.Album)
-			}
-			if track.DurationMs > 0 {
-				builder.SetDurationMs(track.DurationMs)
-			}
-			if track.URL != "" {
-				builder.SetURL(track.URL)
-			}
-
-			if _, err := builder.Save(ctx); err != nil {
-				s.logger.Warn("failed to create playlist track", "error", err, "track", track.Name)
-				continue
-			}
-			addedCount++
+		if existing == nil {
+			added = append(added, playlistTrackPlan{track: track, position: i})
+			continue
 		}
+
+		seenIDs[existing.ID] = true
+		matched = append(matched, playlistTrackPlan{existing: existing, track: track, position: i})
 	}
 
-	// Delete tracks that are no longer in the playlist
-	deletedCount := 0
+	removed := make([]int, 0, len(existingIDs))
 	for id := range existingIDs {
 		if !seenIDs[id] {
-			if err := s.client.PlaylistTrack.DeleteOneID(id).Exec(ctx); err != nil {
-				s.logger.Warn("failed to delete removed playlist track", "error", err, "id", id)
-				continue
+			removed = append(removed, id)
+		}
+	}
+	sort.Ints(removed)
+
+	// A playlist whose rows already match the provider, track for track, is written
+	// not at all: no parking UPDATE, no per-track UPDATE, no DELETE and no sync
+	// event. That is what turns an unchanged re-sync of a 500-track playlist from
+	// a thousand-plus statements into the two reads above.
+	if len(added) == 0 && len(removed) == 0 && allPlaylistTracksMatch(matched) {
+		return nil
+	}
+
+	// Rows that keep their position only need writing when their contents changed.
+	// Rows that move need writing, and so does every other surviving row once the
+	// playlist is re-ordered, because the parking step moved all of them aside.
+	repositioned := false
+	for _, plan := range matched {
+		if plan.existing.Position != plan.position {
+			repositioned = true
+			break
+		}
+	}
+
+	updates := make([]playlistTrackPlan, 0, len(matched))
+	for _, plan := range matched {
+		if repositioned || !playlistTrackMatches(plan) {
+			updates = append(updates, plan)
+		}
+	}
+
+	maxPosition := 0
+	for _, pt := range existingTracks {
+		if pt.Position > maxPosition {
+			maxPosition = pt.Position
+		}
+	}
+
+	totalCount := len(updates) + len(added)
+	message := fmt.Sprintf("Synced %d tracks for playlist: %s", totalCount, pl.Name)
+	if len(removed) > 0 {
+		message = fmt.Sprintf("Synced %d tracks (%d removed) for playlist: %s", totalCount, len(removed), pl.Name)
+	}
+
+	err = s.inTx(ctx, func(tx *ent.Tx) error {
+		if repositioned {
+			// Park every row of the playlist below zero in one bulk UPDATE instead of
+			// one UPDATE per row: subtracting one offset keeps the existing positions
+			// distinct, and leaves every position the reconciliation is about to
+			// write free, so no update can collide with a row that has not moved yet.
+			if err := tx.PlaylistTrack.Update().
+				Where(playlisttrack.HasPlaylistWith(playlist.ID(playlistID))).
+				AddPosition(-(maxPosition + len(existingTracks) + 1)).
+				Exec(ctx); err != nil {
+				return fmt.Errorf("failed to park playlist track positions: %w", err)
 			}
-			deletedCount++
 		}
+
+		// Deleting first keeps a removed row from blocking a new track that takes
+		// over its position.
+		if len(removed) > 0 {
+			if _, err := tx.PlaylistTrack.Delete().
+				Where(playlisttrack.IDIn(removed...)).
+				Exec(ctx); err != nil {
+				return fmt.Errorf("failed to delete %d removed playlist tracks: %w", len(removed), err)
+			}
+		}
+
+		for _, plan := range updates {
+			builder := tx.PlaylistTrack.UpdateOneID(plan.existing.ID).
+				SetTrackName(plan.track.Name).
+				SetArtistName(plan.track.Artist).
+				SetPosition(plan.position)
+
+			if plan.track.ID != "" {
+				builder.SetRemoteID(plan.track.ID)
+			}
+			if plan.track.Album != "" {
+				builder.SetAlbumName(plan.track.Album)
+			}
+			if plan.track.DurationMs > 0 {
+				builder.SetDurationMs(plan.track.DurationMs)
+			}
+			if plan.track.URL != "" {
+				builder.SetURL(plan.track.URL)
+			}
+
+			if err := builder.Exec(ctx); err != nil {
+				return fmt.Errorf("failed to update playlist track %d: %w", plan.existing.ID, err)
+			}
+		}
+
+		if len(added) > 0 {
+			creates := make([]*ent.PlaylistTrackCreate, 0, len(added))
+			for _, plan := range added {
+				builder := tx.PlaylistTrack.Create().
+					SetPlaylistID(playlistID).
+					SetTrackName(plan.track.Name).
+					SetArtistName(plan.track.Artist).
+					SetPosition(plan.position)
+
+				if plan.track.ID != "" {
+					builder.SetRemoteID(plan.track.ID)
+				}
+				if plan.track.Album != "" {
+					builder.SetAlbumName(plan.track.Album)
+				}
+				if plan.track.DurationMs > 0 {
+					builder.SetDurationMs(plan.track.DurationMs)
+				}
+				if plan.track.URL != "" {
+					builder.SetURL(plan.track.URL)
+				}
+				creates = append(creates, builder)
+			}
+
+			if _, err := tx.PlaylistTrack.CreateBulk(creates...).Save(ctx); err != nil {
+				return fmt.Errorf("failed to insert %d playlist tracks: %w", len(added), err)
+			}
+		}
+
+		// The event is written in the same transaction as the rows it describes, so a
+		// rollback cannot leave a playlist reporting a sync it did not make.
+		if _, err := buildSyncEvent(tx.SyncEvent, pl.Edges.User, syncevent.EventTypeTrackAdded, providerName, message,
+			map[string]interface{}{"playlist_name": pl.Name, "track_count": totalCount, "added": len(added), "updated": len(updates), "deleted": len(removed)}).Save(ctx); err != nil {
+			return fmt.Errorf("failed to log playlist track sync event: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
-	totalCount := addedCount + updatedCount
-	if totalCount > 0 || deletedCount > 0 {
-		s.logger.Debug("synced playlist tracks",
-			"playlist_id", playlistID,
-			"added", addedCount,
-			"updated", updatedCount,
-			"deleted", deletedCount)
+	s.logger.Debug("synced playlist tracks",
+		"playlist_id", playlistID,
+		"added", len(added),
+		"updated", len(updates),
+		"deleted", len(removed))
 
-		// Log event and send notification
-		message := fmt.Sprintf("Synced %d tracks for playlist: %s", totalCount, pl.Name)
-		if deletedCount > 0 {
-			message = fmt.Sprintf("Synced %d tracks (%d removed) for playlist: %s", totalCount, deletedCount, pl.Name)
-		}
-		s.logEvent(ctx, pl.Edges.User, syncevent.EventTypeTrackAdded, providerName, message,
-			map[string]interface{}{"playlist_name": pl.Name, "track_count": totalCount, "added": addedCount, "updated": updatedCount, "deleted": deletedCount})
-
-		s.bus.Publish(userID, events.Event{
-			Type: events.EventTypeNotification,
-			Payload: events.NotificationPayload{
-				Title:    "Playlist Tracks Synced",
-				Message:  message,
-				IconType: "success",
-			},
-		})
-	}
+	s.bus.Publish(userID, events.Event{
+		Type: events.EventTypeNotification,
+		Payload: events.NotificationPayload{
+			Title:    "Playlist Tracks Synced",
+			Message:  message,
+			IconType: "success",
+		},
+	})
 
 	return nil
+}
+
+// playlistTrackPlan is one row the reconciliation decided on: an existing row the
+// provider's list matched (existing is then set) with the position and contents it
+// should end up holding, or a track that needs a row of its own.
+type playlistTrackPlan struct {
+	existing *ent.PlaylistTrack
+	track    providers.Track
+	position int
+}
+
+// playlistTrackMatches reports whether a matched row already holds exactly what the
+// provider reports for it, so re-syncing an unchanged playlist writes nothing.
+// Only the fields the reconciliation sets are compared, and a field the provider
+// left empty keeps whatever the row holds.
+func playlistTrackMatches(plan playlistTrackPlan) bool {
+	pt, track := plan.existing, plan.track
+	if pt.Position != plan.position || pt.TrackName != track.Name || pt.ArtistName != track.Artist {
+		return false
+	}
+	if track.ID != "" && pt.RemoteID != track.ID {
+		return false
+	}
+	if track.Album != "" && pt.AlbumName != track.Album {
+		return false
+	}
+	if track.DurationMs > 0 && (pt.DurationMs == nil || *pt.DurationMs != track.DurationMs) {
+		return false
+	}
+	return track.URL == "" || pt.URL == track.URL
+}
+
+func allPlaylistTracksMatch(matched []playlistTrackPlan) bool {
+	for _, plan := range matched {
+		if !playlistTrackMatches(plan) {
+			return false
+		}
+	}
+	return true
 }
