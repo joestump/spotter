@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"spotter/ent"
 	"spotter/ent/album"
@@ -378,35 +377,20 @@ func (h *Handler) CreateMixtape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	djID, err := strconv.Atoi(r.FormValue("dj_id"))
-	if err != nil {
-		http.Error(w, "DJ is required", http.StatusBadRequest)
-		return
-	}
-
-	// Verify DJ ownership
-	d, err := h.GetDJForUser(r.Context(), djID, u.ID)
-	if err != nil {
-		http.Error(w, "DJ not found", http.StatusNotFound)
+	form, ok := h.parseMixtapeForm(w, r, u.ID)
+	if !ok {
 		return
 	}
 
 	syncToNavidrome := r.FormValue("sync_to_navidrome") == "on"
 
-	maxTracks := 25 // default
-	if maxTracksStr := r.FormValue("max_tracks"); maxTracksStr != "" {
-		if mt, err := strconv.Atoi(maxTracksStr); err == nil && mt >= 1 && mt <= 100 {
-			maxTracks = mt
-		}
-	}
-
 	m, err := h.Client.Mixtape.Create().
 		SetName(name).
 		SetDescription(description).
 		SetSchedule(mixtape.Schedule(schedule)).
-		SetMaxTracks(maxTracks).
+		SetMaxTracks(form.maxTracks).
 		SetSyncToNavidrome(syncToNavidrome).
-		SetDj(d).
+		SetDj(form.dj).
 		SetUser(u).
 		Save(r.Context())
 
@@ -416,11 +400,11 @@ func (h *Handler) CreateMixtape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.Logger.Info("mixtape created", "mixtape_id", m.ID, "name", m.Name, "dj", d.Name, "user_id", u.ID)
+	h.Logger.Info("mixtape created", "mixtape_id", m.ID, "name", m.Name, "dj", form.dj.Name, "user_id", u.ID)
 
 	// Publish event
 	if h.Bus != nil {
-		h.Bus.PublishMixtapeCreated(u.ID, m.ID, m.Name, d.Name)
+		h.Bus.PublishMixtapeCreated(u.ID, m.ID, m.Name, form.dj.Name)
 	}
 
 	h.HTMXEvent(w, "mixtape-created", http.StatusOK)
@@ -475,35 +459,20 @@ func (h *Handler) UpdateMixtape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	djID, err := strconv.Atoi(r.FormValue("dj_id"))
-	if err != nil {
-		http.Error(w, "DJ is required", http.StatusBadRequest)
-		return
-	}
-
-	// Verify DJ ownership
-	d, err := h.GetDJForUser(r.Context(), djID, u.ID)
-	if err != nil {
-		http.Error(w, "DJ not found", http.StatusNotFound)
+	form, ok := h.parseMixtapeForm(w, r, u.ID)
+	if !ok {
 		return
 	}
 
 	syncToNavidrome := r.FormValue("sync_to_navidrome") == "on"
 
-	maxTracks := 25 // default
-	if maxTracksStr := r.FormValue("max_tracks"); maxTracksStr != "" {
-		if mt, err := strconv.Atoi(maxTracksStr); err == nil && mt >= 1 && mt <= 100 {
-			maxTracks = mt
-		}
-	}
-
 	updated, err := h.Client.Mixtape.UpdateOne(m).
 		SetName(name).
 		SetDescription(description).
 		SetSchedule(mixtape.Schedule(schedule)).
-		SetMaxTracks(maxTracks).
+		SetMaxTracks(form.maxTracks).
 		SetSyncToNavidrome(syncToNavidrome).
-		SetDj(d).
+		SetDj(form.dj).
 		Save(r.Context())
 
 	if err != nil {
@@ -714,103 +683,7 @@ func (h *Handler) GenerateMixtape(w http.ResponseWriter, r *http.Request) {
 		seed = h.mixtapeSeed(r.Context(), u.ID, r.Form)
 	}
 
-	// Create the generation request
-	req := &vibes.GenerationRequest{
-		Mixtape: m,
-		DJ:      m.Edges.Dj,
-		Seed:    seed,
-		UserID:  u.ID,
-	}
-
-	// Governing: SPEC graceful-shutdown, SPEC vibes-ai-mixtape-engine REQ "background goroutines use context.Background()"
-	// Capture value types to avoid stale *ent.User pointer in goroutine
-	userID := u.ID
-	mixtapeName := m.Name
-	djName := m.Edges.Dj.Name
-
-	// Run generation (this can take a while, so we do it in a goroutine for async UX)
-	go func() {
-		defer h.recoverMixtapeGeneration(userID, mixtapeID, mixtapeName)
-
-		ctx := context.Background()
-
-		// Publish generating event
-		if h.Bus != nil {
-			h.Bus.PublishMixtapeGenerating(userID, mixtapeID, mixtapeName, djName)
-		}
-
-		result, err := h.MixtapeGenerator.GenerateMixtape(ctx, req)
-		if err != nil {
-			h.Logger.Error("mixtape generation failed",
-				"mixtape_id", mixtapeID,
-				"error", err)
-
-			// Update mixtape with error
-			if _, saveErr := h.Client.Mixtape.UpdateOneID(mixtapeID).
-				SetGenerationError(err.Error()).
-				Save(ctx); saveErr != nil {
-				h.Logger.Error("failed to save mixtape error", "error", saveErr)
-			}
-
-			// Publish error event
-			if h.Bus != nil {
-				h.Bus.PublishMixtapeError(userID, mixtapeID, mixtapeName, err.Error())
-			}
-			return
-		}
-
-		// Get matched track IDs
-		trackIDs := result.GetMatchedTrackIDsAsStrings()
-
-		// Update the mixtape with the results
-		updater := h.Client.Mixtape.UpdateOneID(mixtapeID).
-			SetTrackIds(trackIDs).
-			SetTrackCount(len(trackIDs)).
-			SetLastGeneratedAt(time.Now()).
-			SetGenerationPrompt(result.PromptUsed).
-			SetGenerationModel(result.ModelUsed).
-			ClearGenerationError()
-
-		if result.TokensUsed > 0 {
-			updater.SetGenerationTokensUsed(result.TokensUsed)
-		}
-
-		// Store seed information if provided
-		if seed != nil {
-			updater.SetSeedType(string(seed.Type))
-			if seed.Type == vibes.SeedTypeArtist && seed.Artist != nil {
-				updater.SetSeedID(seed.Artist.ID)
-			} else if seed.Type == vibes.SeedTypeAlbum && seed.Album != nil {
-				updater.SetSeedID(seed.Album.ID)
-			} else if seed.Type == vibes.SeedTypeTracks && len(seed.TrackIDs) > 0 {
-				seedTrackIDs := make([]string, len(seed.TrackIDs))
-				for i, id := range seed.TrackIDs {
-					seedTrackIDs[i] = strconv.Itoa(id)
-				}
-				updater.SetSeedTrackIds(seedTrackIDs)
-			}
-		}
-
-		_, err = updater.Save(ctx)
-		if err != nil {
-			h.Logger.Error("failed to save mixtape generation results",
-				"mixtape_id", mixtapeID,
-				"error", err)
-			return
-		}
-
-		h.Logger.Info("mixtape generation complete",
-			"mixtape_id", mixtapeID,
-			"tracks_matched", result.MatchedCount,
-			"tracks_unmatched", result.UnmatchedCount,
-			"tokens_used", result.TokensUsed)
-
-		// Publish success event
-		if h.Bus != nil {
-			h.Bus.PublishMixtapeGenerated(userID, mixtapeID, mixtapeName, djName,
-				len(result.Tracks), result.MatchedCount, result.TokensUsed)
-		}
-	}()
+	h.startMixtapeGeneration(u.ID, m, m.Edges.Dj, seed)
 
 	// Return immediately with a "generating" status
 	h.HTMXEvent(w, "mixtape-generating", http.StatusAccepted)
