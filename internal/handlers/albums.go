@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"sort"
-	"strconv"
 	"time"
 
 	"spotter/ent"
@@ -493,41 +492,25 @@ func (h *Handler) AlbumCreateMixtape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	djID, err := strconv.Atoi(r.FormValue("dj_id"))
-	if err != nil {
-		http.Error(w, "DJ is required", http.StatusBadRequest)
+	form, ok := h.parseMixtapeForm(w, r, u.ID)
+	if !ok {
 		return
 	}
 
-	// Verify DJ ownership
-	d, err := h.GetDJForUser(r.Context(), djID, u.ID)
-	if err != nil {
-		http.Error(w, "DJ not found", http.StatusNotFound)
-		return
-	}
-
-	// Generate mixtape name
-	mixtapeName := r.FormValue("name")
+	// Default the name to the album it is inspired by.
+	mixtapeName := form.name
 	if mixtapeName == "" {
 		mixtapeName = a.Name + " Mix"
-	}
-
-	// Get max tracks (default 25)
-	maxTracks := 25
-	if maxTracksStr := r.FormValue("max_tracks"); maxTracksStr != "" {
-		if mt, err := strconv.Atoi(maxTracksStr); err == nil && mt >= 1 && mt <= 100 {
-			maxTracks = mt
-		}
 	}
 
 	// Create the mixtape
 	m, err := h.Client.Mixtape.Create().
 		SetName(mixtapeName).
 		SetDescription("Inspired by " + a.Name).
-		SetMaxTracks(maxTracks).
+		SetMaxTracks(form.maxTracks).
 		SetSeedType("album").
 		SetSeedID(albumID).
-		SetDj(d).
+		SetDj(form.dj).
 		SetUser(u).
 		Save(r.Context())
 	if err != nil {
@@ -541,77 +524,10 @@ func (h *Handler) AlbumCreateMixtape(w http.ResponseWriter, r *http.Request) {
 		"mixtape_name", m.Name,
 		"album_id", albumID,
 		"album_name", a.Name,
-		"dj_id", d.ID,
-		"dj_name", d.Name)
+		"dj_id", form.dj.ID,
+		"dj_name", form.dj.Name)
 
-	// Generate the mixtape in background
-	if h.MixtapeGenerator != nil {
-		go func() {
-			defer h.recoverMixtapeGeneration(u.ID, m.ID, m.Name)
-
-			ctx := context.Background()
-
-			// Publish generating event
-			if h.Bus != nil {
-				h.Bus.PublishMixtapeGenerating(u.ID, m.ID, m.Name, d.Name)
-			}
-
-			seed := vibes.NewAlbumSeed(a)
-			req := &vibes.GenerationRequest{
-				Mixtape: m,
-				DJ:      d,
-				Seed:    seed,
-				UserID:  u.ID,
-			}
-
-			result, err := h.MixtapeGenerator.GenerateMixtape(ctx, req)
-			if err != nil {
-				h.Logger.Error("mixtape generation failed",
-					"mixtape_id", m.ID,
-					"error", err)
-
-				if _, saveErr := h.Client.Mixtape.UpdateOneID(m.ID).
-					SetGenerationError(err.Error()).
-					Save(ctx); saveErr != nil {
-					h.Logger.Error("failed to save mixtape error", "error", saveErr)
-				}
-
-				if h.Bus != nil {
-					h.Bus.PublishMixtapeError(u.ID, m.ID, m.Name, err.Error())
-				}
-				return
-			}
-
-			// Get matched track IDs
-			trackIDs := result.GetMatchedTrackIDsAsStrings()
-
-			// Update the mixtape with results
-			_, err = h.Client.Mixtape.UpdateOneID(m.ID).
-				SetTrackIds(trackIDs).
-				SetTrackCount(len(trackIDs)).
-				SetLastGeneratedAt(time.Now()).
-				SetGenerationPrompt(result.PromptUsed).
-				SetGenerationModel(result.ModelUsed).
-				SetNillableGenerationTokensUsed(&result.TokensUsed).
-				ClearGenerationError().
-				Save(ctx)
-			if err != nil {
-				h.Logger.Error("failed to save mixtape generation results",
-					"mixtape_id", m.ID,
-					"error", err)
-				return
-			}
-
-			h.Logger.Info("mixtape generation complete",
-				"mixtape_id", m.ID,
-				"tracks_matched", result.MatchedCount)
-
-			if h.Bus != nil {
-				h.Bus.PublishMixtapeGenerated(u.ID, m.ID, m.Name, d.Name,
-					len(result.Tracks), result.MatchedCount, result.TokensUsed)
-			}
-		}()
-	}
+	h.startMixtapeGeneration(u.ID, m, form.dj, vibes.NewAlbumSeed(a))
 
 	// Send success notification
 	if h.Bus != nil {

@@ -22,6 +22,7 @@ import (
 	"spotter/ent/user"
 	"spotter/internal/config"
 	"spotter/internal/events"
+	"spotter/internal/fuzzy"
 	"spotter/internal/llm"
 )
 
@@ -581,7 +582,12 @@ func (g *MixtapeGenerator) getAvailableTracks(ctx context.Context, userID int, d
 func (g *MixtapeGenerator) renderPrompt(data *TemplateData) (string, error) {
 	tmpl, ok := g.templates["generate_mixtape"]
 	if !ok {
-		// Use fallback prompt
+		// Last-resort minimal prompt: a missing template degrades the mixtape
+		// instead of switching generation off.
+		// Governing: ADR-0037 (prompt fallback policy), SPEC vibes-ai-mixtape-engine REQ-VIBES-013
+		g.logger.Warn("mixtape prompt template unavailable, using built-in fallback prompt",
+			"template", "generate_mixtape",
+			"prompts_directory", g.config.GetVibesPromptsDirectory())
 		return g.fallbackPrompt(data), nil
 	}
 
@@ -713,6 +719,15 @@ func (g *MixtapeGenerator) matchTracksToLibrary(ctx context.Context, userID int,
 		trackByName[key] = t
 	}
 
+	// Build the fuzzy candidates once per response, normalized with the same
+	// keys the playlist-sync matcher uses, so the same library and the same
+	// suggestion score identically whichever feature is asking.
+	// Governing: ADR-0014, SPEC vibes-ai-mixtape-engine REQ-VIBES-016, issue #340
+	candidates := make([]fuzzy.Candidate[AvailableTrack], len(available))
+	for i, t := range available {
+		candidates[i] = fuzzy.NewCandidate(t, t.Name, t.Artist)
+	}
+
 	minConfidence := g.config.Vibes.MinMatchConfidence
 	if minConfidence <= 0 {
 		minConfidence = 0.7
@@ -752,8 +767,9 @@ func (g *MixtapeGenerator) matchTracksToLibrary(ctx context.Context, userID int,
 		}
 
 		// Try fuzzy matching
-		bestMatch, confidence := g.findBestFuzzyMatch(suggested.Name, suggested.Artist, available)
-		if bestMatch != nil && confidence >= minConfidence {
+		bestIndex, confidence := fuzzy.Best(fuzzy.NormalizeRunes(suggested.Name), fuzzy.NormalizeRunes(suggested.Artist), candidates)
+		if bestIndex >= 0 && confidence >= minConfidence {
+			bestMatch := &candidates[bestIndex].Match
 			gt.ID = bestMatch.ID
 			gt.Matched = true
 			gt.MatchConfidence = confidence
@@ -778,134 +794,6 @@ func (g *MixtapeGenerator) matchTracksToLibrary(ctx context.Context, userID int,
 	}
 
 	return result, nil
-}
-
-// findBestFuzzyMatch finds the best fuzzy match for a track.
-func (g *MixtapeGenerator) findBestFuzzyMatch(name, artist string, candidates []AvailableTrack) (*AvailableTrack, float64) {
-	var bestMatch *AvailableTrack
-	bestScore := 0.0
-
-	normalizedName := normalizeForMatch(name)
-	normalizedArtist := normalizeForMatch(artist)
-
-	for i := range candidates {
-		candidate := &candidates[i]
-
-		candidateName := normalizeForMatch(candidate.Name)
-		candidateArtist := normalizeForMatch(candidate.Artist)
-
-		nameScore := similarity(normalizedName, candidateName)
-		artistScore := similarity(normalizedArtist, candidateArtist)
-
-		// Weighted average: name is more important
-		score := (nameScore * 0.6) + (artistScore * 0.4)
-
-		// Bonus for both being high confidence
-		if nameScore > 0.8 && artistScore > 0.8 {
-			score = score + 0.1
-			if score > 1.0 {
-				score = 1.0
-			}
-		}
-
-		if score > bestScore {
-			bestScore = score
-			bestMatch = candidate
-		}
-	}
-
-	return bestMatch, bestScore
-}
-
-// normalizeForMatch normalizes a string for fuzzy matching.
-func normalizeForMatch(s string) string {
-	s = strings.ToLower(s)
-
-	// Remove common suffixes
-	suffixes := []string{
-		"(remastered)", "(remaster)", "(deluxe)", "(live)",
-		"[remastered]", "[remaster]", "[deluxe]", "[live]",
-		" - remastered", " - live",
-	}
-	for _, suffix := range suffixes {
-		s = strings.TrimSuffix(s, suffix)
-	}
-
-	// Remove non-alphanumeric characters
-	var result strings.Builder
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == ' ' {
-			result.WriteRune(r)
-		}
-	}
-
-	return strings.TrimSpace(result.String())
-}
-
-// similarity calculates string similarity using Levenshtein distance.
-func similarity(a, b string) float64 {
-	if a == b {
-		return 1.0
-	}
-	if len(a) == 0 || len(b) == 0 {
-		return 0.0
-	}
-
-	distance := levenshtein(a, b)
-	maxLen := len(a)
-	if len(b) > maxLen {
-		maxLen = len(b)
-	}
-
-	return 1.0 - float64(distance)/float64(maxLen)
-}
-
-// levenshtein calculates Levenshtein distance between two strings.
-func levenshtein(a, b string) int {
-	if len(a) == 0 {
-		return len(b)
-	}
-	if len(b) == 0 {
-		return len(a)
-	}
-
-	aRunes := []rune(a)
-	bRunes := []rune(b)
-
-	d := make([][]int, len(aRunes)+1)
-	for i := range d {
-		d[i] = make([]int, len(bRunes)+1)
-	}
-
-	for i := 0; i <= len(aRunes); i++ {
-		d[i][0] = i
-	}
-	for j := 0; j <= len(bRunes); j++ {
-		d[0][j] = j
-	}
-
-	for i := 1; i <= len(aRunes); i++ {
-		for j := 1; j <= len(bRunes); j++ {
-			cost := 1
-			if aRunes[i-1] == bRunes[j-1] {
-				cost = 0
-			}
-
-			d[i][j] = minInt(
-				d[i-1][j]+1,
-				minInt(d[i][j-1]+1, d[i-1][j-1]+cost),
-			)
-		}
-	}
-
-	return d[len(aRunes)][len(bRunes)]
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // publishError publishes an error notification to the user.

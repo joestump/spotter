@@ -2,8 +2,8 @@
 
 **Status:** accepted
 **Version:** 0.1.0
-**Last Updated:** 2026-02-21
-**Governing ADRs:** ADR-0007 (in-memory event bus), ADR-0008 (OpenAI API), ADR-0004 (Ent ORM)
+**Last Updated:** 2026-11-09
+**Governing ADRs:** ADR-0007 (in-memory event bus), ADR-0008 (OpenAI API), ADR-0004 (Ent ORM), ADR-0037 (prompt fallback policy)
 
 ## Overview
 
@@ -50,7 +50,7 @@ Out of scope: The OpenAI API client configuration (see ADR-0008), Ent schema def
 - `AISummary`: the target artist's AI-generated summary
 - `AvailableArtists`: a list of all other artists in the user's library (ID, Name, Genres)
 
-**REQ-SIM-011** — If the template is nil or fails to execute, the service MUST use `fallbackPrompt()` which constructs a minimal prompt containing the artist name, genres, the full list of available artists with their IDs, and instructions to respond with JSON in the format `{"similar_artists": [{"name": "...", "id": 123, "confidence": 0.9, "reason": "..."}]}`.
+**REQ-SIM-011** — If the template is nil or fails to execute, the service MUST use `fallbackPrompt()` which constructs a minimal prompt containing the artist name, genres, the full list of available artists with their IDs, and instructions to respond with JSON in the format `{"similar_artists": [{"name": "...", "id": 123, "confidence": 0.9, "reason": "..."}]}`. This is the last-resort fallback policy ADR-0037 states for every LLM feature, and the vibes engine follows the same rule.
 
 **REQ-SIM-012** — The `AvailableArtists` list MUST exclude the target artist (`artist.IDNEQ(artistID)`) and MUST only include artists belonging to the current user (`artist.HasUserWith(user.ID(userID))`).
 

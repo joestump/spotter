@@ -60,182 +60,6 @@ func TestNewTrackIDsSeed(t *testing.T) {
 	assert.Nil(t, seed.Tracks)
 }
 
-func TestNormalizeForMatch(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "lowercase conversion",
-			input:    "Hello World",
-			expected: "hello world",
-		},
-		{
-			name:     "remove remastered suffix",
-			input:    "Song Name (remastered)",
-			expected: "song name",
-		},
-		{
-			name:     "remove deluxe suffix",
-			input:    "Album Title (deluxe)",
-			expected: "album title",
-		},
-		{
-			name:     "remove live suffix",
-			input:    "Track Name (live)",
-			expected: "track name",
-		},
-		{
-			name:     "remove brackets version",
-			input:    "Song [remastered]",
-			expected: "song",
-		},
-		{
-			name:     "remove special characters",
-			input:    "Song! @Name#",
-			expected: "song name",
-		},
-		{
-			name:     "preserve numbers",
-			input:    "Track 42",
-			expected: "track 42",
-		},
-		{
-			name:     "trim whitespace",
-			input:    "  Song Name  ",
-			expected: "song name",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := normalizeForMatch(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestSimilarity(t *testing.T) {
-	tests := []struct {
-		name     string
-		a        string
-		b        string
-		minScore float64
-		maxScore float64
-	}{
-		{
-			name:     "identical strings",
-			a:        "hello",
-			b:        "hello",
-			minScore: 1.0,
-			maxScore: 1.0,
-		},
-		{
-			name:     "completely different",
-			a:        "abc",
-			b:        "xyz",
-			minScore: 0.0,
-			maxScore: 0.5,
-		},
-		{
-			name:     "one empty string",
-			a:        "hello",
-			b:        "",
-			minScore: 0.0,
-			maxScore: 0.0,
-		},
-		{
-			name:     "both empty strings",
-			a:        "",
-			b:        "",
-			minScore: 1.0,
-			maxScore: 1.0,
-		},
-		{
-			name:     "similar strings",
-			a:        "hello",
-			b:        "hallo",
-			minScore: 0.7,
-			maxScore: 0.9,
-		},
-		{
-			name:     "case matters after normalize",
-			a:        "hello",
-			b:        "Hello",
-			minScore: 0.7,
-			maxScore: 0.9,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			score := similarity(tt.a, tt.b)
-			assert.GreaterOrEqual(t, score, tt.minScore, "score should be >= minScore")
-			assert.LessOrEqual(t, score, tt.maxScore, "score should be <= maxScore")
-		})
-	}
-}
-
-func TestLevenshtein(t *testing.T) {
-	tests := []struct {
-		name     string
-		a        string
-		b        string
-		expected int
-	}{
-		{
-			name:     "identical",
-			a:        "hello",
-			b:        "hello",
-			expected: 0,
-		},
-		{
-			name:     "one insertion",
-			a:        "hell",
-			b:        "hello",
-			expected: 1,
-		},
-		{
-			name:     "one deletion",
-			a:        "hello",
-			b:        "helo",
-			expected: 1,
-		},
-		{
-			name:     "one substitution",
-			a:        "hello",
-			b:        "hallo",
-			expected: 1,
-		},
-		{
-			name:     "empty first string",
-			a:        "",
-			b:        "hello",
-			expected: 5,
-		},
-		{
-			name:     "empty second string",
-			a:        "hello",
-			b:        "",
-			expected: 5,
-		},
-		{
-			name:     "completely different",
-			a:        "abc",
-			b:        "xyz",
-			expected: 3,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := levenshtein(tt.a, tt.b)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestParseJSONResponse(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -440,44 +264,118 @@ func TestMixtapeGenerator_ParseAIResponse(t *testing.T) {
 	})
 }
 
-func TestMixtapeGenerator_FindBestFuzzyMatch(t *testing.T) {
+// oneTrackResponse is an AI response that suggests a single external track.
+func oneTrackResponse(name, artist string) *AIResponse {
+	return &AIResponse{
+		Tracks: []struct {
+			ID     string `json:"id"`
+			Name   string `json:"name"`
+			Artist string `json:"artist"`
+			Reason string `json:"reason"`
+		}{
+			{ID: "external-id", Name: name, Artist: artist, Reason: "test"},
+		},
+	}
+}
+
+// The generator no longer carries its own scorer: every suggestion is scored by
+// internal/fuzzy, the same stack the playlist-sync matcher uses.
+// Governing: ADR-0014, SPEC vibes-ai-mixtape-engine REQ-VIBES-016, issue #340
+func TestMixtapeGenerator_FuzzyMatchUsesSharedStack(t *testing.T) {
 	cfg := &config.Config{}
+	cfg.Vibes.MinMatchConfidence = 0.7
+
 	g := NewMixtapeGenerator(nil, cfg, nil, nil)
 
-	candidates := []AvailableTrack{
+	available := []AvailableTrack{
 		{ID: 1, Name: "Bohemian Rhapsody", Artist: "Queen"},
 		{ID: 2, Name: "Stairway to Heaven", Artist: "Led Zeppelin"},
-		{ID: 3, Name: "Hotel California", Artist: "Eagles"},
+		{ID: 3, Name: "Hotel California (Remastered)", Artist: "Eagles"},
 		{ID: 4, Name: "Imagine", Artist: "John Lennon"},
+		{ID: 5, Name: "夜に駆ける", Artist: "YOASOBI"},
 	}
 
-	t.Run("exact match", func(t *testing.T) {
-		match, confidence := g.findBestFuzzyMatch("Bohemian Rhapsody", "Queen", candidates)
-		require.NotNil(t, match)
-		assert.Equal(t, 1, match.ID)
-		assert.Equal(t, 1.0, confidence)
-	})
+	suggest := oneTrackResponse
 
-	t.Run("close match with typo", func(t *testing.T) {
-		match, confidence := g.findBestFuzzyMatch("Bohemian Rapsody", "Queen", candidates)
-		require.NotNil(t, match)
-		assert.Equal(t, 1, match.ID)
-		assert.Greater(t, confidence, 0.8)
-	})
+	cases := []struct {
+		name            string
+		suggestedName   string
+		suggestedArtist string
+		wantID          int
+		wantConfidence  float64
+	}{
+		{
+			name:            "close match with typo",
+			suggestedName:   "Bohemian Rapsody",
+			suggestedArtist: "Queen",
+			wantID:          1,
+		},
+		{
+			name:            "match with different casing",
+			suggestedName:   "IMAGINE",
+			suggestedArtist: "JOHN LENNON",
+			wantID:          4,
+			wantConfidence:  1.0,
+		},
+		{
+			name:            "partial artist match",
+			suggestedName:   "Stairway to Heaven",
+			suggestedArtist: "Led Zep",
+			wantID:          2,
+		},
+		{
+			name:            "edition suffix is ignored",
+			suggestedName:   "Hotel California",
+			suggestedArtist: "Eagles",
+			wantID:          3,
+			wantConfidence:  1.0,
+		},
+		{
+			// The generator's own copy normalized non-ASCII away, so a CJK
+			// library title could never be matched from the vibes page.
+			name:            "non-ascii library title matches",
+			suggestedName:   "夜に駆ける (Live)",
+			suggestedArtist: "YOASOBI",
+			wantID:          5,
+			wantConfidence:  1.0,
+		},
+	}
 
-	t.Run("match with different casing", func(t *testing.T) {
-		match, confidence := g.findBestFuzzyMatch("IMAGINE", "JOHN LENNON", candidates)
-		require.NotNil(t, match)
-		assert.Equal(t, 4, match.ID)
-		assert.Equal(t, 1.0, confidence)
-	})
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			result, err := g.matchTracksToLibrary(context.Background(), 1, suggest(c.suggestedName, c.suggestedArtist), available)
+			require.NoError(t, err)
+			require.Equal(t, 1, result.MatchedCount, "expected the suggestion to match")
+			assert.True(t, result.Tracks[0].Matched)
+			assert.Equal(t, c.wantID, result.Tracks[0].ID)
+			if c.wantConfidence > 0 {
+				assert.InDelta(t, c.wantConfidence, result.Tracks[0].MatchConfidence, 1e-9)
+			} else {
+				assert.Greater(t, result.Tracks[0].MatchConfidence, 0.7)
+			}
+		})
+	}
+}
 
-	t.Run("partial artist match", func(t *testing.T) {
-		match, confidence := g.findBestFuzzyMatch("Stairway to Heaven", "Led Zep", candidates)
-		require.NotNil(t, match)
-		assert.Equal(t, 2, match.ID)
-		assert.Greater(t, confidence, 0.7)
-	})
+// The generator's own normalization stripped non-ASCII letters, so two
+// different CJK titles both normalized to "" and scored as identical: the
+// wrong track could fill the slot. The shared stack compares the runes.
+// Governing: ADR-0014, issue #330 (rune units), issue #340 (one stack)
+func TestMixtapeGenerator_FuzzyMatchDistinguishesNonASCIITitles(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Vibes.MinMatchConfidence = 0.7
+
+	g := NewMixtapeGenerator(nil, cfg, nil, nil)
+
+	available := []AvailableTrack{
+		{ID: 5, Name: "夜に駆ける", Artist: "YOASOBI"},
+		{ID: 6, Name: "群青", Artist: "YOASOBI"},
+	}
+
+	result, err := g.matchTracksToLibrary(context.Background(), 1, oneTrackResponse("群青 (Live)", "YOASOBI"), available)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.MatchedCount, "expected the suggestion to match")
+	assert.Equal(t, 6, result.Tracks[0].ID, "a different CJK title must not match")
 }
 
 func TestMixtapeGenerator_MatchTracksToLibrary(t *testing.T) {
@@ -823,12 +721,4 @@ func TestTemplateData_Structure(t *testing.T) {
 	assert.NotNil(t, data.SeedArtist)
 	assert.Len(t, data.ListeningHistory, 1)
 	assert.Len(t, data.AvailableTracks, 1)
-}
-
-func TestMinInt(t *testing.T) {
-	assert.Equal(t, 1, minInt(1, 2))
-	assert.Equal(t, 1, minInt(2, 1))
-	assert.Equal(t, 5, minInt(5, 5))
-	assert.Equal(t, -1, minInt(-1, 0))
-	assert.Equal(t, -2, minInt(-1, -2))
 }
