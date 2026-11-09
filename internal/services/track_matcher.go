@@ -4,15 +4,14 @@ package services
 import (
 	"context"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
-	"unicode"
 
 	"spotter/ent"
 	"spotter/ent/artist"
 	"spotter/ent/track"
 	"spotter/ent/user"
+	"spotter/internal/fuzzy"
 	"spotter/internal/providers"
 )
 
@@ -52,14 +51,11 @@ func NewTrackMatcher(client *ent.Client, logger *slog.Logger, minConfidence floa
 
 // NormalizedCandidate is a library track whose match keys have been normalized
 // once, up front. Fuzzy matching compares against the precomputed rune slices
-// so per-source-track work never re-runs normalizeForMatch over the library.
-// Exported so other fuzzy-matching consumers (e.g. the vibes matcher, story
-// #340) can reuse the same candidate representation.
-type NormalizedCandidate struct {
-	Track       *ent.Track
-	TitleRunes  []rune // normalizeForMatch(track name), in runes
-	ArtistRunes []rune // normalizeForMatch(artist name), in runes
-}
+// so per-source-track work never re-runs normalization over the library. The
+// representation - and the scoring that reads it - lives in internal/fuzzy, so
+// every consumer that fuzzy-matches (playlist sync, the vibes generator) walks
+// the same stack.
+type NormalizedCandidate = fuzzy.Candidate[*ent.Track]
 
 // LibraryIndex is a precomputed matching index over a user's Navidrome library.
 // Build it once per sync tick with LoadLibraryIndex and reuse it across
@@ -115,8 +111,8 @@ func (m *TrackMatcher) LoadLibraryIndex(ctx context.Context, userID int) (*Libra
 		if t.Edges.Artist != nil {
 			artistName = t.Edges.Artist.Name
 		}
-		normalizedTitle := normalizeForMatch(t.Name)
-		normalizedArtist := normalizeForMatch(artistName)
+		normalizedTitle := fuzzy.Normalize(t.Name)
+		normalizedArtist := fuzzy.Normalize(artistName)
 
 		// Exact match map
 		key := normalizedArtist + "|" + normalizedTitle
@@ -125,11 +121,7 @@ func (m *TrackMatcher) LoadLibraryIndex(ctx context.Context, userID int) (*Libra
 		// Fuzzy match candidate with precomputed normalized runes.
 		// The query above already filters NavidromeIDNotNil, so every track
 		// here is a valid candidate.
-		idx.candidates = append(idx.candidates, NormalizedCandidate{
-			Track:       t,
-			TitleRunes:  []rune(normalizedTitle),
-			ArtistRunes: []rune(normalizedArtist),
-		})
+		idx.candidates = append(idx.candidates, fuzzy.NewCandidate(t, t.Name, artistName))
 	}
 
 	m.Logger.Debug("built library index",
@@ -232,8 +224,8 @@ func (m *TrackMatcher) MatchTracksWithIndex(idx *LibraryIndex, tracks []provider
 		}
 
 		// Strategy 2: Exact match (artist + title)
-		normalizedTitle := normalizeForMatch(sourceTrack.Name)
-		normalizedArtist := normalizeForMatch(sourceTrack.Artist)
+		normalizedTitle := fuzzy.Normalize(sourceTrack.Name)
+		normalizedArtist := fuzzy.Normalize(sourceTrack.Artist)
 		exactKey := normalizedArtist + "|" + normalizedTitle
 		if matchedTrack, ok := idx.exactMap[exactKey]; ok {
 			if matchedTrack.NavidromeID != nil {
@@ -258,8 +250,9 @@ func (m *TrackMatcher) MatchTracksWithIndex(idx *LibraryIndex, tracks []provider
 		}
 
 		// Strategy 3: Fuzzy matching
-		bestMatch, confidence := findBestFuzzyMatch([]rune(normalizedTitle), []rune(normalizedArtist), idx.candidates)
-		if bestMatch != nil && confidence >= m.MinMatchConfidence {
+		bestIndex, confidence := fuzzy.Best([]rune(normalizedTitle), []rune(normalizedArtist), idx.candidates)
+		if bestIndex >= 0 && confidence >= m.MinMatchConfidence {
+			bestMatch := idx.candidates[bestIndex].Match
 			if bestMatch.NavidromeID != nil {
 				result.NavidromeTrackID = *bestMatch.NavidromeID
 				result.MatchConfidence = confidence
@@ -325,174 +318,6 @@ func (m *TrackMatcher) MatchTracksWithIndex(idx *LibraryIndex, tracks []provider
 		"duration_ms", duration.Milliseconds())
 
 	return results
-}
-
-// findBestFuzzyMatch finds the best fuzzy match for a normalized source
-// title/artist among precomputed candidates.
-// Governing: SPEC track-matching REQ-TM-031, REQ-TM-032 (weighted score + dual-confidence bonus)
-func findBestFuzzyMatch(sourceTitle, sourceArtist []rune, candidates []NormalizedCandidate) (*ent.Track, float64) {
-	var bestMatch *ent.Track
-	bestScore := 0.0
-
-	for _, candidate := range candidates {
-		// Calculate similarity scores
-		titleScore := similarity(sourceTitle, candidate.TitleRunes)
-		artistScore := similarity(sourceArtist, candidate.ArtistRunes)
-
-		// Weighted average: title is more important
-		score := (titleScore * 0.6) + (artistScore * 0.4)
-
-		// Bonus for both being high confidence
-		if titleScore > 0.8 && artistScore > 0.8 {
-			score = (score + 0.1)
-			if score > 1.0 {
-				score = 1.0
-			}
-		}
-
-		if score > bestScore {
-			bestScore = score
-			bestMatch = candidate.Track
-		}
-	}
-
-	return bestMatch, bestScore
-}
-
-// normalizeForMatch normalizes a string for comparison.
-func normalizeForMatch(s string) string {
-	// Convert to lowercase
-	s = strings.ToLower(s)
-
-	// Remove common suffixes that indicate versions
-	suffixes := []string{
-		"(remastered)",
-		"(remaster)",
-		"(deluxe)",
-		"(deluxe edition)",
-		"(bonus track)",
-		"(bonus tracks)",
-		"(radio edit)",
-		"(single version)",
-		"(album version)",
-		"(explicit)",
-		"(clean)",
-		"(live)",
-		"(acoustic)",
-		"(remix)",
-		"[remastered]",
-		"[remaster]",
-		"[deluxe]",
-		"[deluxe edition]",
-		"[bonus track]",
-		"[bonus tracks]",
-		"[radio edit]",
-		"[single version]",
-		"[album version]",
-		"[explicit]",
-		"[clean]",
-		"[live]",
-		"[acoustic]",
-		"[remix]",
-		" - remastered",
-		" - remaster",
-		" - deluxe",
-		" - live",
-		" - acoustic",
-	}
-
-	for _, suffix := range suffixes {
-		s = strings.TrimSuffix(s, suffix)
-	}
-
-	// Remove punctuation and extra whitespace
-	var result strings.Builder
-	lastWasSpace := false
-
-	for _, r := range s {
-		if unicode.IsLetter(r) || unicode.IsNumber(r) {
-			result.WriteRune(r)
-			lastWasSpace = false
-		} else if unicode.IsSpace(r) && !lastWasSpace {
-			result.WriteRune(' ')
-			lastWasSpace = true
-		}
-	}
-
-	return strings.TrimSpace(result.String())
-}
-
-// similarity calculates the similarity between two rune slices using
-// Levenshtein distance. Returns a value between 0.0 (completely different)
-// and 1.0 (identical).
-//
-// Both the edit distance and the maximum length are measured in RUNES.
-// Mixing a rune-based distance with a byte-based max length inflated
-// similarity 2-3x for non-ASCII (CJK/Cyrillic) titles, letting wrong tracks
-// clear the fuzzy threshold.
-// Governing: SPEC track-matching REQ-TM-031 (issue #330: distance and max length in rune units)
-func similarity(a, b []rune) float64 {
-	// Fast path: identical strings (including both-empty) skip the DP matrix.
-	if slices.Equal(a, b) {
-		return 1.0
-	}
-	if len(a) == 0 || len(b) == 0 {
-		return 0.0
-	}
-
-	// Calculate Levenshtein distance (in runes)
-	distance := levenshtein(a, b)
-	maxLen := len(a)
-	if len(b) > maxLen {
-		maxLen = len(b)
-	}
-
-	return 1.0 - float64(distance)/float64(maxLen)
-}
-
-// levenshtein calculates the Levenshtein distance between two rune slices,
-// measured in rune edits.
-func levenshtein(aRunes, bRunes []rune) int {
-	if len(aRunes) == 0 {
-		return len(bRunes)
-	}
-	if len(bRunes) == 0 {
-		return len(aRunes)
-	}
-
-	// Create distance matrix
-	d := make([][]int, len(aRunes)+1)
-	for i := range d {
-		d[i] = make([]int, len(bRunes)+1)
-	}
-
-	// Initialize first column
-	for i := 0; i <= len(aRunes); i++ {
-		d[i][0] = i
-	}
-
-	// Initialize first row
-	for j := 0; j <= len(bRunes); j++ {
-		d[0][j] = j
-	}
-
-	// Fill in the rest
-	for i := 1; i <= len(aRunes); i++ {
-		for j := 1; j <= len(bRunes); j++ {
-			cost := 1
-			if aRunes[i-1] == bRunes[j-1] {
-				cost = 0
-			}
-
-			d[i][j] = min(
-				d[i-1][j]+1,      // deletion
-				d[i][j-1]+1,      // insertion
-				d[i-1][j-1]+cost, // substitution
-			)
-		}
-	}
-
-	return d[len(aRunes)][len(bRunes)]
 }
 
 // GetUnmatchedTracks returns tracks that couldn't be matched to the library.
