@@ -2,8 +2,8 @@
 
 **Status:** accepted
 **Version:** 0.1.0
-**Last Updated:** 2026-02-21
-**Governing ADRs:** ADR-0007 (in-memory event bus), ADR-0008 (OpenAI-compatible LLM backend), ADR-0017 (vibes generator interface abstraction)
+**Last Updated:** 2026-11-09
+**Governing ADRs:** ADR-0007 (in-memory event bus), ADR-0008 (OpenAI-compatible LLM backend), ADR-0014 (three-tier track matching), ADR-0017 (vibes generator interface abstraction), ADR-0037 (prompt fallback policy)
 
 ## Overview
 
@@ -58,7 +58,7 @@ Out of scope: SSE streaming (see Event Bus & SSE spec), Navidrome write-back (se
 - The list of available tracks in the user's library (with genres, energy, valence, BPM where available)
 - The desired track count (`vibes.default_max_tracks`, bounded by `vibes.min_tracks` and `vibes.max_tracks`)
 
-**REQ-VIBES-013** — Prompts MUST be loaded from external template files in the configured `vibes.prompts_directory`. The system MUST use Go's `text/template` engine with the `TemplateData` struct as context. Hardcoded prompt strings are NOT permitted.
+**REQ-VIBES-013** — Prompts MUST be loaded from external template files in the configured `vibes.prompts_directory`. The system MUST use Go's `text/template` engine with the `TemplateData` struct as context. Prompt content lives in those templates: a hardcoded prompt is permitted only as the single last-resort `fallbackPrompt()` for this feature, used when the `generate_mixtape` template is unavailable, MUST log a warning naming the template and the configured directory, and MUST still ask for the JSON shape in REQ-VIBES-015. See ADR-0037.
 
 **REQ-VIBES-014** — The system MUST call an OpenAI-compatible API endpoint (configurable via `openai.base_url`) using the configured model (`vibes.model` or `openai.model`). The system MUST support LiteLLM-compatible proxies as drop-in replacements.
 
@@ -72,7 +72,7 @@ Out of scope: SSE streaming (see Event Bus & SSE spec), Navidrome write-back (se
 }
 ```
 
-**REQ-VIBES-016** — Each AI-suggested track MUST be fuzzy-matched against the user's library. The system MUST apply the configured `vibes.min_match_confidence` threshold. Tracks below threshold MUST be excluded from the final mixtape. The system MUST record both matched and unmatched counts in `GenerationResult`.
+**REQ-VIBES-016** — Each AI-suggested track MUST be fuzzy-matched against the user's library, scored by the same fuzzy-matching stack the track matcher uses (ADR-0014, SPEC track-matching REQ-TM-031/REQ-TM-032), so the same suggestion against the same library scores identically whether it arrives from the vibes page or a playlist sync. The system MUST apply the configured `vibes.min_match_confidence` threshold. Tracks below threshold MUST be excluded from the final mixtape. The system MUST record both matched and unmatched counts in `GenerationResult`.
 
 **REQ-VIBES-017** — Upon successful generation, the system MUST persist the mixtape tracks to the database and MUST publish a `EventTypeMixtapeGenerated` event. On failure, MUST publish `EventTypeMixtapeError`.
 
